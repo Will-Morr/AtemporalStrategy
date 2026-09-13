@@ -1,16 +1,18 @@
 import { test,expect } from './fixtures.mjs';
+import { isolatedServer } from './game-helpers.mjs';
 
-test('landing loads its real content, keyboard opens guide, and stats match',async({page,request,review})=>{
-  await page.goto('/');
+test('landing loads its real content, keyboard opens guide, and stats match',async({page,request,review},testInfo)=>{
+  const server=await isolatedServer(testInfo);review.afterClose(server.stop);
+  await page.goto(server.url);
   await expect(page.getByRole('heading',{name:'Atemporal Strategy',exact:true})).toBeVisible();
-  await expect(page.locator('#status')).toContainText('10 unit and structure types');
+  await expect(page.locator('#status')).toContainText('Claim a slot');
   await review.capture('landing');
   const link=page.getByRole('link',{name:'How to play / Unit reference'});
   await page.keyboard.press('Tab');await expect(link).toBeFocused();
-  await page.keyboard.press('Enter');await expect(page).toHaveURL(/\/guide\/$/);
+  const popup=page.waitForEvent('popup');await page.keyboard.press('Enter');page=await popup;await expect(page).toHaveURL(/\/guide\/$/);
   await expect(page.getByRole('heading',{name:'How to play Atemporal Strategy'})).toBeVisible();
-  const content=await (await request.get('/guide/content.json')).json();
-  const rows=page.locator('tbody tr');await expect(rows).toHaveCount(content.types.length);
+  const content=await (await request.get(`${server.url}guide/content.json`)).json();
+  const rows=page.locator('.table-scroll tbody tr');await expect(rows).toHaveCount(content.types.length);
   for(const type of content.types) {
     const row=rows.filter({has:page.getByRole('cell',{name:type.key,exact:true})});
     await expect(row.locator('td').nth(2)).toHaveText(String(type.matter_cost));
@@ -22,18 +24,19 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
   await page.getByRole('link',{name:'Back to lobby'}).click();await expect(page).toHaveURL(/\/$/);
 });
 
-test('two players and spectator can use isolated browser contexts',async({review})=>{
+test('two players and spectator can use isolated browser contexts',async({review},testInfo)=>{
+  const server=await isolatedServer(testInfo);review.afterClose(server.stop);
   const contexts=[];
   for(const role of ['player-a','player-b','spectator']) {
     const context=await review.newContext(role);contexts.push(context);
-    const page=await context.newPage();await page.goto('/');
+    const page=await context.newPage();await page.goto(server.url);
     expect(await page.evaluate(()=>localStorage.getItem('review-role'))).toBeNull();
     await page.evaluate(role=>localStorage.setItem('review-role',role),role);
   }
   for(const [index,role] of ['player-a','player-b','spectator'].entries()) {
     const page=contexts[index].pages()[0];await page.reload();
     expect(await page.evaluate(()=>localStorage.getItem('review-role'))).toBe(role);
-    await expect(page.locator('#status')).toContainText('10 unit and structure types');
+    await expect(page.locator('#status')).toContainText('Claim a slot');
     await review.capture(role,page);
   }
 });

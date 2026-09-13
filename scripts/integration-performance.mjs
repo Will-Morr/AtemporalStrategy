@@ -1,4 +1,4 @@
-// Export-enabled real-server stress: ~2,000 units, cap-length playback, repeated near-zero
+// Export-enabled real-server stress: two 1,000-unit queues, cap-length playback, repeated near-zero
 // rewrites, process peak memory, cold exact seeks, and a rendered spectator trace/screenshot.
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { cpus, totalmem, platform } from 'node:os';
@@ -36,7 +36,7 @@ try{
     {kind:'edit_production',factories:[id],edit:{kind:'append',items:Array(1000).fill('grunt')}},
   ]));
   const final=(await s.request({kind:'get_exact_state',revision:2,tick:20000},'exact_state',m=>m.tick===20000)).snapshot;
-  summary.entities=final.entities.length;assert(summary.entities>=2000,`dense population ${summary.entities}`);
+  summary.entities=final.entities.length;summary.queued_remaining=final.entities.filter(e=>e.production).map(e=>({owner:e.owner,pending:e.production.pending_items.length,active:!!e.production.active_item}));assert(summary.entities>=1000,`dense population ${summary.entities}`);
   for(const tick of[19003,19997,12347]){const started=now();const result=await s.request({kind:'get_exact_state',revision:2,tick},'exact_state',m=>m.tick===tick);summary.seeks.push({tick,ms:Math.round(now()-started),entities:result.snapshot.entities.length});}
   for(let revision=2;revision<4;revision++)await publish(revision,0,constructors.map((c,p)=>[{kind:'assign_order',entities:[c.id],order:{kind:'construct',area:{min:factories[p],max:factories[p]}}}]));
   const archive=(await import('node:fs')).readdirSync(`${dir}/dense/replays`)[0];

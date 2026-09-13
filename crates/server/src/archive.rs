@@ -133,13 +133,40 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(&temp, path).map_err(|e| e.to_string())
 }
 
+// Stream large regenerable caches so export does not duplicate an entire revision in RAM.
+fn atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<u64> {
+    if disk_full() {
+        return Err(format!(
+            "{}: No space left on device (injected)",
+            path.display()
+        ));
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let temp = path.with_extension(format!("tmp-{}", std::process::id()));
+    let file = fs::File::create(&temp).map_err(|e| e.to_string())?;
+    let mut writer = std::io::BufWriter::new(file);
+    serde_json::to_writer(&mut writer, value).map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())?;
+    writer.get_ref().sync_all().map_err(|e| e.to_string())?;
+    let bytes = writer
+        .get_ref()
+        .metadata()
+        .map_err(|e| e.to_string())?
+        .len();
+    fs::rename(temp, path).map_err(|e| e.to_string())?;
+    Ok(bytes)
+}
+
 fn json<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     serde_json::to_vec(value).map_err(|e| e.to_string())
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
-    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
+    let file = fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_reader(std::io::BufReader::new(file))
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn read_optional<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>> {
@@ -293,29 +320,12 @@ impl Archive {
             event_count: data.events.len(),
             ..Default::default()
         };
-        for (name, bytes, slot) in [
-            ("samples.json", json(&samples)?, &mut sizes.samples_bytes),
-            (
-                "checkpoints.json",
-                json(&checkpoints)?,
-                &mut sizes.checkpoints_bytes,
-            ),
-            ("stats.json", json(&stats)?, &mut sizes.stats_bytes),
-            ("events.json", json(&data.events)?, &mut sizes.events_bytes),
-            (
-                "timeline.json",
-                json(&data.timeline)?,
-                &mut sizes.timeline_bytes,
-            ),
-            (
-                "dictionary.json",
-                json(&data.dictionary)?,
-                &mut sizes.dictionary_bytes,
-            ),
-        ] {
-            *slot = bytes.len() as u64;
-            atomic_write(&dir.join(name), &bytes)?;
-        }
+        sizes.samples_bytes = atomic_json(&dir.join("samples.json"), &samples)?;
+        sizes.checkpoints_bytes = atomic_json(&dir.join("checkpoints.json"), &checkpoints)?;
+        sizes.stats_bytes = atomic_json(&dir.join("stats.json"), &stats)?;
+        sizes.events_bytes = atomic_json(&dir.join("events.json"), &data.events)?;
+        sizes.timeline_bytes = atomic_json(&dir.join("timeline.json"), &data.timeline)?;
+        sizes.dictionary_bytes = atomic_json(&dir.join("dictionary.json"), &data.dictionary)?;
         atomic_write(&dir.join("complete.json"), &json(&sizes)?)?;
         sizes.write_ms = start.elapsed().as_millis() as u64;
         Ok(sizes)

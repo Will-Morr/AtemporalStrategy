@@ -691,6 +691,9 @@ pub enum ClientMessage {
         revision: Revision,
         from_tick: Tick,
         to_tick: Tick,
+        /// Rendered effects only; omit movement diagnostics already represented by samples.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        effects_only: Option<bool>,
     },
     StopAndArchive {
         request_id: String,

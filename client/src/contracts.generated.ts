@@ -74,6 +74,10 @@ export type ClientMessage =
       revision: number;
     }
   | {
+      /**
+       * Rendered effects only; omit movement diagnostics already represented by samples.
+       */
+      effects_only?: boolean | null;
       from_tick: number;
       kind: "get_events";
       revision: number;

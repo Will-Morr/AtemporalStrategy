@@ -295,10 +295,8 @@ fn run_job(
     }
     let message = match result {
         Ok(result) => {
-            if !batch.is_empty() {
-                if !send(&out, batch.message(&job_id, revision), &cancel) {
-                    return;
-                }
+            if !batch.is_empty() && !send(&out, batch.message(&job_id, revision), &cancel) {
+                return;
             }
             WorkerMessage::Complete {
                 job_id: job_id.clone(),

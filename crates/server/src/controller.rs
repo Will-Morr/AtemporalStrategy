@@ -1282,8 +1282,8 @@ impl Controller {
         Ok(self.revision(revision)?.commands_range(from, to))
     }
 
-    pub fn events_range(&self, revision: Revision, from: Tick, to: Tick) -> Result<ServerMessage> {
-        Ok(self.revision(revision)?.events_range(from, to))
+    pub fn events_range(&self, revision: Revision, from: Tick, to: Tick, effects_only: bool) -> Result<ServerMessage> {
+        Ok(self.revision(revision)?.events_range(from, to, effects_only))
     }
 
     // ---- inputs-only peripheral --------------------------------------------------------------
@@ -2019,13 +2019,14 @@ impl RevisionData {
         }
     }
 
-    pub fn events_range(&self, from: Tick, to: Tick) -> ServerMessage {
+    pub fn events_range(&self, from: Tick, to: Tick, effects_only: bool) -> ServerMessage {
         ServerMessage::Events {
             revision: self.revision,
             events: self
                 .events
                 .iter()
                 .filter(|e| e.tick >= from && e.tick <= to)
+                .filter(|e| !effects_only || matches!(e.event, PresentationEvent::Attack { .. } | PresentationEvent::Impact { .. } | PresentationEvent::Destroyed { .. }))
                 .cloned()
                 .collect(),
         }
@@ -2657,5 +2658,40 @@ pub(crate) mod tests {
         assert_eq!(c.pending.as_ref().unwrap().samples.len(), pending);
         assert_eq!(c.phase, Phase::Simulating);
         drop(rx);
+    }
+    #[test]
+    fn effects_query_omits_movement_without_changing_full_diagnostics() {
+        let mut c = started(false, |_| {});
+        let at = Tile { x: 2, y: 2 };
+        let movement = WorldEvent {
+            tick: 10,
+            sequence: 0,
+            event: PresentationEvent::Move {
+                entity_id: identity::genesis(0, 0).unwrap(),
+                from: at,
+                to: at,
+            },
+        };
+        let effect = WorldEvent {
+            tick: 10,
+            sequence: 1,
+            event: PresentationEvent::Impact {
+                target_tile: at,
+                visual_style: VisualStyle::Melee,
+            },
+        };
+        c.revisions.get_mut(&0).unwrap().events = vec![movement.clone(), effect.clone()];
+        let ServerMessage::Events { events, .. } = c.events_range(0, 10, 10, true).unwrap() else {
+            panic!()
+        };
+        assert_eq!(events, vec![effect.clone()]);
+        let ServerMessage::Events { events, .. } = c.events_range(0, 10, 10, false).unwrap() else {
+            panic!()
+        };
+        assert_eq!(events, vec![movement, effect]);
+        let ServerMessage::Events { events, .. } = c.events_range(0, 11, 20, true).unwrap() else {
+            panic!()
+        };
+        assert!(events.is_empty());
     }
 }

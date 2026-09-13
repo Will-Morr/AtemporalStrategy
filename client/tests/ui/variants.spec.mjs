@@ -101,3 +101,23 @@ for(const timed of [false,true])test(`recovery: 2v2 ${timed?'timed':'scoreboard'
   await seek(a,outcome.terminal_state_tick);await a.locator('#replay summary').click();await expect(a.locator('#accepted-inputs')).toContainText('recovered');
   await review.capture('recovered-player-and-survival-history',a);
 });
+
+test('result: finished match shows a green win, red loss and retained replay',async({review},testInfo)=>{
+  test.setTimeout(90000);
+  const server=await isolatedServer(testInfo,c=>{c.match_defaults.starting_matter=1000;c.match_defaults.max_tick=1200;c.match_defaults.objective.rules.victory_rule.points=1;},content=>{
+    for(const t of content.types){if(t.key==='turret'){t.max_hp=1;t.weapon.damage=0;}if(['miner','constructor'].includes(t.key))t.max_hp=10000;}
+  });review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const constructor=await b.evaluate(()=>{const e=window.atemporal.entities().find(e=>e.owner===1&&e.type_key==='constructor');return{x:e.x,y:e.y};}),ambush={x:2,y:4};
+  await tile(b,constructor);await b.keyboard.press('b');await b.keyboard.press('1');await tile(b,ambush);await tile(b,ambush);await b.keyboard.press('q');await b.keyboard.press('4');
+  await tile(b,constructor);await b.keyboard.press('c');await area(b,ambush);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);
+  for(const [p,verdict] of [[a,'loss'],[b,'win']]){
+    await expect(p.locator('#outcome-banner')).toHaveAttribute('data-outcome',verdict);
+    await expect(p.locator('#outcome-banner')).toContainText('MATCH ENDED');await expect(p.locator('#outcome-banner')).toContainText('Replay remains available');
+    await expect(p.locator('#commit')).toBeDisabled();
+    await seek(p,await p.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick));
+    await review.capture(`finished-match-${verdict}`,p);
+    await seek(p,0);await p.locator('#play').click();await expect.poll(()=>p.evaluate(()=>window.atemporal.playhead)).toBeGreaterThan(0);await p.locator('#play').click();
+  }
+});
