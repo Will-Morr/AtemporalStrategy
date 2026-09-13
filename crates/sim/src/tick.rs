@@ -11,6 +11,7 @@ const EPS: f64 = 1e-9;
 #[derive(Clone, Default)]
 struct Intent {
     attack: Option<usize>,
+    heal: Option<usize>,
     mine: bool,
     construct: Option<usize>,
     goal: Option<(Tile, bool)>,
@@ -22,6 +23,7 @@ enum ConsumerKind {
     Site(usize),
     Blueprint(usize),
     Factory(usize),
+    Heal { healer: usize, ally: usize },
 }
 struct Consumer {
     kind: ConsumerKind,
@@ -42,9 +44,9 @@ impl Sim {
         let mut intents = self.intents()?;
         self.mining(&intents);
         let consumers = self.consumers(&intents);
-        let growth = self.allocate(consumers)?;
+        let (growth, healing) = self.allocate(consumers)?;
         let damage = self.combat(&intents);
-        self.resolve(&growth, &damage, &mut intents)?;
+        self.resolve(&growth, &healing, &damage, &mut intents)?;
         self.motion(&intents)?;
         self.births()?;
         self.create_sites()?;
@@ -125,7 +127,21 @@ impl Sim {
                 );
                 f[sim.idx(e_tile)] == 0
             };
-            if let Some(w) = &def.weapon {
+            // A healing-capable supporter prioritizes legal healing of its ally over firing.
+            if let (Order::Support { target }, Some(h)) = (&e.action, &def.healing)
+                && let Some(ally) = self.find(target)
+                && self.state.entities[ally].lifecycle == Lifecycle::Complete
+                && self.state.entities[ally].hp < self.def(ally).max_hp - EPS
+                && Self::dist2(e.tile, self.state.entities[ally].tile) <= h.range * h.range + EPS
+            {
+                intent.hold = true;
+                if ready {
+                    intent.heal = Some(ally);
+                }
+            }
+            if let Some(w) = &def.weapon
+                && !intent.hold
+            {
                 let direct = !w.indirect;
                 let range = w.range;
                 let zone_defend = range.min(def.vision);
@@ -348,6 +364,19 @@ impl Sim {
                 workers,
             });
         }
+        for (i, intent) in intents.iter().enumerate() {
+            let Some(ally) = intent.heal else {
+                continue;
+            };
+            let h = self.def(i).healing.clone().unwrap();
+            let missing = self.def(ally).max_hp - self.state.entities[ally].hp;
+            consumers.push(Consumer {
+                kind: ConsumerKind::Heal { healer: i, ally },
+                priority: self.state.entities[i].priority,
+                demand: h.demand.min(missing / h.hp_per_matter).max(0.0),
+                workers: vec![],
+            });
+        }
         // Production: activate the next pending item, then demand at most the production rate.
         for i in 0..self.state.entities.len() {
             if self.state.entities[i].lifecycle != Lifecycle::Complete {
@@ -399,10 +428,11 @@ impl Sim {
         consumers
     }
 
-    /// Equal-share capped water filling per player and tier. Returns per-entity HP growth.
-    fn allocate(&mut self, consumers: Vec<Consumer>) -> Result<Vec<f64>> {
+    /// Equal-share capped water filling per player and tier. Returns per-entity HP growth and healing.
+    fn allocate(&mut self, consumers: Vec<Consumer>) -> Result<(Vec<f64>, Vec<f64>)> {
         let t = self.state.tick;
         let mut growth = vec![0.0; self.state.entities.len()];
+        let mut healing = vec![0.0; self.state.entities.len()];
         let mut sites_to_create: Vec<(usize, f64)> = vec![];
         for player in 0..self.state.players.len() {
             let mut bank = self.state.players[player].bank;
@@ -481,6 +511,14 @@ impl Sim {
                             self.state.players[player].counters.unit_spend += give;
                             self.note(player as u8, Activity::Construction);
                         }
+                        ConsumerKind::Heal { healer, ally } => {
+                            let h = self.def(healer).healing.clone().unwrap();
+                            healing[ally] += give * h.hp_per_matter;
+                            self.state.entities[healer].next_action_tick = t + h.cooldown;
+                            self.acted[healer] = true;
+                            self.state.players[player].counters.total_spend += give;
+                            self.note(player as u8, Activity::Construction);
+                        }
                     }
                     self.progress = true;
                 }
@@ -495,12 +533,14 @@ impl Sim {
                 .push((self.state.blueprints[b].id.clone(), give));
             self.structure_version += 1;
         }
-        Ok(growth)
+        Ok((growth, healing))
     }
 
     fn consumer_owner(&self, c: &Consumer) -> PlayerId {
         match c.kind {
-            ConsumerKind::Site(s) | ConsumerKind::Factory(s) => self.state.entities[s].owner,
+            ConsumerKind::Site(s)
+            | ConsumerKind::Factory(s)
+            | ConsumerKind::Heal { healer: s, .. } => self.state.entities[s].owner,
             ConsumerKind::Blueprint(b) => self.state.blueprints[b].owner,
         }
     }
@@ -543,8 +583,14 @@ impl Sim {
         damage
     }
 
-    /// hp' = min(new_max, hp + growth − damage); then deaths, site completions, production readiness.
-    fn resolve(&mut self, growth: &[f64], damage: &[f64], intents: &mut Vec<Intent>) -> Result<()> {
+    /// hp' = min(new_max, hp + growth + healing − damage); then deaths and site completions.
+    fn resolve(
+        &mut self,
+        growth: &[f64],
+        healing: &[f64],
+        damage: &[f64],
+        intents: &mut Vec<Intent>,
+    ) -> Result<()> {
         let n = self.state.entities.len();
         let mut keep = vec![true; n];
         let mut structure_changed = false;
@@ -556,8 +602,8 @@ impl Sim {
             } else {
                 def.max_hp
             };
-            let g = growth.get(i).copied().unwrap_or(0.0);
-            let d = damage.get(i).copied().unwrap_or(0.0);
+            let g = growth[i] + healing[i];
+            let d = damage[i];
             e.hp = (e.hp + g - d).min(new_max);
             if e.lifecycle == Lifecycle::Site && e.paid_matter >= def.matter_cost - EPS {
                 e.paid_matter = def.matter_cost;
@@ -1112,6 +1158,15 @@ impl Sim {
             if let (Order::Mine { area }, Some(_)) = (&e.action, &def.mining)
                 && in_rect(e.tile, area)
                 && self.state.ore[self.idx(e.tile)] > 0.0
+            {
+                return true;
+            }
+            if let (Order::Support { target }, Some(h)) = (&e.action, &def.healing)
+                && let Some(ally) = self.find(target)
+                && self.state.entities[ally].lifecycle == Lifecycle::Complete
+                && self.state.entities[ally].hp < self.def(ally).max_hp - EPS
+                && Self::dist2(e.tile, self.state.entities[ally].tile) <= h.range * h.range + EPS
+                && self.state.players[usize::from(e.owner)].bank > 0.0
             {
                 return true;
             }
