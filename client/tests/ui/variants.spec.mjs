@@ -37,9 +37,12 @@ for(const variant of [
     const pendingMatch=(await readdir(`${server.dir}/replays`))[0];
     for(const p of [...ps,spectator])await p.context().setOffline(true);
     await server.stop();await server.start(['--resume',pendingMatch]);
-    for(const p of [...ps,spectator]){await p.context().setOffline(false);await p.reload();await revision(p,0);}
-    await expect(a.locator('#commit')).toBeDisabled();expect(await a.evaluate(()=>window.atemporal.committed)).toEqual([0]);
+    for(const p of [...ps,spectator]){await p.context().setOffline(false);await p.reload();if(p===spectator)await p.getByRole('button',{name:'Spectate',exact:true}).click();await revision(p,0);}
+    await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');expect(await a.evaluate(()=>window.atemporal.committed)).toEqual([0]);
     await review.capture('partial-round-resumed',a);
+    await a.locator('#commit').click();
+    await expect.poll(()=>a.evaluate(()=>window.atemporal.draft.commands.length)).toBe(1);
+    await a.locator('#commit').click();
   }
   for(const p of ps.slice(1))await p.locator('#commit').click();for(const p of [...ps,spectator])await revision(p,1);
   const tick=variant.timed?100:0;await seek(a,tick);await a.keyboard.press('2');await a.keyboard.press('f');await tile(a,{x:constructor.x+1,y:constructor.y+1});

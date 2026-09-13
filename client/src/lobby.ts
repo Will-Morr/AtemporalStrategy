@@ -69,7 +69,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
     start.disabled = !(lobby.can_start && session.slot !== null && session.slot === first);
     start.textContent = session.slot === first && first !== null ? 'Start match' : 'Start match (first occupied slot starts)';
     release.style.display = session.slot !== null ? '' : 'none';
-    status.textContent = session.slot !== null ? `You hold slot ${session.slot}.` : phase === 'lobby' ? 'Claim a slot to play or spectate.' : 'Match in progress. Rejoin a saved player below, or spectate. Each tab keeps its own player.';
+    status.textContent = session.slot !== null ? `You hold slot ${session.slot}.` : phase === 'lobby' ? 'Claim a slot to play or spectate.' : 'Match in progress. Choose a saved player to rejoin, or spectate. Each tab keeps its own player.';
   };
   const updateProfile = () => {
     if (!session.token) return;

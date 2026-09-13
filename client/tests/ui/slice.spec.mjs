@@ -274,8 +274,8 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   const during = await state(a);
   expect(during.playhead).toBeGreaterThan(153);
   await review.capture('round3-playback-a', a);
-  await a.keyboard.press(' ');
-  await expect.poll(async () => (await state(a)).exactTick, { timeout: 15000 }).toBe((await state(a)).playhead);
+  if (await a.evaluate(()=>window.atemporal.playing)) await a.keyboard.press(' ');
+  await expect.poll(async () => { const s=await state(a);return s.exactTick === Math.floor(s.playhead); }, { timeout: 15000 }).toBe(true);
   expect(await a.evaluate(() => window.atemporal.exact.state.control_groups.find(g=>g.id.owner===0 && g.id.slot===3)?.members.length)).toBeGreaterThan(0);
   expect(await a.evaluate(() => window.atemporal.exact.state.control_groups.find(g=>g.id.owner===0 && g.id.slot===4)?.members.length)).toBe(2);
   await s.fill('#tick-input', String(rev2.terminal));

@@ -5,13 +5,16 @@
 import { readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { root, now, assert, buildServer, startServer as spawnServer, Client, lobby } from './match-harness.mjs';
+import { root, now, assert, buildServer, startServer as spawnServer, Client, lobby, writeConfig } from './match-harness.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
 const only = opt('--only', null);
 const work = `${root}target/gate5-check`;
-const startServer = (name, extra, env) => spawnServer(work, name, extra, env);
+const startServer = async (name, extra, env) => {
+  const config = await writeConfig(work, name, () => {});
+  return spawnServer(work, name, ['--config', config, ...extra], env);
+};
 const replaysOf = name => `${work}/${name}/replays`;
 const matchIdOf = name => readdirSync(replaysOf(name))[0];
 const readJson = async path => JSON.parse(await readFile(path, 'utf8'));
@@ -197,8 +200,8 @@ const scenarios = {
   async disk_full() {
     const name = 'disk_full';
     await rm(`${work}/${name}`, { recursive: true, force: true });
-    // Durable writes before round 2's results: 5 (start) + 8 (round 0) + 4 + 8 (round 1) + 4 turn files.
-    let server = await startServer(name, [], { ATEMPORAL_DISK_FULL_AFTER: '29' });
+    // Durable writes before round 2's results: 5 (start) + 8 (round 0) + 6 + 8 (round 1) + 6 turn/draft/request files.
+    let server = await startServer(name, [], { ATEMPORAL_DISK_FULL_AFTER: '33' });
     const { a, b, s, round2 } = await opening(server);
     const tokens = [a.token, b.token];
     // Discard the earlier planning announcement before sending commits; a fast failed

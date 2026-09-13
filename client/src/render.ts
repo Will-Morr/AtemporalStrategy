@@ -33,6 +33,7 @@ export class Renderer {
     this.map.style.height = `${this.map.height}px`;
     this.minimap.width = this.minimap.clientWidth || 200;
     this.minimap.height = this.minimap.clientHeight || 200;
+    this.timeline.style.minHeight = `${this.game.config.player_count * 12 + 14}px`;
     this.timeline.width = this.timeline.clientWidth || 600;
     this.timeline.height = this.timeline.clientHeight || 80;
   }

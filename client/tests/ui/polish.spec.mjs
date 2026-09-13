@@ -35,7 +35,9 @@ test('same-browser players refresh independently and uncommit restores an editab
   await expect.poll(()=>a.evaluate(()=>window.atemporal.draft.commands)).toEqual(original);
   await expect(b.locator('#top-phase')).toContainText('planning');
   await review.capture('uncommitted-plan-restored',a);
-  await a.keyboard.press('Control+z'); // Restored plan remains intact; history starts at withdrawal.
+  await a.keyboard.press('Control+z');
+  expect(await a.evaluate(()=>window.atemporal.draft.commands)).toEqual([]);
+  await a.keyboard.press('Control+u');
   expect(await a.evaluate(()=>window.atemporal.draft.commands)).toEqual(original);
   await a.locator('#commit').click(); await b.locator('#commit').click();
   await revision(a,1); await revision(b,1);

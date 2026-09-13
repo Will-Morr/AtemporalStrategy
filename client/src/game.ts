@@ -557,6 +557,7 @@ export class Game {
         if (reply.draft) {
           this.draft.tick = reply.draft.tick;
           this.draft.commands = reply.draft.commands;
+          this.draft.undo = reply.draft.commands.map((_, index) => ({commands:reply.draft!.commands.slice(0,index),tick:index ? reply.draft!.tick : null}));
           this.current = reply.draft.based_on_revision;
           this.seek(reply.draft.tick);
           this.toast('Turn uncommitted. Your moves are ready to edit.');
@@ -1068,6 +1069,7 @@ export class Game {
       commit.textContent = waiting ? 'Uncommit · edit my moves' : 'Turn started';
       commit.disabled = !waiting || !this.net.connected || this.spectator;
     }
+    if (this.finished) { commit.textContent = 'Match ended'; commit.disabled = true; }
     if (this.turnRequestPending) commit.disabled = true;
   }
 
