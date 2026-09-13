@@ -18,7 +18,9 @@ export class Experience {
   focusDelete: (() => void) | null = null;
   metric: typeof metrics[number] = 'bank';
   graphHover: number | null = null;
+  groupOwner: number;
   constructor(readonly g: Game) {
+    this.groupOwner = g.player ?? 0;
     const toolbar = document.createElement('div'); toolbar.id = 'actions';
     const keys: [string,string][] = [['F Attack','f'],['G Support','g'],['M Mine','m'],['C Construct','c'],['B Build','b'],['Q Queue','q'],['P Priority','p'],['X Idle','x'],['L Loop','l'],['R Stored','r'],['H Members','h'],['⇧H Add','H'],['J Output group','j'],['O Future policy','o'],['Z Output direction','z'],['Undo','Control+z'],['Redo','Control+Shift+z'],['V Statistics','v'],['? Help','?']];
     for (const [label,key] of keys) toolbar.append(button(label, () => {
@@ -37,6 +39,7 @@ export class Experience {
     toolbar.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
     $('timeline-wrap').append(toolbar);
     const groups = document.createElement('details'); groups.id = 'groups'; groups.innerHTML = '<summary>Groups 0–9</summary><div id="group-list"></div>';
+    if (g.spectator) { const owner=document.createElement('select');owner.setAttribute('aria-label','Inspect player groups');for(let p=0;p<g.config.player_count;p++)owner.add(new Option(g.name(p),String(p)));owner.onchange=()=>{this.groupOwner=Number(owner.value);g.selection.clear();g.recalledGroup=null;g.updatePanels();};groups.append(owner); }
     $('selection').append(groups);
     const recipient = document.createElement('div'); recipient.id = 'recipient'; $('selection').prepend(recipient);
     const queue = document.createElement('div'); queue.id = 'queue'; $('selection').append(queue);
@@ -145,12 +148,12 @@ export class Experience {
     const list = $('group-list'); list.replaceChildren();
     const groups = this.groups();
     for (let slot=0;slot<10;slot++) {
-      const group = groups.find(v => v.id.owner === g.player && v.id.slot === slot);
+      const group = groups.find(v => v.id.owner === this.groupOwner && v.id.slot === slot);
       const count = group?.members.filter(m => g.entities().some(e => idKey(e.id) === idKey(m))).length ?? 0;
       const bound = g.exact?.state.entities.filter(e => {
         let binding = e.production?.spawn_group;
         if (g.draft.tick === Math.floor(g.playhead) && g.current === g.latest) for (const d of g.draft.commands) if (d.command.kind === 'bind_factory_group' && d.command.factories.some(f => idKey(f) === idKey(e.id))) binding = d.command.group;
-        return binding?.owner === g.player && binding.slot === slot;
+        return binding?.owner === this.groupOwner && binding.slot === slot;
       }).length ?? 0;
       list.append(button(`${slot}: ${count} living · ${bound} factories · ${group?.latest_order ? `${group.latest_order.order.kind} @${group.latest_order.tick}` : 'no saved order'}`, () => g.digit(slot)));
     }
@@ -189,6 +192,10 @@ export class Experience {
     const survival = document.createElement('div');
     survival.textContent = `Survival requires active building AND constructor/factory. ${transitions.map(t => `${g.name(t.player_id)} ${t.status} @${t.resolved_tick}${t.reasons.length ? ` (${t.reasons.join(', ')})` : ' (recovered)'}`).join(' · ')}`;
     inputs.prepend(survival);
+    const status = document.createElement('div');
+    const entities = g.entities().filter(e => e.lifecycle === 'complete');
+    status.textContent = Array.from({length:g.config.player_count},(_,p) => `${g.name(p)}: building ${entities.some(e=>e.owner===p && g.types.get(e.type_key)?.counts_for_survival)?'✓':'missing'}, constructor/factory ${entities.some(e=>e.owner===p && g.types.get(e.type_key)?.provides_build_ability)?'✓':'missing'}`).join(' · ');
+    inputs.prepend(status);
   }
   queue(): void {
     const g = this.g, root = $('queue');
@@ -203,8 +210,9 @@ export class Experience {
       }; root.append(b);
     };
     for (const v of g.selectedViews()) {
-      const p = v.exact?.production;
+      const p = structuredClone(v.exact?.production);
       if (!p || v.owner !== g.player) continue;
+      if(g.draft.tick === Math.floor(g.playhead) && g.current === g.latest) for(const d of g.draft.commands) {const c=d.command;if('factories' in c && c.factories.some(id=>idKey(id)===idKey(v.id))) {if(c.kind==='bind_factory_group')p.spawn_group=c.group;if(c.kind==='set_stored_order')p.stored_order=c.order;}}
       const info = document.createElement('p');
       const group = this.groups().find(x => x.id.owner === p.spawn_group?.owner && x.id.slot === p.spawn_group?.slot);
       info.textContent = `Output group ${p.spawn_group?.slot ?? 'none'} · newborn ${group?.latest_order?.order.kind ?? p.stored_order.kind} · ${p.active_item?.awaiting_output ? 'blocked' : 'ready'}`; root.append(info);

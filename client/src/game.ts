@@ -411,6 +411,7 @@ export class Game {
     this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});
     this.draft.redo = [];
     this.draft.tick = Math.floor(this.playhead);
+    $('toast').classList.remove('active');
     this.draft.commands.push({ local_id: `d${Date.now()}-${this.draft.commands.length}`, command: command as DraftCommand['command'], future_orders: policy });
     this.updatePanels();
   }
@@ -495,12 +496,12 @@ export class Game {
         return;
       }
       if (e.button !== 0) return;
+      map.focus();
       const tile = this.renderer.tileAt(e.clientX, e.clientY);
       if (this.mode.kind === 'attack' || this.mode.kind === 'stored-target') {
         this.applyTileMode(tile);
         return;
       }
-      map.focus();
       if (this.mode.kind === 'place' && this.mode.type_key !== 'wall') {
         this.placeAt(tile);
         return;
@@ -698,6 +699,7 @@ export class Game {
       e.preventDefault();
       return;
     }
+    if (target?.tagName === 'BUTTON' && (k === 'Enter' || k === ' ')) return;
     if (k === 'Escape') {
       if ($('statistics').classList.contains('active')) $('statistics').classList.remove('active');
       else if ($('help').classList.contains('active')) $('help').classList.remove('active');
@@ -708,6 +710,7 @@ export class Game {
       }
       this.updateMode();
       this.updatePanels();
+      $('map').focus();
       return;
     }
     if (k === '?') {
@@ -765,14 +768,14 @@ export class Game {
       }
       case 'Enter': if (this.mode.kind === 'none' && !this.drag) void this.commit(); else this.toast('Finish or cancel the action before committing.'); break;
       case ' ': this.togglePlay(); e.preventDefault(); break;
-      case ',': this.seek(this.playhead - 1); break;
-      case '.': this.seek(this.playhead + 1); break;
+      case ',': this.seek(this.playhead - (e.shiftKey ? 100 : 1)); break;
+      case '.': this.seek(this.playhead + (e.shiftKey ? 100 : 1)); break;
       case '<': this.seek(this.playhead - 100); break;
       case '>': this.seek(this.playhead + 100); break;
       case 'Home': this.seek(this.editableFrom); break;
       case 'End': this.seek(this.availableThrough); break;
-      case '[': this.rate = RATES[Math.max(0, RATES.indexOf(this.rate) - 1)]; this.updatePanels(); break;
-      case ']': this.rate = RATES[Math.min(RATES.length - 1, RATES.indexOf(this.rate) + 1)]; this.updatePanels(); break;
+      case '[': if (e.shiftKey) {this.panTimeline(-(this.view.t1-this.view.t0)/4);break;} this.rate = RATES[Math.max(0, RATES.indexOf(this.rate) - 1)]; this.updatePanels(); break;
+      case ']': if (e.shiftKey) {this.panTimeline((this.view.t1-this.view.t0)/4);break;} this.rate = RATES[Math.min(RATES.length - 1, RATES.indexOf(this.rate) + 1)]; this.updatePanels(); break;
       case '-': this.zoomTimeline(1.25); e.preventDefault(); break;
       case '=': this.zoomTimeline(0.8); e.preventDefault(); break;
       case '{': this.panTimeline(-(this.view.t1-this.view.t0)/4); break;
@@ -802,14 +805,14 @@ export class Game {
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'priority') {
       const priority = (['high', 'medium', 'low'] as Priority[])[n - 1];
-      const entities = this.selectedIds();
+      const entities = this.selectedViews().filter(v=>this.ownSelectable(v)).map(v=>v.id);
       if (priority && entities.length) this.stage({ kind: 'set_priority', entities, priority });
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'stored') {
       this.mode = { kind: 'none' };
     } else {
       // Recall a control group from exact state; membership is simulation state.
-      const group = this.experience.groups().find(g => g.id.owner === this.player && g.id.slot === n);
+      const group = this.experience.groups().find(g => g.id.owner === this.experience.groupOwner && g.id.slot === n);
       this.selection.clear();
       this.recalledGroup = n;
       if (group && this.exact) {
@@ -860,9 +863,9 @@ export class Game {
     $('top-score').textContent = score ? `score: ${score}` : '';
     const round = this.experience?.rounds.get(this.current);
     if (round) {
-      const fastest = Math.max(1,Math.min(...round.time_totals.map(t=>t.total_ms)));
+      const fastest = Math.max(1000,Math.min(...round.time_totals.map(t=>t.total_ms)));
       const penalty = this.config.objective.kind === 'scoreboard' ? this.config.objective.rules.time_penalty : 'none';
-      $('top-sim').textContent = `Sim ${round.sim_duration_ms}ms · committed time ratio ${round.time_totals.map(t=>`${this.name(t.player_id)} ${(Math.max(1,t.total_ms)/fastest).toFixed(2)}×`).join(' / ')} · penalty ${penalty}${this.current === this.latest && this.phase && !this.committed.includes(this.player ?? -1) && !this.spectator ? ` · live planning ${((performance.now()-this.planningSince)/1000).toFixed(0)}s` : ''}`;
+      $('top-sim').textContent = `Sim ${round.sim_duration_ms}ms · committed time ratio ${round.time_totals.map(t=>`${this.name(t.player_id)} ${(Math.max(1000,t.total_ms)/fastest).toFixed(2)}×`).join(' / ')} · penalty ${penalty}${this.current === this.latest && this.phase && !this.committed.includes(this.player ?? -1) && !this.spectator ? ` · live planning ${((performance.now()-this.planningSince)/1000).toFixed(0)}s` : ''}`;
     }
   }
 
@@ -904,7 +907,7 @@ export class Game {
           }
           if (t?.mining && v.type_key === 'constructor') extra += ' · mines at half rate';
         }
-        return `<div><span class="swatch" style="background:${this.color(v.owner)}"></span> ${v.type_key} ${v.lifecycle === 'site' ? '(site)' : ''} hp ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)} @${Math.round(v.x)},${Math.round(v.y)}${extra}</div>`;
+        return `<div>P${v.owner} <span class="swatch" style="background:${this.color(v.owner)}"></span> ${v.type_key} ${v.lifecycle === 'site' ? '(site)' : ''} hp ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)} @${Math.round(v.x)},${Math.round(v.y)}${extra}</div>`;
       });
       if (views.length > 12) rows.push(`<div class="muted">…and ${views.length - 12} more</div>`);
       if (this.recalledGroup !== null) rows.unshift(`<div><b>Group ${this.recalledGroup}</b>: orders go to current members + future spawns</div>`);
@@ -928,7 +931,8 @@ export class Game {
     $('draft-title').textContent = `Draft${this.draft.tick !== null ? ` @ tick ${this.draft.tick}` : ''} · policy ${this.draft.policy}${gate.ok ? '' : ` · ${gate.reason}`}`;
     const commit = $<HTMLButtonElement>('commit');
     const canCommit = this.net.connected && !this.spectator && !!this.phase && this.phase.revision === this.current && !this.committed.includes(this.player ?? -1) && !this.finished;
-    commit.disabled = !canCommit || this.current !== this.latest;
+    const commitTick = this.draft.tick ?? Math.floor(this.playhead);
+    commit.disabled = !canCommit || this.current !== this.latest || commitTick < this.editableFrom || commitTick > this.availableThrough;
     commit.textContent = this.draft.commands.length ? `Commit turn (${this.draft.commands.length} at tick ${this.draft.tick})` : `Pass turn (tick ${Math.floor(this.playhead)})`;
   }
 
@@ -956,7 +960,7 @@ export class Game {
 
 function describe(c: DraftCommand): string {
   const cmd = c.command;
-  const policy = c.future_orders === 'keep' ? '' : ` [${c.future_orders}]`;
+  const policy = ` [${c.future_orders}]`;
   switch (cmd.kind) {
     case 'assign_order': return `Selected units only: ${cmd.order.kind} × ${cmd.entities.length}${policy}`;
     case 'assign_group_order': return `group ${cmd.group.slot}: ${cmd.order.kind} (members + future spawns)${policy}`;

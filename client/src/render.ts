@@ -312,7 +312,7 @@ export class Renderer {
       ctx.fillText(v.type_key[0], px + s * 0.38, py + s * 0.62);
     }
     ctx.globalAlpha = 1;
-    if (s >= 16) {ctx.fillStyle='#fff';ctx.font='8px system-ui';ctx.fillText(String(v.owner),px+s-6,py+s-1);}
+    if (s >= 10) {ctx.fillStyle='#fff';ctx.font='7px system-ui';ctx.fillText(String(v.owner),px+s-6,py+s-1);}
     // Health bar: filled versus dim segment; sites show completion instead.
     const frac = Math.max(0, Math.min(1, v.hp / v.maxHp));
     ctx.fillStyle = '#0008';

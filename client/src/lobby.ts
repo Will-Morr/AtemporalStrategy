@@ -21,8 +21,8 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
   const error = $<HTMLSpanElement>('lobby-error');
   const status = $<HTMLParagraphElement>('status');
   let lobby = initial;
-  username.value = localStorage.getItem('atemporal-username') ?? '';
-  color.value = localStorage.getItem('atemporal-color') ?? color.value;
+  if (!username.value) username.value = localStorage.getItem('atemporal-username') ?? '';
+  if (color.value === '#4fc3f7') color.value = localStorage.getItem('atemporal-color') ?? color.value;
   $<HTMLParagraphElement>('rules').textContent = lobby.rule_summary;
   if (lobby.available_teams.length) {
     teamWrap.style.display = '';
