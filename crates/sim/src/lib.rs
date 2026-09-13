@@ -21,9 +21,20 @@ pub fn run(
     cancel: &AtomicBool,
     emit: &mut dyn FnMut(Output),
 ) -> Result<RunResult> {
+    run_with_hook(request, cancel, emit, &mut || {})
+}
+
+/// As `run`, calling `between_ticks` at every tick boundary so short jobs can be serviced.
+pub fn run_with_hook(
+    request: &SimRequest,
+    cancel: &AtomicBool,
+    emit: &mut dyn FnMut(Output),
+    between_ticks: &mut dyn FnMut(),
+) -> Result<RunResult> {
     let mut sim = Sim::new(request)?;
     sim.emit_state_outputs(emit, true);
     loop {
+        between_ticks();
         if cancel.load(Ordering::Relaxed) {
             return Err("canceled".into());
         }

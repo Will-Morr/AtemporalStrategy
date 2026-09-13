@@ -35,7 +35,7 @@ pub type TypeKey = String;
 pub type TeamId = String;
 
 /// A JSON integer that survives a browser round trip without precision loss.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(try_from = "u64", into = "u64")]
 pub struct SafeInt(pub(crate) u64);
 impl TryFrom<u64> for SafeInt {
