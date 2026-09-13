@@ -135,3 +135,7 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 ## Production, repair and scoreboard scenarios
 
 `production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real five-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop/narrow viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.
+
+## Missile silo scenarios
+
+`missiles.spec.mjs` builds and configures a silo through real inputs, checks all three production recipes, manual launch queues and cancellation, range/impact previews, satellite flight and destination vision, blast results, stockpiling, refresh and replay rewrites. A second scenario supplies automatic targeting with an allied spotter, then rewrites the automatic plan into stored ammunition. Both run through the controller or native peripheral on desktop/narrow Chromium. The tests compare preview flight times with resolved arrivals and play a one-tick satellite flight between compact replay samples. Capture and inspect the full placement, stockpile, targeting and flight frames; a passing control assertion alone does not establish visual quality.
