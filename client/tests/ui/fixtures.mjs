@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 export { expect };
 
 // Automatic diagnostics also cover tests that forget to request `review`.
+// Allow recorded player contexts more than the default 30 seconds to flush evidence.
 export const test = base.extend({
   review: [async ({ page, context, browser, baseURL, viewport }, use, testInfo) => {
     const log = [];
@@ -78,5 +79,5 @@ export const test = base.extend({
       await testInfo.attach('browser-log', { path, contentType: 'application/json' });
       expect(errors(), 'browser errors').toEqual([]);
     }
-  }, { auto: true }]
+  }, { auto: true, timeout: 120000 }]
 });

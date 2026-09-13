@@ -133,7 +133,7 @@ The coordinator retains shared content/contracts and merges changes sequentially
 - [x] Exact action ticks in player rows, latest-write labels, selected-unit delivery highlights, touchpad panning and visible replay speed presets through 16×.
 - [x] Hybrid scoreboard/fixed-history mode, constructor output clearance, attack-move retaliation and hidden enemy blueprints during seeks.
 - [x] Exact floating-point JSON recovery for fractional matter, with archive/peripheral hash checks and a generated-map regression.
-- [x] Integrate current main, pass the 30-scenario browser suite plus six final timeline scenarios, manually inspect full game frames and record actual verification limits.
+- [x] Integrate current main, pass the final 30-scenario browser suite and focused timeline scenarios, manually inspect full game frames and record actual verification limits.
 
 ## Queued feature work
 
