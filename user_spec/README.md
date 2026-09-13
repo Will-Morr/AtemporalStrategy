@@ -33,6 +33,6 @@ The user subsequently requested implementation of “Resolve product rules and e
 The user also requested a repeatable browser UI review harness and an interactive browser-control layer. Keep both usable by agents generally, rather than tying them to Codex. Agents should be able to iteratively inspect and improve the actual rendered game UI.
 
 
-## Browser automation and CI
+## Browser automation
 
-The user requested an agent-neutral Playwright/MCP harness and CI with useful screenshots, traces and failure artifacts. Verify the existing scaffold honestly and enable gameplay scenarios as real controls become available. Keep this work scoped to automation, CI and browser-review documentation; coordinate package changes with the slice agent. Work in a new worktree and branch based on `main`, and commit and push cohesive chunks. See [browser testing](../docs/browser-testing.md) for the current workflow and explicit coverage limits.
+The user requested an agent-neutral Playwright/MCP harness with useful screenshots, traces and failure artifacts. Verify the existing scaffold honestly and enable gameplay scenarios as real controls become available. Keep this work scoped to automation and browser-review documentation; coordinate package changes with the slice agent. Work in a new worktree and branch based on `main`, and commit and push cohesive chunks. The latest instruction supersedes the earlier CI request: keep checks local, with no hosted jobs or automatic push triggers. See [browser testing](../docs/browser-testing.md) for the current workflow and explicit coverage limits.

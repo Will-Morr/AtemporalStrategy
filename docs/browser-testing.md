@@ -56,11 +56,11 @@ The current multi-context test verifies independent player-A/player-B/spectator 
 
 Artifacts are git-ignored and retained per run for inspection. They are not game archives. Do not run concurrent build-backed reviews in the same worktree: their ports/profiles differ, but the build writes the same `client/dist` and generated contracts. Use separate worktrees or build once and target an external server.
 
-## CI and harness verification
+## Local harness verification
 
-`.github/workflows/checks.yml` runs on pushes, pull requests and manual dispatch. The workspace job runs `scripts/check.sh` for formatting, Rust tests, strict Clippy, browser build, shared fixtures and generated-file drift. The browser job installs the lockfile dependencies and Chromium with OS libraries, runs both scaffold viewports, exercises the standard MCP transport, and verifies deliberate failures. It rejects focused tests in CI and has no automatic retries. The MCP and harness checks still run after a scenario failure when setup reached the review step.
+Run `scripts/check.sh` locally for formatting, Rust tests, strict Clippy, browser build, shared fixtures and generated-file drift. Run the browser and MCP commands above for rendered review and transport verification. These commands do not install hosted jobs or run automatically when the branch is pushed.
 
-Both jobs upload evidence even on failure, with 14-day retention. Download `browser-evidence-<attempt>` from the Actions run, then open `ui/ci/report/index.html` with `playwright show-report`, or inspect its traces with `playwright show-trace`. `browser-mcp/ci` includes session output, protocol transcript, browser console/network logs and run/error metadata. Workspace output is in `workspace-<attempt>/workspace.log`. Setup failures before a command starts may have only the Actions log; startup failures cannot produce a screenshot of a page that never loaded.
+The MCP artifact directory includes session output, protocol transcript, browser console/network logs and run/error metadata. Startup failures cannot produce a screenshot of a page that never loaded.
 
 Run the failure-path check independently:
 
@@ -72,7 +72,7 @@ Its four intentionally failing cases are excluded from normal review. The outer 
 
 ## Gameplay scenario activation
 
-Add real scenarios to `client/tests/ui/*.spec.mjs` as their controls land; normal review and CI discover them without a package change. Configure `ATEMPORAL_UI_SERVER_COMMAND` to launch the implemented game server with deterministic setup and the supplied `PORT`, or use `ATEMPORAL_UI_BASE_URL` for an existing instance. Each independently running match needs isolated server state; mark a shared-match suite serial or give it its own server. An absent required control should fail an enabled scenario, rather than silently skip it or fall back to fixture JSON.
+Add real scenarios to `client/tests/ui/*.spec.mjs` as their controls land; normal review discovers them without a package change. Configure `ATEMPORAL_UI_SERVER_COMMAND` to launch the implemented game server with deterministic setup and the supplied `PORT`, or use `ATEMPORAL_UI_BASE_URL` for an existing instance. Each independently running match needs isolated server state; mark a shared-match suite serial or give it its own server. An absent required control should fail an enabled scenario, rather than silently skip it or fall back to fixture JSON.
 
 | Scenario | Evidence required before claiming coverage | Current state |
 | --- | --- | --- |
