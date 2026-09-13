@@ -4,126 +4,109 @@
 
 ## Execution policy
 
-This pass produces specifications only. The decision register records user requirements, including constructor mining, expanded elimination, three outcomes, team play and lead-based scoring. Remaining scoring interpretations stay revisable. Work can proceed using clearly labeled, revisable defaults where needed. The first milestone is one authoritative end-to-end browser game; the second adds peripheral replication and polish. Every subsystem agent owns a long-lived worktree and should finish a cohesive subsystem, with integration fixtures rather than a pile of disconnected scaffolding.
+Implementation has not begun. Start with one agent, or sequential agents sharing a real integration branch, to deliver a working sim/server/browser slice. Use real neighboring components from the outset; mocks are limited to targeted fault injection and protocol unit fixtures. Stabilize contracts after this slice works, before parallel breadth work. All engineering defaults remain revisable when implementation provides evidence.
 
-Build and verify the entire planned feature set—including variants, guide, graphs, replay and peripheral—before asking the user to play. Intermediate automated and agent-run scenarios provide engineering verification. Timed mode uses locked constructor/factory absence; scoreboard has no round limit and supports manual archive.
+Complete the entire planned feature set—including roster, maps, game variants, groups, guide, graphs, replay and peripheral—before asking the user to play. Intermediate automated scenarios and agent-run browser checks are engineering verification, not a user playtest.
 
-One coordinating agent owns shared contracts and integration. After contracts freeze, create branches/worktrees such as `agent/sim` at `../atemporal-sim`, `agent/server` at `../atemporal-server`, and `agent/client` at `../atemporal-client`. Agents commit to their own branches and report commit IDs. Coordinator merges one handoff at a time, resolves shared contract changes first, then runs integration checks. Do not have multiple agents edit the same contract/config fixture. At most three subsystem agents run alongside the coordinator; assign peripheral work after the sim agent finishes.
+After Gate 2, the coordinator owns shared contracts/content/integration and starts up to three subsystem agents in separate long-lived worktrees, such as `agent/sim` at `../atemporal-sim`, `agent/server` at `../atemporal-server`, and `agent/client` at `../atemporal-client`. Each completes cohesive breadth work against the real slice. Merge handoffs sequentially; coordinate shared schema changes before merging dependent code. Transfer `crates/runner` to the peripheral owner explicitly when that later task begins.
 
 ## Nested implementation checklist
 
-- [ ] Resolve product rules and establish contracts — coordinator
-  - [ ] Implement confirmed per-round/pass scoring and configurable five-point default (scoreboard rules), preserving optional lead-N and team scoring; track remaining Q4 interpretations.
-  - [ ] Freeze versioned event/state/protocol schemas and causal identity encoding.
-  - [ ] Scaffold Rust workspace/browser build, pin dependencies/toolchain, document launch commands.
-  - [ ] Add normalized setup/content examples and fixture protocol messages.
-  - [ ] Shared content-loader guide generation at build; content-hash validation and runtime override/resume fallback.
-  - [ ] Define golden tiny-world fixtures with expected actions and outcomes.
-- [ ] Deterministic world and simulation — simulation agent
-  - [ ] Implement validated capability-based content and full initial roster.
-  - [ ] Seeded cave rooms/corridors, rotational terrain/ore symmetry, start validation.
-  - [ ] Canonical state, genesis/blueprint/production identity, checkpoints and hashing.
-  - [ ] Action assignment, effective historical events after per-entity suppression, dormant-target diagnostics.
-  - [ ] Mining including constructor 50% throughput, bank, priority water filling, partial construction and HP.
-  - [ ] Blueprint selection, production queues/loops/templates and blocked output.
-  - [ ] Persistent groups 0–9, timed membership/binding edits, saved group orders and one-time member delivery.
-  - [ ] Factory spawn membership/inheritance, individual overrides, checkpointed group state and suppression interaction.
-  - [ ] Combat-table idle/turret/attack-move/support behavior, snapshot target state, direct/indirect fire and healing.
-  - [ ] Four/eight-neighbor pathfinding, cooldowns, deterministic allied sidestep/swaps and stuck fallback.
-  - [ ] Ordered parallel intent collection and identical serial fallback.
-  - [ ] Completed-only active-building OR no-build-ability checks with recovery, persisting orders, three outcome kinds, inactivity cutoff/future-event guards, backup horizon, state/events/statistics export.
-  - [ ] Team hostility/support/swaps with individual survival and ownership.
-  - [ ] Checkpoint suffix replay equivalence and release benchmarks.
-- [ ] Match controller, worker and archive — server agent
-  - [ ] Static browser/guide hosting, live lobby profiles/colors/team selection, slots/tokens/spectators, phase machine.
-  - [ ] Commit validation/idempotency, future-order policy/window validation, group ownership/commands and whole-group/member suppression resolution, configured control limits.
-  - [ ] Implement confirmed simultaneous Q2 turn sequencing; choose earliest changed tick across round.
-  - [ ] Worker process protocol, bounded progress/batches, stale-result rejection.
-  - [ ] Exact state/range/stat endpoints and bounded cache/disk chunks.
-  - [ ] Q3 timed boundary, FFA/team survivor scoring, fixed-target/lead thresholds, configurable ties and draw scoring, thinking time and configurable penalties.
-  - [ ] Atomic accepted-turn and round-result persistence, replay/resume CLI.
-  - [ ] Reconnect, worker-failure retry and pending-round crash recovery.
-  - [ ] CLI port, same-origin routes, restart/resume at the same address with persisted roster.
-- [ ] Browser play experience — client agent
-  - [ ] Landing-page guide link, username/color input, team selection and full live roster.
-  - [ ] Concise player guide prose, generated unit tables and responsive static layout.
-  - [ ] Grayscale canvas floor/walls, contrasting units/ore/structures, zoom/pan/WASD and minimap.
-  - [ ] Unit health bars, last-move facing and minimal movement/attack/projectile/explosion playback.
-  - [ ] Selection/shift/box, groups 0–9 with visible recipient mode, factory output binding and capability-aware panel.
-  - [ ] Keyboard action modes, area/line placement, construction orders.
-  - [ ] Factory queue/loop/stored-order UI and blocked-output visibility.
-  - [ ] Draft timestamp, future-order keep/all/window controls and removal previews, atomic undo/redo, clear/rebase and commit/pass.
-  - [ ] Seek/play/rate/step/zoom/pan timeline, event bars, immutable region.
-  - [ ] Revision-aware exact-state fetching and progress/reconnect handling.
-  - [ ] Score/timing/spend panels, team/survivor outcomes, lead margin display, graph overlay and round replay viewer.
-  - [ ] Keyboard-only action workflow with mouse used for map selection.
-- [ ] End-to-end automated integration — coordinator
-  - [ ] Run two player tabs plus spectator, complete an opening factory/army fight.
-  - [ ] Rewrite before production and verify outcomes, IDs, overlays and undo.
-  - [ ] Exercise timed/scoreboard, both control limits, asymmetric 3-player FFA, symmetric 4-player FFA and 2v2 team setup.
-  - [ ] Inspect prototype usability and performance; fix actual blocking friction.
-- [ ] Input-only peripheral — available simulation agent, after first playable milestone
-  - [ ] Runner peripheral mode, bootstrap/fingerprint verification, local browser serving.
-  - [ ] Relay commits to controller; reproduce revisions using native shared sim.
-  - [ ] Hash verification, mismatch UI, reconnect/replay and cache rebuild.
-  - [ ] Compare controller/peripheral hashes across retroactive multi-round fixture.
-- [ ] Final hardening and handoff — coordinator
-  - [ ] Behavior, recovery and performance scenarios below pass with recorded results.
-  - [ ] Document setup YAML, content tuning, replay/resume, constraints and benchmark machine.
-  - [ ] Offer the user a playtest only after all planned features and required automated checks are complete; record feedback then.
+- [ ] Establish the real vertical slice — one lead agent, before subsystem fan-out
+  - [ ] Scaffold the Rust workspace and browser build; pin toolchain/dependencies and document launch commands.
+  - [ ] Implement shared content validation and provisional contract types, causal tuple IDs and pre-tick state conventions.
+  - [ ] Use a small deterministic fixture map and enough real content for miner → constructor → factory → grunt production.
+  - [ ] Implement shared four/eight-neighbor destination BFS fields and bounded local stuck handling.
+  - [ ] Implement tick action/motion, mining/construction/production, basic combat and simple allied displacement.
+  - [ ] Run the actual sim library on a dedicated server thread with typed channels and per-tick cancellation.
+  - [ ] Serve a minimal browser with selection, attack-move, blueprint placement, queue, commit and timeline playback/seek.
+  - [ ] Stage/validate at any editable tick using exact in-process reconstruction, including non-sample ticks.
+  - [ ] Persist real accepted turns/results and rerun from a checkpoint after an earlier-tick rewrite.
+  - [ ] Measure Gate 2 round latency, cold seek and per-revision event/stat/snapshot size with export enabled.
+  - [ ] Stabilize versioned contracts and shared fixtures from the working slice, then assign breadth work.
+- [ ] Complete deterministic simulation — simulation agent after Gate 2
+  - [ ] Full capability-based roster and validated content, including constructor mining at 50% miner throughput.
+  - [ ] Connected cave rooms/corridors, rotational symmetry, start access and configurable ore budgets.
+  - [ ] Continuous bank spending, tier water filling, damaged partial construction and cancellation rules.
+  - [ ] Production queue editing/loops, output direction/blocking and stored-order fallback.
+  - [ ] Persistent groups 0–9, membership/bindings, saved orders and newborn inheritance.
+  - [ ] Entity/group order locks, overlapping intervals, same/newer-round overrides and missing-target diagnostics.
+  - [ ] Complete combat behavior table, target state, direct/indirect fire and capability-gated support/healing.
+  - [ ] Shared-field cold/warm equivalence, static invalidation, bounded local detours and goal-crowd settling.
+  - [ ] Ordered parallel intents/serial reductions, serial fallback and HashMap/HashSet prohibition.
+  - [ ] Checkpointed locks/cooldowns/facing/targeting/stuck state; exclude derived flow caches and cache version.
+  - [ ] Completed-only survival checks with recovery; inactivity/absolute horizon without elimination early-stop.
+  - [ ] Compact revision entity dictionaries, events/stats, canonical hashes and full/checkpoint replay equivalence.
+  - [ ] Release benchmarks at 100/500/2,000 entities and the full configured cap.
+- [ ] Complete match controller and archive — server agent after Gate 2
+  - [ ] Lobby usernames/colors/team selection, live roster, slots/tokens/spectators and stale-start protection.
+  - [ ] Sim adapter scheduling, bounded channels, exact-state LRU, job errors/cancellation and stale-result rejection.
+  - [ ] Simultaneous commit validation/idempotency, sequential draft references, control limits and policy validation.
+  - [ ] Snapshot/command/stat ranges, exact states, bounded cache chunks and on-demand archive regeneration.
+  - [ ] Timed constructor/factory finalization and scoreboard survivor/lead/target/draw/tie/time-penalty reducers.
+  - [ ] No scoreboard round cap; manual stop/archive with no invented result or extra score.
+  - [ ] Atomic turn/round publication, pending-round recovery, replay/resume CLI and timing persistence.
+  - [ ] CLI port, same-origin routes, stable-address restart and fresh bootstrap/server-instance detection.
+  - [ ] One startup guide-generation invocation using loaded content, also used for archived-content guides.
+- [ ] Complete browser experience — client agent after Gate 2
+  - [ ] Landing-page guide link, profile/color/team inputs and full live roster.
+  - [ ] Concise guide prose/layout and generated readable unit/building stats.
+  - [ ] Grayscale terrain, contrasting entities/ore, zoom/pan/WASD and minimap.
+  - [ ] Health/completion bars, last-move facing and minimal movement/projectile/explosion playback.
+  - [ ] Selection/shift/box, groups 0–9, visible direct/group recipient mode and factory output bindings.
+  - [ ] Keyboard action modes, areas/lines, queue/loop/template/priority controls and placement output preview.
+  - [ ] Draft timestamp, local non-authoritative lock estimates, undo/redo/rebase and commit/pass.
+  - [ ] Any-tick exact-state loading, seek/play/rate/step/zoom/pan timeline and immutable region.
+  - [ ] Event bars, before/after result summaries, actual skipped-command reasons and tick links.
+  - [ ] Score/time/spend panels, graphs, recovery/final-loss distinctions and historical-round viewer.
+  - [ ] Reconnect, stale-instance/revision handling, browser-safe keys and text-input focus behavior.
+- [ ] Complete input-only peripheral — assigned agent after the slice, before user playtest
+  - [ ] `runner` native peripheral, shared sim adapter/library, controller bootstrap/fingerprint validation.
+  - [ ] Local browser/guide serving on configurable port and commit relay to the controller.
+  - [ ] Derive locks/IDs/groups from inputs; compare revision hashes without world-state streaming.
+  - [ ] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay.
+- [ ] Full integration and handoff — coordinator
+  - [ ] Real two-player tabs plus spectator cover opening, production, combat, rewriting and replay.
+  - [ ] Exercise both objectives/control limits, 3-player FFA, 4-player FFA and 2v2 teams.
+  - [ ] Verify all behavioral, durability and performance checks below; fix blockers.
+  - [ ] Document launch/setup/content/guide/archive usage, constraints and measured benchmark machine/results.
+  - [ ] Ask the user to play only when the full current plan is implemented and required checks pass.
 
 ## Agent assignments and acceptance contracts
 
-| Agent | Exclusive ownership | Inputs | Required handoff |
-| --- | --- | --- | --- |
-| Coordinator | `crates/contracts`, `crates/content`, guide generator, root build files, shared fixtures/config, documentation | Settled decisions | Versioned schemas, compilable skeleton, integration harness, final assembled game |
-| Simulation | `crates/sim`, sim benches (uses coordinator-owned content loader) | Contracts and content fixtures | Library implementing `SimRequest` to deterministic batches/result, replay tests, measured release performance |
-| Server | `crates/server`, worker-mode shell in `crates/runner`, archive code | Contracts; fake sim adapter until sim lands | Playable transport/lobby/commit flow, durable revisions, failure/recovery tests, launch command |
-| Client | `client/` | Protocol fixtures and a local mocked transport | Full interaction flow and guide prose/layout against fixtures and then server, build output and manual keyboard checklist |
-| Peripheral (later) | Peripheral module in `crates/runner` | Integrated server/sim and frozen native fingerprint | Local endpoint, input relay, verification/reconnect demonstration |
+| Agent | Exclusive ownership after Gate 2 | Required handoff |
+| --- | --- | --- |
+| Coordinator | `crates/contracts`, `crates/content`, guide generator, build wiring, shared fixtures/config/docs | Stabilized slice, compatible schema changes, startup stat export and assembled game |
+| Simulation | `crates/sim`, sim benches | Real library completing mechanics, cold/warm/cache/thread replay checks and measured performance |
+| Server | `crates/server`, in-process sim adapter, archive code | Real lobby/commit/publication/resume flow, failure checks and launch command |
+| Client | `client/`, guide prose/layout | Full interaction flow against real server, build output and agent-run browser checklist |
+| Peripheral | `crates/runner` | Native controller connection, local endpoint, input relay and hash/reconnect demonstration |
 
-Server agent initially owns the runner entry point. Transfer runner ownership explicitly before peripheral implementation. Simulation agent must not independently change schema or fixture meanings; propose a contract change to the coordinator, who updates version/fixtures and informs all agents. Use mocks at process/library boundaries only; avoid maintaining two game engines.
+Content loader/exporter has one owner. The guide depends on content; the sim never depends on HTML generation. Server owns startup invocation/routing, not a second loader. Agents work against the integrated slice rather than waiting for separate mocked subsystems. Each handoff reports commit IDs, runnable commands, checks/results, limitations and any coordinated contract changes.
 
 ## Integration gates and meaningful checks
 
-Gate 1: schemas serialize/deserialize identically in Rust and TypeScript; tiny-world golden fixtures settle tick/state conventions. No subsystem waits for a polished UI.
+Gate 1: provisional Rust/TypeScript schema fixtures and tiny worlds establish tick semantics, tuple identities and serialized data. Do not freeze the whole contract or fan out subsystem agents yet.
 
-Gate 2: miner → factory blueprint → funded factory → looped grunt production → attack order works from a browser commit through the worker and back to timeline. Do this before adding all graphs/peripheral mode.
+Gate 2: real miner → factory blueprint → funded factory → produced grunt → attack works from browser commit through the in-process sim and back to timeline. Seek to a non-sample tick, issue an order there and verify partial resimulation against full replay. Measure actual event/stat/snapshot bytes and commit-to-playable/cold-seek latency with default-cap export before selecting retention budgets. Only then stabilize contracts and start breadth agents. This is an automated engineering milestone, not an early user playtest.
 
-Gate 3: replay hashes match with one/four threads, full replay/checkpoint replay, and controller/peripheral on the supported build. Inputs that delay or remove births never redirect old orders. Checkpoints include cooldown/production state.
+Gate 3: full/checkpoint/peripheral replay has identical hashes with one/four threads and cold/warm/evicted flow caches. Restore lock windows, targeting, cooldowns and bounded local detours. Clippy prohibits HashMap/HashSet in the sim. Compact transport dictionaries must not affect gameplay order or IDs.
 
-Gate 4: targeted conservation and conflict tests cover water filling, simultaneous death, damaged construction, ore exhaustion, blocked spawns, swaps/corner cuts, equal-time edits, inactivity windows, capped moving cycles, long cooldowns and future scheduled commands. Use tolerance only for resource invariants; deterministic hash equality is exact.
+Gate 4: the behavioral fixtures below pass. Use numeric tolerance for conservation invariants, but exact equality for deterministic hashes. No code exists yet; these are acceptance criteria, not claimed results.
 
-Gate 5: fault injection after durable input, during worker run, after result writes and before publication recovers exactly one score delta and the same accepted moves. Duplicate commit requests do not append another turn. Malformed commands do not crash server/worker.
+Gate 5: inject failures after durable input, during a sim-thread job, on cancellation/channel backpressure, after result writes and before publication. Recover one score delta and the same accepted moves. A failed/canceled job cannot mutate a published revision. Process-kill recovery uses the archive; recoverable thread failure restarts a clean job. Duplicate commits do not append another turn. Disk-full leaves accepted inputs recoverable and the last published result intact.
 
-Gate 6: two-player/spectator browser walkthrough covers every action, timeline seeking, draft undo/rebase, stale responses, reconnect, graph selection and immutable-history restrictions. Run release benchmarks once stable; repeat only after relevant changes or failures.
+Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick planning, replay, guide, graphs, variants, reconnect and immutable-history rules. Measure typical and cap-length 20,000-tick runs, dense chokepoints and repeated near-zero rewrites. Report end-to-end latency, seeks, memory and bytes/revision with export enabled. Cache eviction preserves access to every archived round through regeneration. Repeat checks after relevant changes/failures, not as unbounded busywork.
 
-Each handoff reports scope, command(s) to run, meaningful tests and results, known limitations, and any unmerged contract requests. Do not call a mocked subsystem complete until it is exercised with its real neighbor.
+## Behavioral fixtures
 
-Additional acceptance cases from the user’s gameplay requirements: constructor mines exactly half miner throughput over equal active ticks; turret+constructor survives, turret+miner loses without a factory, lone constructor loses without an active building, and factory-only survives both presence tests. Hidden scouts never postpone elimination. A/B/C with A eliminated and B/C surviving reports win with two proposed FFA score deltas; no eliminations is stalemate; all eliminated is draw. A 2v2 result with one and two survivors yields team survivor counts 1 and 2; verify stalemates award zero and a partial-elimination win awards each team its survivor count. Lead-N checks handle tied leaders, simultaneous score increments and team totals. Replaying a partial elimination must still reach later eliminations and reproduce the final survivor set.
-
-Scoring acceptance: an unchanged winning timeline continues awarding points on pass rounds; default match target is configurable 5. A 2v2 run with all four alive awards 0/0, one eliminated awards 1/2 (by surviving team membership), and all eliminated awards 0/0 in draw/none or proposed 2/2 in draw/all_players. Apply each round’s complete delta vector once before evaluating target/lead rules.
-
-Future-order replacement acceptance: at t=20 and W=10, remove selected entities’ events at 21 and 30, preserve events at 20 and 31; DropAll also removes 31. For an A/B group event, redirecting A preserves B. Same-round new orders and other owners are untouched. Window mode rejects disabled/nonpositive configuration. Single-order mode accepts replacement+removals as one command. Undo/rebase previews restore/recompute precisely. Later new commands inside an old cleared window execute normally. Original round playback retains its original events; new revisions and peripherals share the same suppression set/hash. Suppressing the only distant future order removes its inactivity-wait obligation. Suppressing a future factory queue edit preserves prior active production and causal spawn identity. Test that target disappearance after simultaneous rewrite does not undo the accepted suppression.
-
-Control-group acceptance: issue group order A, individually redirect member U to B, then spawn V; U stays on B and V joins/inherits A. Later group order C overrides both once, while a subsequent individual override remains until another group order. Empty-group orders are valid. Several factories feed one group; blocked output inherits the latest order/binding at actual spawn. Group command plus any future removals counts once in single-order mode. Overlapping group deliveries obey canonical order. Full/checkpoint/peripheral replay agrees after moving a birth or group order earlier. Suppressing U’s component leaves saved order and V’s behavior intact; suppressing the whole group event removes both delivery and saved-order write. Plain digit recall changes selection without consuming a turn; changing a recalled selection clearly switches to individual targeting.
-
-Visual acceptance: units/ore/orders contrast clearly against both gray terrain tones; health bars show damage at exact ticks; successful axis/diagonal movement updates facing while idle, blocked moves and attacks retain it. Seek/checkpoint replay restores facing after a long idle interval. Pause freezes effects, scrubbing and revision changes remove stale effects, and combat between sampled snapshots remains visible through events. Visual projectile duration never shifts damage timing or sim hashes. Dense combat/high playback rate remains readable with bounded effect counts. Inspect a replay containing death, artillery fire and allied swaps.
-
-Latest survival/scoring acceptance: an unfinished factory does not prevent elimination, but its surviving constructor continues building and restores the player on completion. A temporarily eliminated army can eliminate the opponent later, producing a draw instead of an early win. Continue even at zero current survivors if actions/future inputs can change state. Recovery followed by all players alive is stalemate and never scores. Full/checkpoint/peripheral replay preserves both transitions and final status; an immutable past elimination does not disable future recovery. For 2v2 all-eliminated endpoints, draw/none gives 0/0 and proposed draw/all_players gives 2/2; survivors remain empty in both. Default target tie at 5/5 continues, 6/5 ends; configured shared victory returns both at 5/5. Test complete same-round score reduction with draw/tie policies, and no duplicate awards after crash recovery.
-
-Guide/lobby handoff: coordinator owns shared loader/exporter and build wiring; client agent owns player-facing prose/layout; server agent owns guide selection, live roster persistence/broadcast and CLI port. Do not independently maintain a second stat schema or move fixed team selection back into YAML-only assignments.
-
-Acceptance: changing a unit stat rebuilds both sim content and guide table; runtime overrides and resumed archived stats serve a matching guide rather than bundled stale numbers. Validate guide links, readable roster tables and walkthrough against a real opening turn. In two player tabs plus spectator, username/color/team edits appear everywhere; a late join gets the complete roster and a stale Start is refreshed. Start freezes the visible accepted roster. Launch on a nondefault port, restart/resume on that port, and refresh existing tabs to recover identities/phase; reject an occupied port without changing URLs. Guide and WebSocket work at the same chosen origin. Profiles and documentation must not alter simulation hashes.
-
-Behavior and performance acceptance fixtures (before the completed game is handed to the user):
-
-- Movement: idle allied blocker with free sidestep; legal swap without reciprocal intent; packed corridor and opposing allied traffic; no vehicle diagonal displacement; no entity moved twice; no available legal displacement; many-unit destination spreading; occupied output feeding a crowd. Serial/parallel/checkpoint hashes must agree. Failures are fixed before balancing, not deferred until user playtesting.
-- Combat: automatic idle turret fire, mobile idle defense, reached AttackMove goal, acquisition outside range, hold on cooldown, loss of target and mutual Support reading previous snapshot without recursion.
-- Inactivity: unreachable retry and unfunded factory actually stop; long otherwise-legal cooldown defers stopping; a necessary detour counts as progress; forced displacement alone does not; normal/fast-forward/checkpoint stop ticks agree.
-- Performance: typical full round plus cap-length cyclic run, dense chokepoint and repeated tick-zero rewrites with export/disk enabled. Record commit-to-playable latency and exact-state seeks, peaks and bytes per revision. Slow-disk/backpressure and disk-full fixtures preserve authoritative inputs/results; cache eviction still permits every archived round to be reconstructed.
-- Interfaces: a factory cannot be placed with all output directions against rock; same-draft group edits affect removal preview; temporary blueprint IDs resolve identically at commit; changing priority preserves future attack orders; browser-safe keys do not navigate tabs/history; sim tests do not require a guide build.
-
-Implementation has not begun; all verification remains outstanding. Keep match adjudication isolated in controller reducers: test constructor-based locked defeat independently of full battlefield status, and manual archive independently of scoring.
-
-Match-adjudication acceptance: absence of active buildings with a living constructor in S[new_L] does not finalize timed loss; absence of both constructors/factories does. A future-only absence beyond the boundary remains editable. Evaluate simultaneous locked losses together. Repeat tied wins/stalemates/draws without an automatic round cap, then manually stop/archive and verify no extra points and no fabricated battlefield draw. Persist partial-round inputs and the last published result on manual archive.
+- **Economy:** equal-duration constructor mining is half dedicated-miner throughput; high/medium/low allocation obeys capped equal shares; damage remains lost during funding; blocked paid factory output never duplicates or double-charges a birth. Default peaceful mine-and-loop opening exhausts its ore and reaches inactivity within the target wall time; estimate versus measured depletion is recorded.
+- **Movement:** cold/warm fields select identical legal next steps; walkers cannot cut corners and vehicles never move diagonally, including forced displacement. Idle blockers yield; packed/opposing corridors and factory crowds move without overlap or moving an entity twice. Group arrivals settle without perpetual displacement. Static target fields do not make structures traversable. Radius-6 stuck detours retain a necessary uphill first step across checkpoints; unreachable fields do not repeatedly launch full searches.
+- **Identity:** one queue command targeting two factories produces distinct tuple IDs. Delayed/removed births never retarget orders. Site completion preserves ID. Loop occurrences advance only at actual spawn. Compact u16/u32 dictionaries decode old revision events independently of the current revision; crossing the conservative u16 bound chooses wider encoding, not truncation.
+- **Order locks:** at t=20/W=10, older events at 21 and 30 skip, 20 and 31 remain; DropAll also skips 31. Explicit A/B delivery with only A locked still applies to B. Same-round/newer commands execute. Group slot locks block older saved-order writes; member locks preserve those writes. Newborns inherit active slot locks. A missing replacement target installs no lock. A short newer window does not erase a longer prior one or extend newer-round restrictions beyond its window. Local estimates may differ from actual no-op results after rewriting. Fully locked distant events need not postpone inactivity; uncertain future targets do.
+- **Control groups:** group order A, individual override B on U, then spawn V leaves U on B and V on A. Later group C overrides both once. Empty groups store orders; overlapping groups follow canonical event order. Blocked output inherits at actual spawn. Single-order mode counts one group assignment plus its locks as one command.
+- **Combat/inactivity:** automatic turret fire, idle defense, target acquisition/loss, reached destinations, hold-on-cooldown and mutual Support reading prior snapshot. Unreachable retries/unfunded production stop; otherwise-legal long cooldowns defer inactivity. Voluntary detours count as progress; forced displacement alone does not. Normal/fast-forward/checkpoint stop ticks agree.
+- **Survival/scoring:** unfinished entities do not prevent elimination; surviving constructors continue work and can restore a player. Residual armies can produce mutual elimination; no survivor-count early-stop. All recovered → stalemate/zero points. Partial survival → win/survivor awards. All eliminated → configured draw/none or all-player awards, with an empty survivor list. Apply all deltas before target/lead/tie checks; default 5/5 continues and 6/5 ends, shared-victory mode can return both.
+- **Match adjudication:** locked active-building absence with a constructor does not finalize timed loss; locked constructor/factory absence does. Mutable future losses remain editable. Reduce simultaneous losses together. Scoreboard never auto-stops after repeated ties/stalemates; manual archive records unfinished without another award or fabricated battlefield draw and retains partial-round inputs.
+- **Browser/guide/port:** live usernames/colors/teams appear for both players and spectators; stale Start refreshes roster. Non-sample exact ticks never snap. Local lock estimates account for preceding draft edits. Temporary blueprint references resolve consistently. Startup and resumed-content guides use actual loaded stats through one generation function. Nondefault-port restart/resume works by refreshing existing tabs; occupied ports fail without silently changing URLs.
+- **Visuals:** grayscale terrain keeps entities/ore/orders legible; health/facing restore at arbitrary ticks. Pause/seek/revision changes handle cosmetic shots/explosions without stale effects or shifted damage timing. Short combat between samples remains visible through events; dense playback bounds cosmetic counts.

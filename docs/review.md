@@ -134,7 +134,7 @@ Recommendation: benchmark commit-to-playable-publication and exact-tick seek lat
 
 ### R7 — Medium: generic future-order removal has surprising cross-setting effects
 
-Evidence: [removal scope](contracts.md#future-order-suppression-contract) and [group suppression](contracts.md#persistent-control-groups).
+Evidence: [removal scope](contracts.md#future-order-locks) and [group suppression](contracts.md#persistent-control-groups).
 
 The current proposal allows a priority or queue-setting command carrying DropAll to remove future movement orders as well as future settings. A player trying to change spending priority could erase the army's future attack. Deleting a later suppression source does not restore what it previously removed; this is internally coherent as revision editing, but differs from causally replaying all commands as ordinary in-world actions. Member-level suppression also preserves the group's saved order, so future births can still inherit it. These choices are not user-locked.
 
@@ -177,3 +177,107 @@ The user explicitly discounted R5's proposed early human playtest and requested 
 | R9 inactivity | Valid. Only otherwise-executable time-delayed work defers stopping; failed retries do not. Define activity once and compare normal/fast-forward/checkpoint execution. | Concrete proposal; cap remains necessary for productive movement cycles. |
 
 The earlier assurance that no product questions remained was too strong. R1/R3 were explicitly raised and answered: constructor-based locked timed defeat and manual archive without a scoreboard cap. Remaining reducer edge cases are disclosed implementation interpretations, not another blanket approval gate. Displacement reduces avoidable jams but is not a promise of routing through physically sealed terrain or of starvation freedom in every arbitrary crowd configuration. Test the expected corridor/output cases before calling the mechanic adequate.
+
+## Review 2026-09-12 — implementation-readiness pass
+
+This is a desk review of the complete planning set before any code exists. The user reviewed the findings and made two decisions: the per-unit A* movement design must be replaced, and order entry must remain possible at any tick (no snapshot-locked planning). All other changes below were accepted as proposals to apply. Update the architecture/contracts/implementation documents to match before agent handoff.
+
+### Required changes
+
+#### C1 — Replace per-opportunity A* with destination flow fields (user-required)
+
+Problem: [motion and AI shortcuts](architecture.md#motion-and-ai-shortcuts) derives a full A* path per movement opportunity, with per-entity route caching as a later optimization. At 500 entities moving every few ticks over a 12,000-tick run this is on the order of a million searches per round, roughly tens of seconds, not the two-second target. Per-entity cache invalidation with equivalence tests is the hard road and still scales with unit count.
+
+Change:
+
+- A destination field is a BFS distance grid from a goal tile over terrain plus static structures/sites, one per `(goal_tile, neighbor_rule, structure_version)`. Walkers use eight-neighbor Chebyshev BFS without corner cutting; vehicles use four-neighbor BFS. A 48×48 field is ~2K cells of `u16`.
+- A moving unit takes the neighbor with the lowest field value that is legal for it, treating dynamic occupants as soft obstacles as already specified. Ties break by fixed neighbor order. Field lookups replace path derivation everywhere: AttackMove destinations, Support follow targets, Mine/Construct work tiles (goal = the chosen work tile), and stuck fallback.
+- Fields are derived caches, not state: rebuild on checkpoint load, discard on any structure placement/completion/destruction (`structure_version` increments). They never appear in hashes or checkpoints; decisions must be identical whether a field was cached or freshly built.
+- Many-unit orders to one tile need no separate destination-spreading rule for routing: units descend the same field and stop when adjacent tiles are full. Keep the existing `resolved_destination` proposal only if fixtures show units oscillating at the goal.
+- Short-range chase within vision uses the same mechanism with the target tile as goal, or greedy stepping when the target is adjacent-visible; do not build per-pursuer full searches.
+- Unreachable goals are detected once per field (goal not connected to the unit's component), which feeds the inactivity reducer directly.
+- Occupancy-aware stuck fallback after three failed attempts becomes a bounded local BFS (radius ~6) with current blockers as hard obstacles, not a map-wide search.
+
+Affected docs: architecture (motion, performance), contracts (`resolved_destination`, `blocked_step` fields), implementation checklist and movement fixtures. Acceptance: path-heavy 500-entity benchmark stays under target with fields enabled; serial/parallel/checkpoint hashes agree with cold and warm field caches; corridor and output-crowd fixtures still resolve.
+
+#### C2 — Run the simulation in-process; keep any-tick exact state (user-decided)
+
+Problem: [processes](architecture.md#processes-and-modules) launches a worker subprocess per resimulation and per exact-state request. Planning requires exact `S[t]` for validation, so every timeline click becomes a process spawn, framed checkpoint transfer, and replay. The server already links the sim crate for commit validation, so the process boundary buys only crash isolation while costing framing, IPC, and worker lifecycle code. The user explicitly requires seeking and order entry at any tick, so exact-state reconstruction stays.
+
+Change:
+
+- The sim runs on a dedicated thread inside the server process, using the same `SimRequest`/`WorkerMessage` types over a channel. Drop the stdin/stdout framing, frame size limits, temporary result directory promotion, and subprocess cancellation rules; cancellation becomes a shared flag checked per tick. Keep the fingerprint and the rule that a failed run leaves the last published revision intact.
+- Exact state at tick `t` is reconstructed in-process from the nearest earlier checkpoint (≤ 99 ticks at the proposed interval). With C1 this is milliseconds. Keep a small LRU of reconstructed exact states keyed by `(revision, tick)`.
+- The browser may render interpolated sampled state immediately while exact state loads, but command staging waits for exact state as already specified.
+- The runner binary keeps only peripheral mode. The "worker mode" checklist items move into the server agent's in-process sim adapter.
+- The user's original expectation of a separate simulation process is satisfied in intent (IO never blocks on ticks); note this as an assistant interpretation in decisions.
+
+Affected docs: architecture (processes, round latency), contracts (simulation boundary, runner framing), implementation (agent ownership of `crates/runner`, Gate 5 fault injection reduces to thread failure). Acceptance: default cold seek well under 250 ms; commit-to-playable latency measured without process startup.
+
+#### C3 — Bound the default run length through ore, not the horizon
+
+Problem: mining counts as progress, so a single looping miner defers the inactivity stop until ore is exhausted. With ore intended to bound game length and `max_tick` proposed at 100,000, the typical round simulates the entire remaining ore supply every time and the browser shows a 100k-tick timeline. This is the default case, not an edge case.
+
+Change:
+
+- Set initial content so total ore per player depletes in roughly 10,000–20,000 ticks at full miner throughput; set `max_tick` proposed default to 20,000. Both remain YAML tuning values.
+- Report the ore-depletion tick estimate in the lobby rule summary so the horizon is visible.
+- The cap-length benchmark scenario uses the new cap; drop the separate 100,000-tick workload.
+
+Affected docs: decisions (end conditions), contracts (MatchConfig defaults), architecture (performance targets). Acceptance: a mine-and-loop opening with no combat stops by ore exhaustion within the target wall time.
+
+#### C4 — Replace revision-scoped suppression records with an in-world order lock
+
+Problem: [future-order suppression](contracts.md#future-order-locks) resolves removals on the controller against the base revision, persists per-component suppression sets, distinguishes whole-group from member masks, and adds preview/history protocol messages. This is the most intricate contract in the plan. Its only advantage over an in-world rule is that a removal stays stable when the replacement itself no-ops after another player's same-round change.
+
+Change:
+
+- `FutureOrderPolicy` stays on `AssignOrder`/`AssignGroupOrder`. When such a command executes at tick `t`, each affected living owned entity receives `order_lock = { until_tick: t+W or ∞, issued_round }`. For group orders the lock also applies to the group slot itself.
+- When any later assignment or entity-directed setting from an earlier accepted round is applied at tick `u` with `t < u <= until_tick`, it is skipped for that entity (or the group slot) with outcome reason `locked_by_later_round`. Commands from the same or later rounds are unaffected, matching the current "same-round commands are never suppressed" rule.
+- Newborns inherit the group slot lock check through the same path, so a whole-group lock suppresses the saved-order write from older rounds; member locks do not.
+- `order_lock` is entity/group state: checkpointed, hashed, replicated by the peripheral for free. Remove `Suppression`, `CommittedCommand.suppressions`, `PreviewFutureOrders`, `GetEntityOrderHistory`, `GetGroupOrderHistory` and `suppressed_by`. The client preview becomes a local computation over fetched scheduled commands and is labeled non-authoritative.
+- Inactivity lookahead treats a future command as effective unless every component it targets is locked past its tick; that check is done in-sim with current lock state.
+- Disclosed edge: if the replaced entity does not exist at `t` in the rewritten simulation, no lock is placed and older future orders remain live. Report it in command outcomes.
+
+Affected docs: contracts (orders/drafts, suppression, control groups, protocol), architecture (historical orders), decisions (future-order replacement), acceptance fixtures. Acceptance: the existing t=20/W=10 cases produce identical observable behavior; single-order mode still counts one command.
+
+#### C5 — Build one vertical slice before fanning out agents
+
+Problem: the [handoff plan](implementation.md#execution-policy) freezes contracts and starts three subsystem agents on mocks (fake sim adapter, mocked transport). Contracts of this size will change when the sim becomes real; mocked neighbors drift and integration lands late.
+
+Change: one agent (or sequential agents) delivers Gate 2 end to end — real sim library, minimal server with in-process sim, minimal client with select/attack-move/blueprint/queue/commit/timeline seek. Only after Gate 2 passes do the three agents take breadth work in worktrees. Contract freeze happens after the slice, not before.
+
+Affected docs: implementation (execution policy, checklist order, gate wording).
+
+#### C6 — Simplify the guide build to one path
+
+Problem: compile-time generation plus a content-hash fallback generator at startup is two code paths for the same tables. Change: always generate the guide at server startup from the loaded content through the shared loader, into a temp/static directory served at `/guide/`. Drop the bundled-guide manifest comparison. The user's compile-time preference is satisfied in spirit (no hand-maintained tables); note as an interpretation.
+
+### Smaller changes
+
+- Entity IDs: use a fixed-size tuple `(birth_command: CommandId, item_index: u16, occurrence: u32)` instead of causal strings or digests; intern to `u16` indices per revision for snapshots and events so 32-byte strings never appear per entity per sample.
+- Determinism: forbid `HashMap`/`HashSet` in `crates/sim` (clippy `disallowed_types`); use `BTreeMap` or sorted `Vec`.
+- Measure per-revision stats/events size at Gate 2 with the new cap before choosing retention budgets.
+
+### Unchanged and confirmed sound
+
+Pre-tick `S[t]` checkpoint convention, causal identity with dormant references, ordered parallel-intent/serial-reduce tick, two-phase action/motion with absolute cooldowns, allied displacement rule, non-absorbing elimination with three outcomes, per-round score reduction, and atomic turn/round persistence.
+
+### Deferred scope note
+
+Peripheral mode, 3–4 player variants, timed reducers, lead-N, draw policies and the time penalty remain in scope before the first playtest by user decision. They are not blocked by the changes above; C2 and C4 make the peripheral strictly simpler.
+
+## Implementation-readiness disposition
+
+The accepted pass is incorporated into the current architecture, contracts, client plan and implementation sequence. The main documents state only the resulting design; this section retains the reasoning/history. No implementation or measured performance result is claimed.
+
+- Destination BFS fields replace whole-map per-unit path searches. Static-target seeding, cache independence and bounded local detours are explicit. Crowd settling is a shared-goal rule; per-unit destination spreading is not baseline scope.
+- Simulation and any-tick exact-state reconstruction use a dedicated in-process thread and typed channels. Runner is peripheral-only. Atomic turn/round publication remains; subprocess framing and result-directory promotion are absent.
+- Ore budgets target about 10,000–20,000 dedicated-miner ticks per start (initial target 12,000), with a proposed 20,000-tick cap and visible estimate. Both remain tuning choices, not measured guarantees.
+- In-world entity/group locks replace controller-resolved suppression data/endpoints. Local previews are estimates and actual no-op results come from simulation. Missing targets install no lock. A small canonical collection preserves overlapping round/expiry windows: one short newer lock cannot erase a longer one, and taking independent maxima must not overextend a newer restriction.
+- The real sim/server/browser Gate 2 slice precedes contract stabilization and agent fan-out. It measures actual data volume and latency. Every planned mode/feature still precedes user playtesting.
+- Static guide generation always uses the loaded content at startup through one function; archived content uses the same path. This and in-process execution remain disclosed interpretations of the original preferences.
+- Causal tuple IDs include a frozen multi-target scope within birth_command, so one queue command to two factories cannot collide. Compact transport indices use u16 when a conservative total-birth bound fits and u32 otherwise; they never become persistent order IDs or affect hashes.
+- Shared field grids/cache version stay derived; bounded local detour steps and lock state are serialized because they affect future decisions. Clippy disallows unordered map/set types in the sim.
+
+Verification still required in code: all relevant flow-cache/thread/checkpoint identities; window boundaries and overlapping locks; distinct multi-factory births; absent/delayed-target lock behavior; arbitrary non-sample tick entry; full-cap and mine-and-loop latency with export; and the single startup guide path. These details close specification ambiguity, not substitute for executing the fixtures.

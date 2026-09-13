@@ -33,3 +33,9 @@ Units have health bars showing damage and rotate to indicate the direction they 
 Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
 
 Link the guide from the landing page where players select teams. Players enter a username and choose a color. During setup, all usernames and player colors must be clearly visible and update for everyone as they change, so the full lobby state is known before starting.
+
+## Timeline planning and movement performance
+
+Players must be able to watch the replay starting from any tick and inject orders on any tick. Do not restrict order entry to sampled snapshot ticks; exact state at an arbitrary tick must remain available.
+
+Movement must use a lightweight shared approach instead of per-unit A* searches. Destination flow fields are the accepted implementation proposal. In-process simulation, ore-budget tuning, in-world order locks, an end-to-end slice before parallel subsystem work, and one startup guide-generation path are accepted proposals; they remain implementation choices rather than additional locked gameplay rules.
