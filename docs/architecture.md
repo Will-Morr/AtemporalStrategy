@@ -100,7 +100,7 @@ Snapshot memory and browser delivery must be bounded: checkpoint interval config
 
 When configured for inputs-only delivery, main server still runs the authoritative simulation and owns scoring. A trusted native peripheral connects to its WebSocket, downloads pinned initial configuration/content plus the command ledger, and uses the exact same simulation library/build to reproduce revisions. It serves a local browser UI and local state snapshots; player commits relay to the main server using assigned slot credentials. Main server sends commands, phase metadata, scores/timing, and state hashes, not world snapshots in this mode.
 
-Peripheral acknowledges completed revision/hash; mismatch stops local order entry and shows a diagnostic. It can reconstruct from the initial seed and ledger after reconnect; optional locally persisted checkpoints accelerate this. No automatic acceptance of client-computed wins, custom consensus, browser WASM port, or peer-to-peer synchronization. The ordinary authoritative mode remains the first playable milestone.
+Peripheral compares each completed revision's final hash and terminal tick with the controller's reference; mismatch stops local order entry (planning is not forwarded) and shows a diagnostic through the status endpoint and failed queries. It reconstructs from the initial state and ledger after reconnect or a runner restart, and regenerates evicted bodies by full replay with the hash re-checked; locally persisted checkpoints are not implemented (in-memory only). No automatic acceptance of client-computed wins, custom consensus, browser WASM port, or peer-to-peer synchronization. The ordinary authoritative mode remains the first playable milestone.
 
 ## Multiplayer result reduction
 

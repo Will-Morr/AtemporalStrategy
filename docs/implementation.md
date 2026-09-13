@@ -60,11 +60,11 @@ After Gate 2, the coordinator owns shared contracts/content/integration and star
   - [ ] Event bars, before/after result summaries, actual skipped-command reasons and tick links.
   - [ ] Score/time/spend panels, graphs, recovery/final-loss distinctions and historical-round viewer.
   - [ ] Reconnect, stale-instance/revision handling, browser-safe keys and text-input focus behavior.
-- [ ] Complete input-only peripheral — assigned agent after the slice, before user playtest
-  - [ ] `runner` native peripheral, shared sim adapter/library, controller bootstrap/fingerprint validation.
-  - [ ] Local browser/guide serving on configurable port and commit relay to the controller.
-  - [ ] Derive locks/IDs/groups from inputs; compare revision hashes without world-state streaming.
-  - [ ] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay.
+- [x] Complete input-only peripheral — assigned agent after the slice, before user playtest
+  - [x] `runner` native peripheral, shared sim adapter/library, controller bootstrap/fingerprint validation.
+  - [x] Local browser/guide serving on configurable port and commit relay to the controller.
+  - [x] Derive locks/IDs/groups from inputs; compare revision hashes without world-state streaming.
+  - [x] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay (`scripts/peripheral-check.mjs`; the mismatch diagnostic reaches the browser through withheld planning and failed queries, not a dedicated panel).
 - [ ] Full integration and handoff — coordinator
   - [ ] Real two-player tabs plus spectator cover opening, production, combat, rewriting and replay.
   - [ ] Exercise both objectives/control limits, 3-player FFA, 4-player FFA and 2v2 teams.
@@ -122,6 +122,6 @@ Gate 2 is met, so the breadth assignments below are open. The slice already prov
 | Now | Controller/archive breadth | `crates/server`: teams/capacity in the lobby, bounded byte-accounted channels, retention/eviction with regeneration, archive resume/replay CLI, stats bucketing, failure injection. |
 | Now | Browser breadth | `client`: group-edit/binding chords, graphs, per-round replay viewer, before/after summaries, lock-effect previews, reconnect polish and multi-player rendered review. |
 | Now | Browser harness/CI improvements | Extend `client/tests/ui/slice.spec.mjs` rather than the scaffold test; keep screenshots as review evidence. |
-| Explicit later ownership transfer | Native peripheral | `crates/runner`, using the same real sim adapter/library and input contracts. |
+| Done | Native peripheral | `crates/runner` over the server library's sim adapter and revision store; `--inputs-only` controller route; see [development](development.md). |
 
 The coordinator retains shared content/contracts and merges changes sequentially. Compact transport, exact-state reconstruction and real lock application should be settled in the slice before separate owners depend on them. These assignments do not authorize an early user playtest.

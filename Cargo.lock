@@ -25,7 +25,15 @@ dependencies = [
 name = "atemporal-runner"
 version = "0.1.0"
 dependencies = [
+ "atemporal-content",
  "atemporal-contracts",
+ "atemporal-server",
+ "atemporal-sim",
+ "axum",
+ "futures-util",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]

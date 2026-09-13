@@ -108,7 +108,18 @@ pub struct Controller {
     pub evictions: u64,
 }
 
-fn now_ms() -> u64 {
+/// Build/target/schema/config/content identity; a peripheral must reproduce it exactly.
+pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprint> {
+    Ok(Fingerprint {
+        schema_version: Version::default(),
+        sim_build: format!("atemporal-sim {}", env!("CARGO_PKG_VERSION")),
+        target: std::env::consts::ARCH.to_string() + "-" + std::env::consts::OS,
+        config_hash: identity::canonical_hash(config)?,
+        content_hash: atemporal_content::content_hash(content)?,
+    })
+}
+
+pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -131,13 +142,7 @@ impl Controller {
     ) -> Result<Self> {
         let config = setup.match_defaults.clone();
         let instance_id = token("instance", std::process::id() as usize);
-        let fingerprint = Fingerprint {
-            schema_version: Version::default(),
-            sim_build: format!("atemporal-sim {}", env!("CARGO_PKG_VERSION")),
-            target: std::env::consts::ARCH.to_string() + "-" + std::env::consts::OS,
-            config_hash: identity::canonical_hash(&config)?,
-            content_hash: atemporal_content::content_hash(&content)?,
-        };
+        let fingerprint = fingerprint(&config, &content)?;
         let players = usize::from(config.player_count);
         let lobby = LobbyState {
             revision: 0,
@@ -1177,24 +1182,9 @@ impl Controller {
         to: Tick,
         stride: Tick,
     ) -> Result<ServerMessage> {
-        let data = self.revision(revision)?;
-        let stride = stride.max(self.config.snapshot_interval);
-        let samples = data
-            .samples
-            .range(from..=to)
-            .filter(|(t, _)| (*t - from.min(**t)).is_multiple_of(stride) || **t == to)
-            .map(|(_, s)| s.clone())
-            .collect();
-        Ok(ServerMessage::SnapshotRange {
-            revision,
-            index_width: if data.dictionary.len() <= usize::from(u16::MAX) {
-                16
-            } else {
-                32
-            },
-            entity_dictionary: data.dictionary.clone(),
-            samples,
-        })
+        Ok(self
+            .revision(revision)?
+            .snapshot_range(self.config.snapshot_interval, from, to, stride))
     }
 
     pub fn stats_range(
@@ -1204,54 +1194,17 @@ impl Controller {
         to: Tick,
         bucket_width: Tick,
     ) -> Result<ServerMessage> {
-        let data = self.revision(revision)?;
-        let interval = self.config.snapshot_interval.max(1);
-        let span = to.saturating_sub(from).saturating_add(1);
-        let width = bucket_width
-            .max(interval)
-            .max(span.div_ceil(MAX_STAT_BUCKETS))
-            .next_multiple_of(interval);
-        // Banks and counters are gauges/cumulative, so a bucket reports its latest sample.
-        let mut buckets: Vec<StatsSample> = vec![];
-        for (tick, sample) in data.stats.range(from..=to) {
-            let bucket = (tick - from) / width;
-            if buckets
-                .last()
-                .is_some_and(|last| (last.tick - from) / width == bucket)
-            {
-                buckets.pop();
-            }
-            buckets.push(sample.clone());
-        }
-        Ok(ServerMessage::StatsRange { revision, buckets })
+        Ok(self.revision(revision)?.stats_range(
+            self.config.snapshot_interval,
+            from,
+            to,
+            bucket_width,
+        ))
     }
 
     pub fn round_result(&self, revision: Revision) -> Result<ServerMessage> {
-        let data = self.revision(revision)?;
-        let mut totals: BTreeMap<PlayerId, u64> = (0..self.config.player_count)
-            .map(|player| (player, 0))
-            .collect();
-        for turn in &data.turns {
-            *totals.entry(turn.player).or_default() += turn.duration_ms.get();
-        }
-        Ok(ServerMessage::RoundResult {
-            revision,
-            round: data.round,
-            parent_revision: data.parent,
-            outcome: data.outcome.clone().ok_or("revision is not published")?,
-            timeline_index: data.timeline_index.clone(),
-            score: data.score.clone(),
-            timed: data.timed.clone(),
-            time_totals: totals
-                .into_iter()
-                .map(|(player_id, duration_ms)| PlayerTime {
-                    player_id,
-                    total_ms: duration_ms.try_into().unwrap_or_default(),
-                })
-                .collect(),
-            sim_duration_ms: data.sim_duration_ms.try_into().unwrap_or_default(),
-            command_outcomes: data.command_outcomes.clone(),
-        })
+        self.revision(revision)?
+            .round_result(self.config.player_count)
     }
 
     pub fn commands_range(
@@ -1260,28 +1213,71 @@ impl Controller {
         from: Tick,
         to: Tick,
     ) -> Result<ServerMessage> {
+        Ok(self.revision(revision)?.commands_range(from, to))
+    }
+
+    pub fn events_range(&self, revision: Revision, from: Tick, to: Tick) -> Result<ServerMessage> {
+        Ok(self.revision(revision)?.events_range(from, to))
+    }
+
+    // ---- inputs-only peripheral --------------------------------------------------------------
+
+    /// Initialization data for a trusted peripheral: pinned identity plus the current ledger.
+    pub fn replay_bootstrap(&self) -> Result<ServerMessage> {
+        let initial = self
+            .revisions
+            .get(&0)
+            .and_then(|g| g.checkpoints.get(&0))
+            .ok_or("match has not started")?;
+        let current = self.revision(self.current)?;
+        Ok(ServerMessage::ReplayBootstrap {
+            fingerprint: self.fingerprint.clone(),
+            config: self.config.clone(),
+            content: self.content.clone(),
+            initial_state: Box::new(initial.clone()),
+            ledger: current.turns.clone(),
+            precedence: current.precedence.clone(),
+        })
+    }
+
+    /// The turns a revision's round added and the lock boundary its job ran under, which is the
+    /// parent's timed boundary (0 without one) and fixes `minimum_end_tick` for reproduction.
+    pub fn round_inputs(&self, revision: Revision) -> Result<ServerMessage> {
         let data = self.revision(revision)?;
-        Ok(ServerMessage::Commands {
+        let round = data.round;
+        let previous_boundary = data
+            .parent
+            .and_then(|p| self.revisions.get(&p))
+            .and_then(|p| p.timed.as_ref())
+            .map_or(0, |t| t.boundary);
+        Ok(ServerMessage::RoundInputs {
             revision,
             turns: data
                 .turns
                 .iter()
-                .filter(|t| t.tick >= from && t.tick <= to)
+                .filter(|t| t.round == round)
                 .cloned()
                 .collect(),
+            precedence: data
+                .precedence
+                .iter()
+                .find(|p| p.round == round)
+                .cloned()
+                .unwrap_or(RoundPrecedence {
+                    round,
+                    players: vec![],
+                }),
+            editable_from: previous_boundary,
         })
     }
 
-    pub fn events_range(&self, revision: Revision, from: Tick, to: Tick) -> Result<ServerMessage> {
+    pub fn reference_hash(&self, revision: Revision) -> Result<ServerMessage> {
         let data = self.revision(revision)?;
-        Ok(ServerMessage::Events {
+        let outcome = data.outcome.as_ref().ok_or("revision is not published")?;
+        Ok(ServerMessage::ReferenceHash {
             revision,
-            events: data
-                .events
-                .iter()
-                .filter(|e| e.tick >= from && e.tick <= to)
-                .cloned()
-                .collect(),
+            tick: outcome.terminal_state_tick,
+            hash: data.final_hash.clone(),
         })
     }
 
@@ -1862,7 +1858,114 @@ impl RevisionData {
             last_used: 0,
         }
     }
-    fn estimate_bytes(&self) -> u64 {
+    pub fn snapshot_range(
+        &self,
+        snapshot_interval: Tick,
+        from: Tick,
+        to: Tick,
+        stride: Tick,
+    ) -> ServerMessage {
+        let stride = stride.max(snapshot_interval);
+        let samples = self
+            .samples
+            .range(from..=to)
+            .filter(|(t, _)| (*t - from.min(**t)).is_multiple_of(stride) || **t == to)
+            .map(|(_, s)| s.clone())
+            .collect();
+        ServerMessage::SnapshotRange {
+            revision: self.revision,
+            index_width: if self.dictionary.len() <= usize::from(u16::MAX) {
+                16
+            } else {
+                32
+            },
+            entity_dictionary: self.dictionary.clone(),
+            samples,
+        }
+    }
+
+    pub fn stats_range(
+        &self,
+        snapshot_interval: Tick,
+        from: Tick,
+        to: Tick,
+        bucket_width: Tick,
+    ) -> ServerMessage {
+        let interval = snapshot_interval.max(1);
+        let span = to.saturating_sub(from).saturating_add(1);
+        let width = bucket_width
+            .max(interval)
+            .max(span.div_ceil(MAX_STAT_BUCKETS))
+            .next_multiple_of(interval);
+        // Banks and counters are gauges/cumulative, so a bucket reports its latest sample.
+        let mut buckets: Vec<StatsSample> = vec![];
+        for (tick, sample) in self.stats.range(from..=to) {
+            let bucket = (tick - from) / width;
+            if buckets
+                .last()
+                .is_some_and(|last| (last.tick - from) / width == bucket)
+            {
+                buckets.pop();
+            }
+            buckets.push(sample.clone());
+        }
+        ServerMessage::StatsRange {
+            revision: self.revision,
+            buckets,
+        }
+    }
+
+    pub fn round_result(&self, player_count: u8) -> Result<ServerMessage> {
+        let mut totals: BTreeMap<PlayerId, u64> =
+            (0..player_count).map(|player| (player, 0)).collect();
+        for turn in &self.turns {
+            *totals.entry(turn.player).or_default() += turn.duration_ms.get();
+        }
+        Ok(ServerMessage::RoundResult {
+            revision: self.revision,
+            round: self.round,
+            parent_revision: self.parent,
+            outcome: self.outcome.clone().ok_or("revision is not published")?,
+            timeline_index: self.timeline_index.clone(),
+            score: self.score.clone(),
+            timed: self.timed.clone(),
+            time_totals: totals
+                .into_iter()
+                .map(|(player_id, duration_ms)| PlayerTime {
+                    player_id,
+                    total_ms: duration_ms.try_into().unwrap_or_default(),
+                })
+                .collect(),
+            sim_duration_ms: self.sim_duration_ms.try_into().unwrap_or_default(),
+            command_outcomes: self.command_outcomes.clone(),
+        })
+    }
+
+    pub fn commands_range(&self, from: Tick, to: Tick) -> ServerMessage {
+        ServerMessage::Commands {
+            revision: self.revision,
+            turns: self
+                .turns
+                .iter()
+                .filter(|t| t.tick >= from && t.tick <= to)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    pub fn events_range(&self, from: Tick, to: Tick) -> ServerMessage {
+        ServerMessage::Events {
+            revision: self.revision,
+            events: self
+                .events
+                .iter()
+                .filter(|e| e.tick >= from && e.tick <= to)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    pub fn estimate_bytes(&self) -> u64 {
         let checkpoints: usize = self
             .checkpoints
             .values()

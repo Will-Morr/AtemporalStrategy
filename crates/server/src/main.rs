@@ -1,11 +1,7 @@
 //! `atemporal-server --port 8080 --config config/game.yaml`: one match per process, same-origin
 //! assets/guide/WebSocket on exactly the requested port. `--resume <match_id>` reopens an archive
 //! under its pinned config/content; `--verify <match_id>` replays it and compares hashes.
-mod adapter;
-mod archive;
-mod controller;
-mod ws;
-
+use atemporal_server::{adapter, archive, controller, ws};
 use atemporal_sim::*;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -28,9 +24,13 @@ fn run() -> Result<()> {
     while let Some(key) = args.next() {
         if key == "--help" {
             println!(
-                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--memory-budget-mb N] [--results-budget-mb N] [--resume MATCH_ID | --verify MATCH_ID]"
+                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--memory-budget-mb N] [--results-budget-mb N] [--inputs-only] [--resume MATCH_ID | --verify MATCH_ID]"
             );
             return Ok(());
+        }
+        if key == "--inputs-only" {
+            options.insert(key, "true".into());
+            continue;
         }
         let value = args
             .next()
@@ -159,6 +159,7 @@ fn run() -> Result<()> {
         controller: Arc::new(Mutex::new(controller)),
         client_dir,
         guide_dir: guide_dir.clone(),
+        inputs_only: options.contains_key("--inputs-only"),
     };
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -168,7 +169,7 @@ fn run() -> Result<()> {
         let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
             .await
             .map_err(|e| format!("cannot bind port {port}: {e}"))?;
-        println!("atemporal-server listening on http://127.0.0.1:{port}/ ({mode} {match_id}; guide {}; replays {})", guide_dir.display(), replay_root.display());
+        println!("atemporal-server listening on http://127.0.0.1:{port}/ ({mode} {match_id}; guide {}; replays {}{})", guide_dir.display(), replay_root.display(), if app.inputs_only { "; inputs-only: world state only through peripherals" } else { "" });
         // A resumed match may need its opening rerun or a fully committed round simulated.
         let pending = {
             let mut c = app.controller.lock().unwrap();

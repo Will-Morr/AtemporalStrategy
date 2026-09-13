@@ -1,4 +1,7 @@
 //! Same-origin HTTP routes (client assets, generated guide) and the WebSocket protocol.
+//! `/ws/peripheral` serves a trusted inputs-only peripheral: it receives the replay bootstrap,
+//! per-revision inputs and reference hashes and never world-state bodies; `--inputs-only` makes
+//! the ordinary route refuse those bodies too, so world state only exists through peripherals.
 use crate::controller::Controller;
 use atemporal_sim::*;
 use axum::{
@@ -23,11 +26,13 @@ pub struct App {
     pub controller: Arc<Mutex<Controller>>,
     pub client_dir: PathBuf,
     pub guide_dir: PathBuf,
+    pub inputs_only: bool,
 }
 
 pub fn router(app: App) -> Router {
     Router::new()
         .route("/ws", get(ws_upgrade))
+        .route("/ws/peripheral", get(peripheral_upgrade))
         .route("/guide", get(guide_root))
         .route("/guide/", get(guide_root))
         .route("/guide/{*path}", get(guide_file))
@@ -50,7 +55,7 @@ async fn client_file(State(app): State<App>, uri: Uri) -> Response {
     serve(&app.client_dir, path).await
 }
 
-async fn serve(root: &Path, relative: &str) -> Response {
+pub async fn serve(root: &Path, relative: &str) -> Response {
     if relative
         .split('/')
         .any(|part| part == ".." || part.is_empty())
@@ -82,7 +87,40 @@ async fn serve(root: &Path, relative: &str) -> Response {
 
 async fn ws_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(64 << 20)
-        .on_upgrade(move |socket| connection(app, socket))
+        .on_upgrade(move |socket| connection(app, socket, false))
+}
+async fn peripheral_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
+    ws.max_message_size(64 << 20)
+        .on_upgrade(move |socket| connection(app, socket, true))
+}
+
+/// Inputs a peripheral still lacks before it can reproduce `through`: the bootstrap once, then
+/// every published revision after `synced` in order, each followed by its reference hash.
+fn peripheral_sync(
+    app: &App,
+    synced: &mut Option<Revision>,
+    through: Revision,
+) -> Vec<ServerMessage> {
+    let c = app.controller.lock().unwrap();
+    let mut out = vec![];
+    let from = synced.map_or(0, |r| r + 1);
+    if from > through {
+        return out;
+    }
+    for revision in c.revisions.range(from..=through).map(|(r, _)| *r) {
+        if let (Ok(inputs), Ok(hash)) = (c.round_inputs(revision), c.reference_hash(revision)) {
+            if synced.is_none() {
+                match c.replay_bootstrap() {
+                    Ok(m) => out.push(m),
+                    Err(_) => return out,
+                }
+            }
+            out.push(inputs);
+            out.push(hash);
+            *synced = Some(revision);
+        }
+    }
+    out
 }
 
 fn envelope(app: &App, message: ServerMessage) -> String {
@@ -95,12 +133,13 @@ fn envelope(app: &App, message: ServerMessage) -> String {
     .unwrap_or_default()
 }
 
-async fn connection(app: App, socket: WebSocket) {
+async fn connection(app: App, socket: WebSocket, peripheral: bool) {
     let (mut sink, mut stream) = socket.split();
     let (direct_tx, mut direct_rx) = mpsc::unbounded_channel::<ServerMessage>();
     let mut public = app.controller.lock().unwrap().broadcast.subscribe();
     let writer_app = app.clone();
     let writer = tokio::spawn(async move {
+        let mut synced: Option<Revision> = None;
         loop {
             let message = tokio::select! {
                 Some(m) = direct_rx.recv() => m,
@@ -110,12 +149,32 @@ async fn connection(app: App, socket: WebSocket) {
                     Err(_) => break,
                 },
             };
-            if sink
-                .send(Message::Text(envelope(&writer_app, message).into()))
-                .await
-                .is_err()
-            {
-                break;
+            // A peripheral learns each revision's inputs and hash before its publication.
+            let mut batch = vec![];
+            if peripheral {
+                match &message {
+                    ServerMessage::Welcome { .. } => {
+                        let current = writer_app.controller.lock().unwrap().current;
+                        batch = peripheral_sync(&writer_app, &mut synced, current);
+                        batch.insert(0, message);
+                    }
+                    ServerMessage::RevisionPublished { revision, .. } => {
+                        batch = peripheral_sync(&writer_app, &mut synced, *revision);
+                        batch.push(message);
+                    }
+                    _ => batch.push(message),
+                }
+            } else {
+                batch.push(message);
+            }
+            for message in batch {
+                if sink
+                    .send(Message::Text(envelope(&writer_app, message).into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
             }
         }
     });
@@ -138,12 +197,32 @@ async fn connection(app: App, socket: WebSocket) {
                 continue;
             }
         };
+        if (peripheral || app.inputs_only) && streams_world_state(&client) {
+            reject(
+                &direct_tx,
+                "",
+                "query_failed",
+                "this server shares inputs only; world state is served by a peripheral".into(),
+            );
+            continue;
+        }
         handle(&app, &direct_tx, &mut player, client).await;
     }
     if let Some(p) = player {
         app.controller.lock().unwrap().disconnect(p);
     }
     writer.abort();
+}
+
+fn streams_world_state(client: &ClientMessage) -> bool {
+    matches!(
+        client,
+        ClientMessage::GetSnapshotRange { .. }
+            | ClientMessage::GetExactState { .. }
+            | ClientMessage::GetStats { .. }
+            | ClientMessage::GetEvents { .. }
+            | ClientMessage::GetControlGroups { .. }
+    )
 }
 
 fn reject(
