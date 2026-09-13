@@ -32,4 +32,4 @@ Content loading/normalization is shared; the sim reads capability data only. The
 
 ## Still provisional
 
-Compact binary encodings (JSON only today), `Move` events, retention/eviction budgets, the inputs-only transport (`replay_bootstrap`, `round_inputs`, `reference_hash` are defined but unused), archive resume, lobby team capacity enforcement, and server-side stats bucketing. Changing any record is a coordinator change with regenerated schema/types/fixtures.
+Compact binary encodings (JSON only today), `Move` events and the inputs-only transport (`replay_bootstrap`, `round_inputs`, `reference_hash` are defined but unused). Retention budgets, archive resume, lobby team capacity and server-side stats bucketing are implemented in the server without record changes: `get_stats` buckets report the latest `StatsSample` in each bucket, and timeline index buckets widen with the run length. Changing any record is a coordinator change with regenerated schema/types/fixtures.

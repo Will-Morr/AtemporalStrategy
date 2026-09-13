@@ -637,7 +637,7 @@ impl Controller {
                 if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
                     return false;
                 }
-                fail_point("during_job");
+                fail_point("during_job", pending.round);
                 pending.dictionary.extend(dictionary);
                 for s in samples {
                     pending.samples.insert(s.tick, s);
@@ -698,9 +698,21 @@ impl Controller {
         if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
             return;
         }
-        eprintln!("simulation job {job_id} failed: {message}; last published revision retained");
+        eprintln!("simulation job {job_id} failed: {message}");
         self.running = None;
         self.pending = None;
+        self.reopen_round();
+    }
+
+    /// Persisting or publishing failed (for example a full disk): the last published revision
+    /// stays current and the round reopens for this round's players to commit again. Their
+    /// durable turns remain on disk, so a restart with --resume replays them instead.
+    pub fn recover_after_failed_publish(&mut self, message: &str) {
+        eprintln!("publish failed: {message}; last published revision retained");
+        self.reopen_round();
+    }
+
+    fn reopen_round(&mut self) {
         self.committed.clear();
         if self.revisions.contains_key(&self.current) {
             self.phase = Phase::Planning;
@@ -760,7 +772,7 @@ impl Controller {
         if let Some(archive) = &self.archive {
             sizes = archive.write_results(&data)?;
             data.bytes = sizes.total();
-            fail_point("after_results");
+            fail_point("after_results", round);
             let precedence = data
                 .precedence
                 .iter()
@@ -793,7 +805,7 @@ impl Controller {
                 time_totals: self.time_totals(),
                 timeline_index: data.timeline_index.clone(),
             })?;
-            fail_point("before_publish");
+            fail_point("before_publish", round);
         }
         let persist_ms = persist_start.elapsed().as_millis() as u64;
         let revision = data.revision;
@@ -1092,7 +1104,7 @@ impl Controller {
         if let Some(archive) = &self.archive {
             archive.write_turn(&turn, &request.request_id)?;
         }
-        fail_point("after_turn_written");
+        fail_point("after_turn_written", self.round);
         self.time_totals[usize::from(player)] += duration;
         self.committed
             .insert(player, (request.request_id.clone(), turn));

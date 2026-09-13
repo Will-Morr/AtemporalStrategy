@@ -563,9 +563,9 @@ pub fn drive_job(app: App, mut rx: mpsc::Receiver<WorkerMessage>) {
                         }
                         None => None,
                     };
-                    let result = app.controller.lock().unwrap().publish(data, timed_state);
-                    if let Err(e) = result {
-                        eprintln!("publish failed: {e}");
+                    let mut c = app.controller.lock().unwrap();
+                    if let Err(e) = c.publish(data, timed_state) {
+                        c.recover_after_failed_publish(&e);
                     }
                 }
                 WorkerMessage::Failed {

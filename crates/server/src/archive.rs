@@ -98,11 +98,12 @@ pub struct Archive {
     pub root: PathBuf,
 }
 
-/// Gate 5 injection: `ATEMPORAL_FAIL_AT=<point>` aborts the process at that point and
-/// `ATEMPORAL_DISK_FULL_AFTER=<n>` makes every durable write after the n-th fail like ENOSPC.
-pub fn fail_point(point: &str) {
-    if std::env::var("ATEMPORAL_FAIL_AT").is_ok_and(|p| p == point) {
-        eprintln!("ATEMPORAL_FAIL_AT={point}: aborting");
+/// Gate 5 injection: `ATEMPORAL_FAIL_AT=<point>:<round>` aborts the process at that point of
+/// that round, and `ATEMPORAL_DISK_FULL_AFTER=<n>` makes every durable write after the n-th
+/// fail like ENOSPC.
+pub fn fail_point(point: &str, round: u32) {
+    if std::env::var("ATEMPORAL_FAIL_AT").is_ok_and(|p| p == format!("{point}:{round}")) {
+        eprintln!("ATEMPORAL_FAIL_AT={point}:{round}: aborting");
         std::process::abort();
     }
 }

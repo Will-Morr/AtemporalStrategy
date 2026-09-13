@@ -39,13 +39,13 @@ After Gate 2, the coordinator owns shared contracts/content/integration and star
   - [ ] Compact revision entity dictionaries, events/stats, canonical hashes and full/checkpoint replay equivalence.
   - [ ] Release benchmarks at 100/500/2,000 entities and the full configured cap.
 - [ ] Complete match controller and archive — server agent after Gate 2
-  - [ ] Lobby usernames/colors/team selection, live roster, slots/tokens/spectators and stale-start protection.
-  - [ ] Sim adapter scheduling, bounded channels, exact-state LRU, job errors/cancellation and stale-result rejection.
-  - [ ] Simultaneous commit validation/idempotency, sequential draft references, control limits and policy validation.
-  - [ ] Snapshot/command/stat ranges, exact states, bounded cache chunks and on-demand archive regeneration.
-  - [ ] Timed constructor/factory finalization and scoreboard survivor/lead/target/draw/tie/time-penalty reducers.
-  - [ ] No scoreboard round cap; manual stop/archive with no invented result or extra score.
-  - [ ] Atomic turn/round publication, pending-round recovery, replay/resume CLI and timing persistence.
+  - [x] Lobby usernames/colors/team selection, live roster, slots/tokens/spectators and stale-start protection.
+  - [x] Sim adapter scheduling, bounded channels, exact-state LRU, job errors/cancellation and stale-result rejection.
+  - [x] Simultaneous commit validation/idempotency, sequential draft references, control limits and policy validation.
+  - [x] Snapshot/command/stat ranges, exact states, bounded cache chunks and on-demand archive regeneration.
+  - [x] Timed constructor/factory finalization and scoreboard survivor/lead/target/draw/tie/time-penalty reducers (checked end to end by `scripts/match-check.mjs`; the reducers live in `crates/contracts`).
+  - [x] No scoreboard round cap; manual stop/archive with no invented result or extra score.
+  - [x] Atomic turn/round publication, pending-round recovery, replay/resume CLI and timing persistence.
   - [ ] CLI port, same-origin routes, stable-address restart and fresh bootstrap/server-instance detection.
   - [ ] One startup guide-generation invocation using loaded content, also used for archived-content guides.
 - [ ] Complete browser experience — client agent after Gate 2
@@ -114,7 +114,7 @@ Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick p
 
 ## Work that can run independently now
 
-Gate 2 is met, so the breadth assignments below are open. The slice already provides the real engine, server thread, archive, protocol and a playable client; breadth agents extend them in place rather than replacing them. Known slice limits to pick up: intents run serially (no bounded pool yet), the map generator supports two players only, archive resume and retention budgets are missing, stats are not bucketed server-side, allied displacement and radius-6 detours have no dedicated fixtures beyond the golden worlds, and the client lacks group-edit chords, graphs, per-round replay and the before/after comparison.
+Gate 2 is met, so the breadth assignments below are open. The slice already provides the real engine, server thread, archive, protocol and a playable client; breadth agents extend them in place rather than replacing them. Known slice limits to pick up: intents run serially (no bounded pool yet), the map generator supports two players only (so team lobbies beyond two players cannot start until it does), allied displacement and radius-6 detours have no dedicated fixtures beyond the golden worlds, and the client lacks group-edit chords, graphs, per-round replay and the before/after comparison. The server now has archive resume/verification, retention budgets, server-side stats bucketing and Gate 5 failure checks (`scripts/gate5-check.mjs`).
 
 | Timing | Bounded assignment | Ownership and handoff |
 | --- | --- | --- |
