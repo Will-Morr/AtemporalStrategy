@@ -1282,8 +1282,16 @@ impl Controller {
         Ok(self.revision(revision)?.commands_range(from, to))
     }
 
-    pub fn events_range(&self, revision: Revision, from: Tick, to: Tick, effects_only: bool) -> Result<ServerMessage> {
-        Ok(self.revision(revision)?.events_range(from, to, effects_only))
+    pub fn events_range(
+        &self,
+        revision: Revision,
+        from: Tick,
+        to: Tick,
+        effects_only: bool,
+    ) -> Result<ServerMessage> {
+        Ok(self
+            .revision(revision)?
+            .events_range(from, to, effects_only))
     }
 
     // ---- inputs-only peripheral --------------------------------------------------------------
@@ -2026,7 +2034,15 @@ impl RevisionData {
                 .events
                 .iter()
                 .filter(|e| e.tick >= from && e.tick <= to)
-                .filter(|e| !effects_only || matches!(e.event, PresentationEvent::Attack { .. } | PresentationEvent::Impact { .. } | PresentationEvent::Destroyed { .. }))
+                .filter(|e| {
+                    !effects_only
+                        || matches!(
+                            e.event,
+                            PresentationEvent::Attack { .. }
+                                | PresentationEvent::Impact { .. }
+                                | PresentationEvent::Destroyed { .. }
+                        )
+                })
                 .cloned()
                 .collect(),
         }

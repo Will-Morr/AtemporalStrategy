@@ -807,7 +807,11 @@ impl Peripheral {
                 self.prepare(revision).await?;
                 let store = self.store.lock().unwrap();
                 let store = store.as_ref().ok_or("no match bootstrap yet")?;
-                Ok(store.data(revision)?.events_range(from_tick, to_tick, effects_only.unwrap_or(false)))
+                Ok(store.data(revision)?.events_range(
+                    from_tick,
+                    to_tick,
+                    effects_only.unwrap_or(false),
+                ))
             }
             ClientMessage::GetCommands {
                 revision,

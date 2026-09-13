@@ -8,6 +8,23 @@ Use the launch and installation instructions in [development](development.md) an
 
 The browser scenarios drive real inputs and real servers: the normal opening, production, group inheritance, retroactive replacement, authoritative skipped reasons, historical comparison, graphs, timed boundaries, same-port restart, 3-player FFA, 4-player FFA, 2v2 teams, both control limits, partial-round resume, forced historical-cache regeneration, and temporary loss/recovery in both objectives. The focused playtest scenario verifies ghost queues/priorities/start orders, constructor order replacement and undo/redo, R rotation, bottom-edge access, fog, contextual actions, matter at the viewed tick, applied-order markers and Shift-wheel panning. Finished-match coverage checks WIN/LOSS colors, disabled commits and retained replay.
 
+## Final verification and visual review
+
+`scripts/check.sh` passed on the completed runtime source: workspace/default and serial simulation tests, strict Clippy, TypeScript/build, shared fixtures and generated-file drift. Gate 2, match-controller scenarios, all seven Gate 5 scenarios and release cold/warm/thread/checkpoint equivalence passed. The final cap benchmark reached 20,000 ticks with one and four threads. Logs are retained locally as `/tmp/ui-handoff-check.log`, `/tmp/ui-final-gate2.log`, `/tmp/ui-final-match.log`, `/tmp/ui-final-gate5.log`, `/tmp/ui-final-equivalence.log` and `/tmp/ui-final-bench.log`.
+
+The final full desktop run passed 12 scenarios (`artifacts/ui/2026-09-13T08-21-52.158Z-560201`); the narrow run passed four (`2026-09-13T08-23-25.967Z-562551`). Finished-match copy and the default real-server review command were then rechecked in both viewports: two passed (`2026-09-13T08-26-44.687Z-566342`). These runs retain console/network diagnostics, PNGs, accessibility records, video on failures and traces. Earlier failed runs remain available and are not presented as passing evidence.
+
+Full rendered game frames were manually inspected, including the bottom map edge, configured ghost factory, completed factory and newborn, fogged battlefield, combat destruction, selected-order timeline, restored historical round, loss/recovery history, final desktop LOSS, narrow WIN, and dense spectator/player views. The final frames have readable production emphasis, distinguishable directional shapes, no full-health bars, clear win/loss colors and usable replay after match end. Narrow command panels require scrolling. The recovery trace was also inspected for its action sequence and captured frames; transient polling assertions resolved successfully in the passing test.
+
+Representative final frames:
+
+- [Timed recovery and full command deck](../artifacts/ui/2026-09-13T08-21-52.158Z-560201/results/variants-recovery-2v2-time-906cc-n-delayed-factory-completes-desktop-chromium/recovered-player-and-survival-history.png)
+- [Narrow ghost production](../artifacts/ui/2026-09-13T08-23-25.967Z-562551/results/playtest-playtest-fixes-re-c97ed-hosts-fog-and-applied-ticks-narrow-chromium/ghost-production-configured.png)
+- [Finished match: desktop loss](../artifacts/ui/2026-09-13T08-26-44.687Z-566342/results/variants-result-finished-m-eccb9-ed-loss-and-retained-replay-desktop-chromium/finished-match-loss.png)
+- [Finished match: narrow win](../artifacts/ui/2026-09-13T08-26-44.687Z-566342/results/variants-result-finished-m-eccb9-ed-loss-and-retained-replay-narrow-chromium/finished-match-win.png)
+
+The five intentional failure probes passed their outer harness checks, preserving diagnostics, screenshots, traces and independent identity videos (`artifacts/harness/1789288015241-566765`). The agent-neutral MCP smoke passed initialization, discovery, real-server navigation, guide popup selection, snapshot and screenshot (`artifacts/browser-mcp/smoke-1789288002246-566135`). Both review entry points now launch a real game server by default.
+
 ## Performance
 
 Machine: Intel Core i7-8565U, four cores/eight logical CPUs, 15.3 GiB RAM, Linux; Rust 1.97.1 and Node 22.23.2. Measurements are local engineering runs, not dedicated-hardware guarantees.

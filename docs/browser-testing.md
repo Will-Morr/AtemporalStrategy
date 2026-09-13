@@ -15,14 +15,14 @@ ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --replays target/ui
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.
 
-Every run allocates a local port, builds the browser assets and starts the preview server (which generates its guide from effective content), runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
+Every run allocates a local port, builds the browser assets and starts the real game server (which generates its guide from effective content), runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
 
 ```sh
 ATEMPORAL_UI_PORT=8090 npm run ui:review --prefix client
 ATEMPORAL_UI_BASE_URL=http://127.0.0.1:8080 npm run ui:review --prefix client
 ```
 
-The second command reviews an already running real game server, without launching/rebuilding or stopping it. `ATEMPORAL_UI_SERVER_COMMAND` can replace the default preview-server command; it runs from the repository root and receives the selected `PORT`. The gameplay suite requires the release server and built browser assets. Most scenarios start isolated matches; the opening slice uses this base server. Use a fresh replay directory for each base-server run.
+The second command reviews an already running real game server, without launching/rebuilding or stopping it. `ATEMPORAL_UI_SERVER_COMMAND` can replace the default game-server command; it runs from the repository root and receives the selected `PORT`. The gameplay suite requires the release server and built browser assets. Most scenarios start isolated matches; the opening slice uses this base server. Use a fresh replay directory for each base-server run.
 
 Playwright flags pass through normally:
 
@@ -115,7 +115,7 @@ Validate the actual project MCP configuration independently of any agent product
 npm run browser:check --prefix client
 ```
 
-The smoke client speaks JSON-RPC directly: initializes MCP, discovers browser and coordinate tools, navigates the actual page, clicks the guide link, reads its snapshot and saves a screenshot. It closes its browser and preview server afterward. The smoke check waits for its own preview process to announce readiness, preserves protocol requests/responses and stderr on failure, and attempts a failure screenshot before cleanup. The explicit artifact override must be empty. For an already-built external server, use `ATEMPORAL_UI_BASE_URL=... node scripts/check-browser-mcp.mjs` to avoid the npm script’s build step. Environment variables explicitly set by the caller take precedence over `.mcp.json` defaults. A new/reloaded agent session may be necessary for its client to discover newly configured tools; adding a server does not retrofit this chat's advertised tool list.
+The smoke client speaks JSON-RPC directly: initializes MCP, discovers browser and coordinate tools, navigates the actual page, clicks the guide link, reads its snapshot and saves a screenshot. It closes its browser and game server afterward. The smoke check waits for its own game process to announce readiness, preserves protocol requests/responses and stderr on failure, and attempts a failure screenshot before cleanup. The explicit artifact override must be empty. For an already-built external server, use `ATEMPORAL_UI_BASE_URL=... node scripts/check-browser-mcp.mjs` to avoid the npm script’s build step. Environment variables explicitly set by the caller take precedence over `.mcp.json` defaults. A new/reloaded agent session may be necessary for its client to discover newly configured tools; adding a server does not retrofit this chat's advertised tool list.
 
 The desktop app's built-in `@Browser` remains an optional separate connection. Neither layer depends on it. See [Playwright web-server setup](https://playwright.dev/docs/test-webserver), [traces](https://playwright.dev/docs/trace-viewer-intro), [visual comparisons](https://playwright.dev/docs/test-snapshots), and [Playwright MCP](https://github.com/microsoft/playwright-mcp) for upstream behavior.
 
