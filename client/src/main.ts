@@ -54,7 +54,7 @@ async function boot(): Promise<void> {
     localStorage.removeItem('atemporal-slot-token');
   }
   status.textContent = `Connected · ${w.config.player_count} players · ${w.phase}`;
-  const { session: settled, lobby } = await runLobby(net, w.config, w.lobby, w.phase, session);
+  const { session: settled, lobby } = await runLobby(net, w.config, net.lobby ?? w.lobby, net.published ? 'planning' : w.phase, session);
   game = new Game(net, w.config, settled, lobby);
   // Debug/test hook: agent-run browser checks read state through it; never used by gameplay code.
   (window as unknown as { atemporal: Game }).atemporal = game;

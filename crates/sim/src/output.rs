@@ -94,13 +94,7 @@ impl Sim {
             survivors,
             eliminated,
             surviving_sides,
-            survival_transitions: self
-                .state
-                .survival_transitions
-                .iter()
-                .filter(|t| t.resolved_tick >= self.checkpoint_tick)
-                .cloned()
-                .collect(),
+            survival_transitions: self.state.survival_transitions.clone(),
         };
         RunResult {
             outcome,

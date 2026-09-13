@@ -40,3 +40,5 @@ The user requested an agent-neutral Playwright/MCP harness with useful screensho
 ## Complete browser implementation
 
 The user requested the complete browser checklist on `agent/client` in `../atemporal-client`, cohesive commits and pushes, real-server Playwright input scenarios with screenshot inspection, and `scripts/check.sh`. Client ownership includes guide prose. The user subsequently authorized the necessary replay protocol/server change so historical results and authoritative skipped reasons can be inspected. Keep that change separate and ready to rebase onto another agent’s in-flight server work.
+
+The final UI request uses a new branch/worktree, resolves the consolidated playtest requirements, and then completes any remaining “Complete browser experience” items and the “Full integration and handoff” checklist. Commit the playtest-fix batch before the remaining multiplayer, single-order and recovery browser work.

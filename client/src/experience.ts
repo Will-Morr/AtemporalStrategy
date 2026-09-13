@@ -204,7 +204,7 @@ export class Experience {
     survival.textContent = `Survival requires active building AND constructor/factory. ${transitions.map(t => `${g.name(t.player_id)} ${t.status} @${t.resolved_tick}${t.reasons.length ? ` (${t.reasons.join(', ')})` : ' (recovered)'}`).join(' · ')}`;
     inputs.prepend(survival);
     const status = document.createElement('div');
-    const entities = g.entities().filter(e => e.lifecycle === 'complete');
+    const entities = g.rawEntities().filter(e => e.lifecycle === 'complete');
     status.textContent = Array.from({length:g.config.player_count},(_,p) => `${g.name(p)}: building ${entities.some(e=>e.owner===p && g.types.get(e.type_key)?.counts_for_survival)?'✓':'missing'}, constructor/factory ${entities.some(e=>e.owner===p && g.types.get(e.type_key)?.provides_build_ability)?'✓':'missing'}`).join(' · ');
     inputs.prepend(status);
   }

@@ -38,7 +38,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
       li.append(swatch);
       const label = document.createElement('span');
       label.textContent = slot.profile
-        ? `Slot ${slot.slot}: ${slot.profile.username}${slot.profile.team_id ? ` (${slot.profile.team_id})` : ''} — ${slot.connected ? 'connected' : 'disconnected'}`
+        ? `Slot ${slot.slot}: ${slot.profile.username}${slot.profile.team_id ? ` (${lobby.available_teams.find(t=>t.team_id===slot.profile!.team_id)?.label ?? slot.profile.team_id})` : ''} — ${slot.connected ? 'connected' : 'disconnected'}`
         : `Slot ${slot.slot}: open`;
       li.append(label);
       if (!slot.claimed && session.slot === null && phase === 'lobby') {
@@ -77,6 +77,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
   const objective = config.objective.kind === 'scoreboard' ? 'Scoreboard' : 'Timed';
   document.title = `Atemporal Strategy — ${objective}`;
   return new Promise(resolve => {
+    net.on('welcome', m => {lobby = m.lobby; phase = m.phase; render();});
     net.on('lobby_updated', m => {
       lobby = m.lobby;
       error.textContent = '';

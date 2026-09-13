@@ -167,6 +167,7 @@ export class Game {
 
   async onPublished(m: ServerMessage & { kind: 'revision_published' }): Promise<void> {
     if (this.revisions.has(m.revision) && this.terrain) { this.latest = Math.max(this.latest,m.revision); return; }
+    const wasFull = this.view.t0 === 0 && this.view.t1 === this.rev()?.outcome.terminal_state_tick;
     const view: RevisionView = {
       revision: m.revision,
       outcome: m.outcome,
@@ -192,7 +193,7 @@ export class Game {
       console.log(`initial exact state in ${Math.round(performance.now() - t0)} ms`);
       if (!this.renderer.fit() && this.player !== null) this.renderer.centerOn(this.startTile(this.player).x, this.startTile(this.player).y);
     }
-    if (previous < 0) this.view = { t0:0,t1:Math.max(1,m.outcome.terminal_state_tick) };
+    if (previous < 0 || wasFull) this.view = { t0:0,t1:Math.max(1,m.outcome.terminal_state_tick) };
     else this.panTimeline(0);
     $('toast').classList.remove('active');
     this.playhead = Math.min(this.playhead, m.outcome.terminal_state_tick);

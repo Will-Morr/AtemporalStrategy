@@ -180,6 +180,20 @@ const scenarios = {
 
   // Writes fail like ENOSPC while round 2's results are being written: the round reopens with the
   // last revision intact, both durable turns survive, and a resume replays them.
+  async worker_panic() {
+    const name='worker_panic';await rm(`${work}/${name}`,{recursive:true,force:true});
+    const server=await startServer(name,[],{ATEMPORAL_WORKER_PANIC_ONCE:'1'});
+    const {a,b,s,round2}=await opening(server);
+    try {
+      for(const [c,id,draft] of [[a,'a2',round2.a],[b,'b2',round2.b]]) assert((await c.sendAndWaitCommit(id,draft)).kind==='commit_accepted','durable panic-test commit');
+      const published=await s.wait('revision_published',m=>m.revision===2);
+      const commands=await s.request({kind:'get_commands',revision:2,from_tick:0,to_tick:20000},'commands',m=>m.revision===2);
+      assert(server.log.join('').includes('retrying panicked worker'),'worker panic retried automatically');
+      results[name]={retry_logged:true,...(await checkRecovered(name,published,commands.turns))};
+      const exact=await s.request({kind:'get_exact_state',revision:2,tick:154},'exact_state',m=>m.tick===154);
+      assert(exact.snapshot.tick===154,'worker services subsequent exact-state jobs');
+    } finally {for(const c of [a,b,s])c.close();server.child.kill('SIGTERM');await server.exited;}
+  },
   async disk_full() {
     const name = 'disk_full';
     await rm(`${work}/${name}`, { recursive: true, force: true });
@@ -214,7 +228,7 @@ const scenarios = {
 await buildServer();
 await mkdir(work, { recursive: true });
 let failed = false;
-for (const name of ['baseline', 'kill_after_turn_written', 'kill_during_job', 'kill_after_results', 'kill_before_publish', 'disk_full']) {
+for (const name of ['baseline', 'kill_after_turn_written', 'kill_during_job', 'kill_after_results', 'kill_before_publish', 'disk_full', 'worker_panic']) {
   if (only && name !== only && name !== 'baseline') continue;
   const started = now();
   try { await scenarios[name](); console.log(`ok   ${name} (${Math.round(now() - started)} ms)`); }

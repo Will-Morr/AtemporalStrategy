@@ -100,6 +100,7 @@ pub struct Controller {
     pub sim: SimThread,
     running: Option<(String, Arc<AtomicBool>)>,
     pending: Option<RevisionData>,
+    worker_retries: u8,
     pub match_winners: Vec<SideId>,
     pub measurements: Vec<RoundMeasurement>,
     pub memory_budget: u64,
@@ -190,6 +191,7 @@ impl Controller {
             sim,
             running: None,
             pending: None,
+            worker_retries: 0,
             match_winners: vec![],
             measurements: vec![],
             memory_budget: DEFAULT_MEMORY_BUDGET,
@@ -626,6 +628,9 @@ impl Controller {
         let mut request =
             self.build_request(revision, checkpoint, turns, precedence, minimum_end_tick);
         request.entity_dictionary = data.dictionary.clone();
+        request
+            .job_id
+            .push_str(&format!("-retry{}", self.worker_retries));
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel(OUT_CAPACITY);
         self.running = Some((request.job_id.clone(), cancel.clone()));
@@ -712,6 +717,27 @@ impl Controller {
         data.command_outcomes.extend(command_outcomes);
         data.timeline_index = timeline_index(&data.timeline, self.config.player_count);
         Some(data)
+    }
+
+    /// Retry a panicked worker once from the durable inputs and an untouched published base.
+    pub fn retry_worker_panic(
+        &mut self,
+        job_id: &str,
+    ) -> Result<Option<mpsc::Receiver<WorkerMessage>>> {
+        if self.running.as_ref().is_none_or(|(id, _)| id != job_id) || self.worker_retries > 0 {
+            return Ok(None);
+        }
+        self.worker_retries += 1;
+        if let Some((_, cancel)) = self.running.take() {
+            cancel.store(true, Ordering::Relaxed);
+        }
+        self.pending = None;
+        eprintln!("retrying panicked worker from durable round {}", self.round);
+        if self.round == 0 {
+            self.start_job(0, vec![], vec![]).map(Some)
+        } else {
+            self.close_round().map(Some)
+        }
     }
 
     pub fn on_failed(&mut self, job_id: &str, message: &str) {
@@ -907,6 +933,7 @@ impl Controller {
     }
 
     fn open_planning(&mut self) {
+        self.worker_retries = 0;
         self.round += 1;
         self.committed.clear();
         self.ready_at.clear();
@@ -2600,5 +2627,35 @@ pub(crate) mod tests {
         );
         assert!(c.release_slot("guest").is_err());
         assert!(c.lobby.can_start);
+    }
+    #[test]
+    fn stale_job_messages_cannot_mutate_published_or_pending_revision() {
+        let mut c = started(false, |_| {});
+        commit(&mut c, 0, "a1", 0);
+        let rx = commit(&mut c, 1, "b1", 0).unwrap();
+        let hash = c.revisions[&0].final_hash.clone();
+        let pending = c.pending.as_ref().unwrap().samples.len();
+        assert!(!c.on_batch(WorkerMessage::Progress {
+            job_id: "stale".into(),
+            revision: 99,
+            tick: 100,
+            end_tick: 200
+        }));
+        assert!(
+            c.on_complete(
+                "stale",
+                c.revisions[&0].outcome.clone().unwrap(),
+                "wrong".into(),
+                0,
+                vec![]
+            )
+            .is_none()
+        );
+        c.on_failed("stale", "ignored");
+        assert_eq!(c.current, 0);
+        assert_eq!(c.revisions[&0].final_hash, hash);
+        assert_eq!(c.pending.as_ref().unwrap().samples.len(), pending);
+        assert_eq!(c.phase, Phase::Simulating);
+        drop(rx);
     }
 }

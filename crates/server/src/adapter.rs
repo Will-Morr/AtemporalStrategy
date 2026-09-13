@@ -88,13 +88,43 @@ impl SimThread {
     }
 }
 
+/// Each job owns its simulation state. Unwinding discards that job, not the service thread.
+fn guard<T>(f: impl FnOnce() -> T) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .map_err(|_| "simulation worker panicked; discarded partial job".to_string())
+}
+
+/// Bounded backpressure must remain cancellable even when the consumer stops draining.
+fn send(
+    out: &tmpsc::Sender<WorkerMessage>,
+    mut message: WorkerMessage,
+    cancel: &AtomicBool,
+) -> bool {
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            return false;
+        }
+        match out.try_send(message) {
+            Ok(()) => return true,
+            Err(tmpsc::error::TrySendError::Closed(_)) => return false,
+            Err(tmpsc::error::TrySendError::Full(returned)) => {
+                message = returned;
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+    }
+}
+
 fn service_replay(
     request: &SimRequest,
     players: u8,
     reply: oneshot::Sender<Result<crate::controller::RevisionData, String>>,
 ) {
     let mut data = crate::controller::RevisionData::new(request.revision, 0, None, 0);
-    let _ = reply.send(crate::controller::collect_run(request, &mut data, players).map(|_| data));
+    let _ = reply.send(
+        guard(|| crate::controller::collect_run(request, &mut data, players).map(|_| data))
+            .and_then(|r| r),
+    );
 }
 
 fn service_exact(
@@ -102,7 +132,7 @@ fn service_exact(
     tick: Tick,
     reply: oneshot::Sender<Result<WorldState, String>>,
 ) {
-    let _ = reply.send(atemporal_sim::reconstruct(request, tick));
+    let _ = reply.send(guard(|| atemporal_sim::reconstruct(request, tick)).and_then(|r| r));
 }
 
 fn worker(rx: mpsc::Receiver<Job>) {
@@ -143,7 +173,20 @@ fn worker(rx: mpsc::Receiver<Job>) {
                         }
                     }
                 };
-                run_job(&request, cancel, out, &mut hook);
+                if let Err(message) =
+                    guard(|| run_job(&request, cancel.clone(), out.clone(), &mut hook))
+                {
+                    send(
+                        &out,
+                        WorkerMessage::Failed {
+                            job_id: request.job_id.clone(),
+                            revision: request.revision,
+                            error_code: "worker_panic".into(),
+                            message,
+                        },
+                        &cancel,
+                    );
+                }
             }
         }
     }
@@ -204,6 +247,10 @@ fn run_job(
     let mut batch = Batch::new();
     let mut last_flush = request.checkpoint.tick;
     let mut closed = false;
+    static INJECTED: AtomicBool = AtomicBool::new(false);
+    let inject_panic = request.revision == 2
+        && std::env::var_os("ATEMPORAL_WORKER_PANIC_ONCE").is_some()
+        && !INJECTED.swap(true, Ordering::Relaxed);
     let mut emit = |o: Output| {
         if closed {
             return;
@@ -220,18 +267,23 @@ fn run_job(
                 if tick.saturating_sub(last_flush) >= BATCH_TICKS || batch.bytes >= BATCH_BYTES {
                     last_flush = tick;
                     // A slow consumer throttles the simulation, never the IO loop.
-                    if out.blocking_send(batch.message(&job_id, revision)).is_err()
-                        || out
-                            .blocking_send(WorkerMessage::Progress {
+                    if !send(&out, batch.message(&job_id, revision), &cancel)
+                        || !send(
+                            &out,
+                            WorkerMessage::Progress {
                                 job_id: job_id.clone(),
                                 revision,
                                 tick,
                                 end_tick: request.end_tick_exclusive,
-                            })
-                            .is_err()
+                            },
+                            &cancel,
+                        )
                     {
                         closed = true;
                         cancel.store(true, Ordering::Relaxed);
+                    }
+                    if inject_panic {
+                        panic!("injected recoverable worker panic after partial output");
                     }
                 }
             }
@@ -244,7 +296,9 @@ fn run_job(
     let message = match result {
         Ok(result) => {
             if !batch.is_empty() {
-                let _ = out.blocking_send(batch.message(&job_id, revision));
+                if !send(&out, batch.message(&job_id, revision), &cancel) {
+                    return;
+                }
             }
             WorkerMessage::Complete {
                 job_id: job_id.clone(),
@@ -266,5 +320,36 @@ fn run_job(
             message,
         },
     };
-    let _ = out.blocking_send(message);
+    send(&out, message, &cancel);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn progress() -> WorkerMessage {
+        WorkerMessage::Progress {
+            job_id: "test".into(),
+            revision: 1,
+            tick: 0,
+            end_tick: 100,
+        }
+    }
+    #[test]
+    fn cancellation_unblocks_full_channel_without_consumer() {
+        let (tx, _rx) = tmpsc::channel(1);
+        tx.try_send(progress()).unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let flag = cancel.clone();
+        let (done, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            done.send(send(&tx, progress(), &flag)).unwrap();
+        });
+        cancel.store(true, Ordering::Relaxed);
+        assert!(!rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap());
+    }
+    #[test]
+    fn panic_boundary_discards_failure_and_accepts_next_job() {
+        assert!(guard(|| panic!("test job failure")).is_err());
+        assert_eq!(guard(|| 42).unwrap(), 42);
+    }
 }
