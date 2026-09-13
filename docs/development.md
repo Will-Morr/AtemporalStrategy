@@ -1,6 +1,6 @@
 # Development and launch
 
-The vertical slice is implemented: a deterministic simulation library, a server that runs it on a dedicated thread, and a browser client that plays the opening, commits simultaneous turns, seeks any tick and replays. Pinned tools: Rust 1.97.1 (`rust-toolchain.toml`), Node 22.23.2 (`.node-version`), npm 10.9.8. Direct dependencies use exact versions with lockfiles for the rest. `serde_yaml` 0.9.34 is a pinned deprecated parser for this prototype.
+The browser game is implemented: a deterministic simulation library, a server that runs it on a dedicated thread, and a browser client that plays the opening, commits simultaneous turns, seeks any tick and replays. Pinned tools: Rust 1.97.1 (`rust-toolchain.toml`), Node 22.23.2 (`.node-version`), npm 10.9.8. Direct dependencies use exact versions with lockfiles for the rest. `serde_yaml` 0.9.34 is a pinned deprecated parser for this prototype.
 
 ## Launch
 
@@ -18,7 +18,7 @@ Each match writes `replays/<match-id>/`: `manifest.json`, pinned `config.yaml`/`
 
 Retention: revision bodies (samples, checkpoints, stats, events, timeline) stay in memory up to `--memory-budget-mb` (default 512, JSON-size proxy), evicted least-recently-used but never the current revision; `results/` is kept under `--results-budget-mb` (default 2048), removing the oldest caches first and never turns or round records. A query on an evicted revision reloads from disk or replays the ledger on the sim thread (about 1 s for a 20,000-tick revision on the Gate 2 machine) and writes the cache back. The sim thread flushes batches by estimated bytes (4 MiB) as well as ticks, so the bounded channel caps in-flight memory. `get_stats` buckets server-side (latest sample per bucket, at most 2,000 buckets) and the published timeline index holds at most 500 entries per player.
 
-Failure injection for Gate 5 checks: `ATEMPORAL_FAIL_AT=after_turn_written|during_job|after_results|before_publish` aborts the process at that point; `ATEMPORAL_DISK_FULL_AFTER=<n>` makes every durable write after the n-th fail like a full disk. A failed publish reopens the round with the last revision intact; the durable turns replay on `--resume`.
+Failure injection for Gate 5 checks: `ATEMPORAL_FAIL_AT=after_turn_written|during_job|after_results|before_publish` aborts the process at that point; `ATEMPORAL_DISK_FULL_AFTER=<n>` makes every durable write after the n-th fail like a full disk. `ATEMPORAL_WORKER_PANIC_ONCE=1` tests a recoverable simulation-thread panic after partial output: the controller discards that job and retries the durable round once with a fresh job identity. Cancellation also releases a producer waiting on a full output channel. A failed publish reopens the round with the last revision intact; the durable turns replay on `--resume`.
 
 ## Checks
 
@@ -26,9 +26,9 @@ Failure injection for Gate 5 checks: `ATEMPORAL_FAIL_AT=after_turn_written|durin
 scripts/check.sh                  # fmt, workspace tests, strict clippy, client build, fixture drift
 node scripts/gate2-check.mjs      # real server + protocol: three rounds, rewrite, seeks, sizes → target/gate2-summary.json
 node scripts/match-check.mjs      # timed lock advancement + mid-match resume + history_exhausted, timed loss, time penalty, stop/archive, occupied port/routes/restart instance/archived-content guide → target/match-check-summary.json
-node scripts/gate5-check.mjs      # failure injection: kills at four points, duplicate commits, disk-full; each recovers the baseline hash → target/gate5-summary.json
+node scripts/gate5-check.mjs      # failure injection: kills at four points, duplicate commits, disk-full and recoverable worker panic; each recovers the baseline hash → target/gate5-summary.json
 ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --replays target/ui-replays' \
-  npm run ui:review --prefix client -- --grep slice --project=desktop-chromium
+  npm run ui:review --prefix client -- --project=desktop-chromium
 ```
 
 The workspace tests include the engine acceptance suite: all eight authored tiny worlds run through the real engine and are checked with the golden comparator, checkpoint reruns hash-match full replays, and the generated map runs the miner → factory → grunt → attack opening (`crates/sim/tests`). The browser walkthrough (`client/tests/ui/slice.spec.mjs`) drives two players and a spectator with real input against the real server and keeps screenshots under `artifacts/ui/<run>/`. Both are engineering verification, not a user playtest. See [Gate 2 measurements](gate2-measurements.md) for the recorded numbers and [browser review](browser-testing.md) for the harness.
@@ -39,7 +39,15 @@ Useful tools: `cargo run -p atemporal-tools -- schema | guide | normalize | fixt
 
 - `crates/contracts` — versioned records, identities, locks, scoring, timed adjudication, golden comparator.
 - `crates/content` — content/setup loading and validation; optional `guide` feature.
-- `crates/sim` — the engine: `world.rs` indexes, `fields.rs` flow fields, `commands.rs`, `tick.rs`, `output.rs`, `map.rs` (2-player fixture map). Clippy forbids HashMap/HashSet here.
+- `crates/sim` — the engine: `world.rs` indexes, `fields.rs` flow fields, `commands.rs`, `tick.rs`, `output.rs`, `map.rs` (connected 2–4-player maps). Clippy forbids HashMap/HashSet here.
 - `crates/server` — `adapter.rs` sim thread (run/exact/replay jobs), `controller.rs` match state, lobby, retention, resume and replay verification, `archive.rs` files, `ws.rs` routes/protocol, `main.rs` CLI.
 - `client/src` — `net.ts`, `lobby.ts`, `game.ts` (state, input, panels), `render.ts` (map, minimap, timeline).
-- `crates/runner` — reserved for the native peripheral; still a placeholder.
+- `crates/runner` — reserved for the native peripheral; implemented by a separately assigned agent; non-blocking for this UI handoff.
+
+## Final browser and integration checks
+
+`client/tests/ui/playtest.spec.mjs` exercises the playtest fixes, including configurable ghost production, order replacement, fog, bottom-edge access and touchpad panning. `variants.spec.mjs` covers 3-player FFA, 4-player FFA and 2v2 across both objective/control modes, real archive refresh, partial-round recovery, forced cache regeneration and temporary elimination followed by recovery. The guide and focused gameplay also run at 390×844; narrow command panels scroll. Desktop keyboard/mouse and touchpad gestures are the primary input design.
+
+Run `node scripts/integration-performance.mjs` after the release/browser build for the export-enabled dense cave workload, cold seeks, repeated tick-zero rewrites, memory measurements and an actual rendered browser frame. It writes `target/integration-performance/summary.json`, a screenshot and trace. Two queues request 1,000 units each; blocked output can limit the realized population. `cargo bench -p atemporal-sim` separately measures authored 100/500/2,000-entity march/battle worlds and a 20,000-tick production run. See the integration verification record for measured results and machine details.
+
+Large result caches stream to disk rather than building a second complete serialized revision in memory. Browser replay requests only rendered effects through optional `get_events.effects_only`; ordinary event queries retain full movement diagnostics. Retention budgets exclude the currently published revision, so dense current revisions can exceed the configured budget. The stress measurement reports this explicitly. Fog controls battlefield presentation and selection; replay data and statistics remain inspectable, so it is not a server-side secrecy boundary.

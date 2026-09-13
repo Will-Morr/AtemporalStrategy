@@ -45,7 +45,7 @@ test('playtest fixes: reachable map, contextual production, ghosts, fog and appl
     const tl=await a.locator('#timeline').boundingBox();await a.mouse.move(tl.x+tl.width*.5,tl.y+20);await a.mouse.wheel(0,-500);
     const before=await a.evaluate(()=>({...window.atemporal.view}));await a.keyboard.down('Shift');await a.mouse.wheel(0,120);await a.keyboard.up('Shift');
     await expect.poll(()=>a.evaluate(()=>window.atemporal.view.t0)).not.toBe(before.t0);
-    await a.mouse.move(700,350);const camera=await a.evaluate(()=>({...window.atemporal.renderer.camera}));await a.keyboard.down('Shift');await a.mouse.wheel(0,120);await a.keyboard.up('Shift');
+    const map=await a.locator('#map').boundingBox();await a.mouse.move(map.x+map.width*.5,map.y+Math.max(80,map.height*.5));const camera=await a.evaluate(()=>({...window.atemporal.renderer.camera}));await a.keyboard.down('Shift');await a.mouse.wheel(0,120);await a.keyboard.up('Shift');
     await expect.poll(()=>a.evaluate(()=>window.atemporal.renderer.camera.y)).not.toBe(camera.y);
     expect(await a.evaluate(()=>window.atemporal.renderer.camera.scale)).toBe(camera.scale);
     await review.capture('configured-factory-live-and-timeline',a);

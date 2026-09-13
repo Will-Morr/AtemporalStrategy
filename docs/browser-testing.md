@@ -9,7 +9,8 @@ From the repository root:
 ```sh
 npm ci --prefix client
 npm run ui:install --prefix client
-npm run ui:review --prefix client
+cargo build --release -p atemporal-server
+ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --replays target/ui-replays' npm run ui:review --prefix client
 ```
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.
@@ -21,7 +22,7 @@ ATEMPORAL_UI_PORT=8090 npm run ui:review --prefix client
 ATEMPORAL_UI_BASE_URL=http://127.0.0.1:8080 npm run ui:review --prefix client
 ```
 
-The second command reviews an already running real game server, without launching/rebuilding or stopping it. `ATEMPORAL_UI_SERVER_COMMAND` can replace the default preview-server command; it runs from the repository root and receives the selected `PORT`. When the server handoff lands, point it at that real server and extend the tests for gameplay. The current tests deliberately cover the existing scaffold/guide, not an invented battlefield.
+The second command reviews an already running real game server, without launching/rebuilding or stopping it. `ATEMPORAL_UI_SERVER_COMMAND` can replace the default preview-server command; it runs from the repository root and receives the selected `PORT`. The gameplay suite requires the release server and built browser assets. Most scenarios start isolated matches; the opening slice uses this base server. Use a fresh replay directory for each base-server run.
 
 Playwright flags pass through normally:
 
@@ -52,7 +53,7 @@ npx playwright show-trace ../artifacts/ui/<run-id>/results/<test>/trace.zip
 
 An agent should run a relevant scenario, **inspect the resulting PNGs**, diagnose visual/interaction problems, edit the UI, and repeat the same scenario. A passing selector assertion is not a visual review. Preserve failure evidence; tests do not retry automatically. The automatic review fixture captures observed contexts' errors even when a test does not explicitly request `review`, and fails on page errors, failed requests, HTTP responses with status 400 or higher, or console errors. Screenshot names describe the actual inspected state.
 
-The current multi-context test verifies independent player-A/player-B/spectator storage and page loads. It does not claim slots, commits, or combat are implemented. New gameplay tests should use actual user inputs and server setup with a deterministic seed. Capture a known paused timeline tick before comparing images; never let changing simulation/playback time stand in for a visual regression. Prefer role/text locators for UI controls and coordinate input plus screenshots for canvas. `review.capture(name, page)` supports both. Use `await review.newContext("player-a")` for each additional identity; the fixture observes new pages/popups, saves failure evidence and closes these contexts. Do not close them early. Playwright includes these contexts in the test’s `trace.zip`; do not manually start/stop their tracing. External contexts must be explicitly observed and remain the caller’s cleanup responsibility. Pixel baselines can use Playwright's `toHaveScreenshot` once a meaningful scene exists; inspect baseline changes rather than blindly refreshing them.
+The identity test verifies independent storage against isolated real lobbies. The slice, playtest and variant scenarios additionally claim slots, commit, build, fight and restore archived matches. New gameplay tests should use actual user inputs and server setup with a deterministic seed. Capture a known paused timeline tick before comparing images; never let changing simulation/playback time stand in for a visual regression. Prefer role/text locators for UI controls and coordinate input plus screenshots for canvas. `review.capture(name, page)` supports both. Use `await review.newContext("player-a")` for each additional identity; the fixture observes new pages/popups, saves failure evidence and closes these contexts. Do not close them early. Playwright includes these contexts in the test’s `trace.zip`; do not manually start/stop their tracing. External contexts must be explicitly observed and remain the caller’s cleanup responsibility. Pixel baselines can use Playwright's `toHaveScreenshot` once a meaningful scene exists; inspect baseline changes rather than blindly refreshing them.
 
 Artifacts are git-ignored and retained per run for inspection. They are not game archives. Do not run concurrent build-backed reviews in the same worktree: their ports/profiles differ, but the build writes the same `client/dist` and generated contracts. Use separate worktrees or build once and target an external server.
 
@@ -76,13 +77,13 @@ Add real scenarios to `client/tests/ui/*.spec.mjs` as their controls land; norma
 
 | Scenario | Evidence required before claiming coverage | Current state |
 | --- | --- | --- |
-| Landing and guide | Keyboard link activation, generated stats, narrow layout, screenshot inspection | Enabled against scaffold |
-| Independent browser identities | Separate storage across reloads and context evidence | Enabled; does not claim real slots |
-| Lobby and spectator | Claim actual slots, update username/color/team and observe all clients; spectator restrictions | Pending real controls/server |
-| Timeline and drafts | Pause at exact tick, enter actual orders, undo/replace future orders, capture selection and timeline | Pending real controls/server |
-| Simultaneous commit | First commit waits, final commit publishes the same revision to both players and spectator | Pending real controls/server |
-| Groups and production | Keyboard groups, factory output membership and inherited order visible in replay | Pending real controls/server |
-| Restore | Restart real server at same port, refresh clients and compare persisted revision/orders | Pending real server/archive path |
+| Landing and guide | Keyboard link activation, generated stats, narrow layout, screenshot inspection | Real lobby and generated guide |
+| Independent browser identities | Separate storage across reloads and context evidence | Real lobby storage isolation; gameplay scenarios claim slots |
+| Lobby and spectator | Claim actual slots, update username/color/team and observe all clients; spectator restrictions | Real 2–4-player lobbies, profiles and team labels |
+| Timeline and drafts | Pause at exact tick, enter actual orders, undo/replace future orders, capture selection and timeline | Slice and playtest scenarios |
+| Simultaneous commit | First commit waits, final commit publishes the same revision to both players and spectator | Slice and all objective/control variants |
+| Groups and production | Keyboard groups, factory output membership and inherited order visible in replay | Slice, configurable ghosts and single-order variants |
+| Restore | Restart real server at same port, refresh clients and compare persisted revision/orders | Same-port resume, partial-round resume and forced cache regeneration |
 
 For each activation, document the seed/config, viewport, revision and paused tick, inputs exercised, assertions and inspected screenshots. Verify authoritative behavior as well as visible output. The rendered guide describes planned mechanics; its text alone is not evidence those mechanics work. No human playtest is required for unfinished slices.
 

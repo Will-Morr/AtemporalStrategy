@@ -403,13 +403,15 @@ async fn handle(
             revision,
             from_tick,
             to_tick,
+            effects_only,
         } => {
             let result = match prepare(app, revision).await {
-                Ok(()) => app
-                    .controller
-                    .lock()
-                    .unwrap()
-                    .events_range(revision, from_tick, to_tick),
+                Ok(()) => app.controller.lock().unwrap().events_range(
+                    revision,
+                    from_tick,
+                    to_tick,
+                    effects_only.unwrap_or(false),
+                ),
                 Err(e) => Err(e),
             };
             respond(tx, result);

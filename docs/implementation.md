@@ -4,11 +4,11 @@
 
 ## Execution policy
 
-The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Breadth work may now start against the integrated slice. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.
+The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.
 
 Complete the entire planned feature set—including roster, maps, game variants, groups, guide, graphs, replay and peripheral—before asking the user to play. Intermediate automated scenarios and agent-run browser checks are engineering verification, not a user playtest.
 
-After Gate 2, the coordinator owns shared contracts/content/integration and starts up to three subsystem agents in separate long-lived worktrees, such as `agent/sim` at `../atemporal-sim`, `agent/server` at `../atemporal-server`, and `agent/client` at `../atemporal-client`. Each completes cohesive breadth work against the real slice. Merge handoffs sequentially; coordinate shared schema changes before merging dependent code. Transfer `crates/runner` to the peripheral owner explicitly when that later task begins.
+Shared contracts/content and integration remain coordinated across isolated worktrees. Merge handoffs sequentially and reconcile generated contracts together. The native input-only peripheral is assigned separately; the user explicitly made it non-blocking for UI implementation and verification.
 
 ## Nested implementation checklist
 
@@ -35,7 +35,7 @@ After Gate 2, the coordinator owns shared contracts/content/integration and star
   - [ ] Shared-field cold/warm equivalence, static invalidation, bounded local detours and goal-crowd settling.
   - [ ] Ordered parallel intents/serial reductions, serial fallback and HashMap/HashSet prohibition.
   - [ ] Checkpointed locks/cooldowns/facing/targeting/stuck state; exclude derived flow caches and cache version.
-  - [ ] Completed-only survival checks with recovery; inactivity/absolute horizon without elimination early-stop.
+  - [ ] Completed-only survival checks with recovery; inactivity/absolute horizon and configurable decided-side stop that preserves active recovery.
   - [ ] Compact revision entity dictionaries, events/stats, canonical hashes and full/checkpoint replay equivalence.
   - [ ] Release benchmarks at 100/500/2,000 entities and the full configured cap.
 - [x] Complete match controller and archive — server agent after Gate 2
@@ -92,7 +92,7 @@ Gate 2 (met): real miner → factory blueprint → funded factory → produced g
 
 Gate 3: full/checkpoint/peripheral replay has identical hashes with one/four threads and cold/warm/evicted flow caches. Restore lock windows, targeting, cooldowns and bounded local detours. Clippy prohibits HashMap/HashSet in the sim. Compact transport dictionaries must not affect gameplay order or IDs.
 
-Gate 4: the behavioral fixtures below pass. Use numeric tolerance for conservation invariants, but exact equality for deterministic hashes. Shared helper and fixture checks exist; actual engine acceptance remains outstanding.
+Gate 4: the behavioral fixtures below pass. Use numeric tolerance for conservation invariants, but exact equality for deterministic hashes. The real engine acceptance suite covers these fixtures.
 
 Gate 5: inject failures after durable input, during a sim-thread job, on cancellation/channel backpressure, after result writes and before publication. Recover one score delta and the same accepted moves. A failed/canceled job cannot mutate a published revision. Process-kill recovery uses the archive; recoverable thread failure restarts a clean job. Duplicate commits do not append another turn. Disk-full leaves accepted inputs recoverable and the last published result intact.
 
@@ -106,7 +106,7 @@ Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick p
 - **Order locks:** at t=20/W=10, older events at 21 and 30 skip, 20 and 31 remain; DropAll also skips 31. Explicit A/B delivery with only A locked still applies to B. Same-round/newer commands execute. Group slot locks block older saved-order writes; member locks preserve those writes. Newborns inherit active slot locks. A missing replacement target installs no lock. A short newer window does not erase a longer prior one or extend newer-round restrictions beyond its window. Local estimates may differ from actual no-op results after rewriting. Fully locked distant events need not postpone inactivity; uncertain future targets do.
 - **Control groups:** group order A, individual override B on U, then spawn V leaves U on B and V on A. Later group C overrides both once. Empty groups store orders; overlapping groups follow canonical event order. Blocked output inherits at actual spawn. Single-order mode counts one group assignment plus its locks as one command.
 - **Combat/inactivity:** automatic turret fire, idle defense, target acquisition/loss, reached destinations, hold-on-cooldown and mutual Support reading prior snapshot. Unreachable retries/unfunded production stop; otherwise-legal long cooldowns defer inactivity. Voluntary detours count as progress; forced displacement alone does not. Normal/fast-forward/checkpoint stop ticks agree.
-- **Survival/scoring:** unfinished entities do not prevent elimination; surviving constructors continue work and can restore a player. Residual armies can produce mutual elimination; no survivor-count early-stop. All recovered → stalemate/zero points. Partial survival → win/survivor awards. All eliminated → configured draw/none or all-player awards, with an empty survivor list. Apply all deltas before target/lead/tie checks; default 5/5 continues and 6/5 ends, shared-victory mode can return both.
+- **Survival/scoring:** unfinished entities do not prevent elimination; surviving constructors continue work and can restore a player. Residual armies can produce mutual elimination; survivor count alone never stops active recovery; the configurable decided-side stop requires opposition unable to act. All recovered → stalemate/zero points. Partial survival → win/survivor awards. All eliminated → configured draw/none or all-player awards, with an empty survivor list. Apply all deltas before target/lead/tie checks; default 5/5 continues and 6/5 ends, shared-victory mode can return both.
 - **Match adjudication:** locked active-building absence with a constructor does not finalize timed loss; locked constructor/factory absence does. Mutable future losses remain editable. Reduce simultaneous losses together. Scoreboard never auto-stops after repeated ties/stalemates; manual archive records unfinished without another award or fabricated battlefield draw and retains partial-round inputs.
 - **Browser/guide/port:** live usernames/colors/teams appear for both players and spectators; stale Start refreshes roster. Non-sample exact ticks never snap. Local lock estimates account for preceding draft edits. Temporary blueprint references resolve consistently. Startup and resumed-content guides use actual loaded stats through one generation function. Nondefault-port restart/resume works by refreshing existing tabs; occupied ports fail without silently changing URLs.
 - **Visuals:** grayscale terrain keeps entities/ore/orders legible; health/facing restore at arbitrary ticks. Pause/seek/revision changes handle cosmetic shots/explosions without stale effects or shifted damage timing. Short combat between samples remains visible through events; dense playback bounds cosmetic counts.
@@ -114,7 +114,7 @@ Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick p
 
 ## Work that can run independently now
 
-Gate 2 is met, so the breadth assignments below are open. The slice already provides the real engine, server thread, archive, protocol and a playable client; breadth agents extend them in place rather than replacing them. Known slice limits to pick up: intents run serially (no bounded pool yet), the map generator supports two players only (so team lobbies beyond two players cannot start until it does), allied displacement and radius-6 detours have no dedicated fixtures beyond the golden worlds, and the client lacks group-edit chords, graphs, per-round replay and the before/after comparison. The server now has archive resume/verification, retention budgets, server-side stats bucketing and Gate 5 failure checks (`scripts/gate5-check.mjs`).
+The integrated engine supports bounded parallel intents, 2–4-player maps, allied traffic and checkpoint-safe detours. The browser includes group editing, graphs, per-round replay and before/after comparison. The server supports resume/verification, retention budgets and regeneration. Final verification exercises these together; the separately assigned native peripheral has independent ownership.
 
 | Timing | Bounded assignment | Ownership and handoff |
 | --- | --- | --- |

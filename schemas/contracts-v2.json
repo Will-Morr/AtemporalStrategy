@@ -676,6 +676,13 @@
         {
           "additionalProperties": false,
           "properties": {
+            "effects_only": {
+              "description": "Rendered effects only; omit movement diagnostics already represented by samples.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "from_tick": {
               "format": "uint32",
               "maximum": 4294967295,

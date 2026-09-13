@@ -225,8 +225,8 @@ export class Game {
       const range = await this.net.request({ kind: 'get_snapshot_range', revision: rev.revision, from_tick: from, to_tick: to, stride: this.config.snapshot_interval }, 'snapshot_range', s => s.revision === rev.revision && (s.samples.length === 0 || s.samples[0].tick >= from));
       rev.dictionary = range.entity_dictionary;
       for (const s of range.samples) rev.samples.set(s.tick, s);
-      const events = await this.net.request({ kind: 'get_events', revision: rev.revision, from_tick: from, to_tick: to }, 'events', e => e.revision === rev.revision);
-      rev.events.push(...events.events);
+      const events = await this.net.request({ kind: 'get_events', revision: rev.revision, from_tick: from, to_tick: to, effects_only: true }, 'events', e => e.revision === rev.revision);
+      rev.events = rev.events.concat(events.events);
       rev.chunks.add(k);
       while (rev.chunks.size > 8) {
         const oldest = rev.chunks.values().next().value!; rev.chunks.delete(oldest);
@@ -923,8 +923,8 @@ export class Game {
     $('top-tick').innerHTML = `tick <b>${Math.floor(this.playhead)}</b> / ${rev?.outcome.terminal_state_tick ?? 0} · editable ${this.editableFrom}–${this.availableThrough}`;
     const sample = this.sampleAt(this.playhead);
     const banks = this.exact && this.exact.tick === Math.floor(this.playhead) && this.exact.revision === this.current
-      ? this.exact.state.players.map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`)
-      : sample?.players.map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`) ?? [];
+      ? this.exact.state.players.filter(p => this.spectator || p.player_id === this.player).map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`)
+      : sample?.players.filter(p => this.spectator || p.player_id === this.player).map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`) ?? [];
     $('top-bank').textContent = `MATTER · ${banks.join(' · ')} · tick ${Math.floor(this.playhead)}${this.exact?.tick === Math.floor(this.playhead) ? '' : ' (sampled)'}`;
     const score = rev?.score?.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id} ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · ');
     $('top-score').textContent = score ? `score: ${score}` : '';
@@ -952,7 +952,7 @@ export class Game {
       result.dataset.outcome = verdict.toLowerCase();
       const banner = $('outcome-banner');
       banner.dataset.outcome = verdict.toLowerCase();
-      banner.textContent = `${this.finished ? 'MATCH ENDED · ' : 'TIMELINE RESULT · '}${verdict} · ${this.finished ? 'Replay remains available' : 'Simulation continues after elimination; final survival determines this result'}`;
+      banner.textContent = `${this.finished ? 'MATCH ENDED · ' : 'TIMELINE RESULT · '}${verdict} · ${this.finished ? 'Replay remains available' : o.stop_reason === 'elimination' ? 'Simulation stopped: remaining opposition cannot act · Plan a new timeline or replay' : 'Simulation finished · Final survival determines this result · Replay available'}`;
       const lines = [`<b>Revision ${rev.revision}</b>: ${o.kind} (${o.stop_reason.replace('_', ' ')} at tick ${o.terminal_state_tick}, last progress ${o.last_progress_tick})`];
       lines.push(`survivors: ${o.survivors.map(p => this.name(p)).join(', ') || 'none'}`);
       if (rev.score) lines.push(rev.score.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id}: +${e.raw_delta} → ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · '));
