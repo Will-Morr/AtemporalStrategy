@@ -52,8 +52,8 @@ fn reachable(w: &WorldState) -> Vec<bool> {
     seen
 }
 
-/// Four-neighbour shortest path between two floor tiles.
-fn shortest(w: &WorldState, from: Tile, to: Tile) -> Vec<Tile> {
+/// Shortest path between two floor tiles; diagonal steps never cut a rock corner.
+fn shortest(w: &WorldState, from: Tile, to: Tile, diagonal: bool) -> Vec<Tile> {
     let n = usize::from(w.terrain.width);
     let mut parent: Vec<Option<Tile>> = vec![None; n * n];
     let mut seen = vec![false; n * n];
@@ -63,16 +63,37 @@ fn shortest(w: &WorldState, from: Tile, to: Tile) -> Vec<Tile> {
         if t == to {
             break;
         }
-        for (dx, dy) in [(0i32, -1i32), (1, 0), (0, 1), (-1, 0)] {
+        let open = |x: i32, y: i32| {
+            x >= 0
+                && y >= 0
+                && x < n as i32
+                && y < n as i32
+                && w.terrain.cells[y as usize * n + x as usize] == TerrainCell::Floor
+        };
+        let steps: &[(i32, i32)] = if diagonal {
+            &[
+                (0, -1),
+                (1, 0),
+                (0, 1),
+                (-1, 0),
+                (1, -1),
+                (1, 1),
+                (-1, 1),
+                (-1, -1),
+            ]
+        } else {
+            &[(0, -1), (1, 0), (0, 1), (-1, 0)]
+        };
+        for (dx, dy) in steps {
             let (x, y) = (i32::from(t.x) + dx, i32::from(t.y) + dy);
-            if x < 0 || y < 0 || x >= n as i32 || y >= n as i32 {
+            if !open(x, y) || (dx * dy != 0 && !(open(x, y - dy) && open(x - dx, y))) {
                 continue;
             }
             let nt = Tile {
                 x: x as u16,
                 y: y as u16,
             };
-            if w.terrain.cells[idx(w, nt)] == TerrainCell::Floor && !seen[idx(w, nt)] {
+            if !seen[idx(w, nt)] {
                 seen[idx(w, nt)] = true;
                 parent[idx(w, nt)] = Some(t);
                 queue.push_back(nt);
@@ -259,10 +280,6 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
     );
     let sizes = clusters(&w);
     assert!(sizes.len() >= 16, "scattered clusters: {sizes:?}");
-    assert!(
-        sizes.iter().any(|s| *s >= 5),
-        "some larger deposits: {sizes:?}"
-    );
     // The centre is open and the shortest base-to-base path runs through it, on every seed.
     for seed in 0..12u64 {
         let mut config = config.clone();
@@ -274,7 +291,8 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
             TerrainCell::Floor,
             "seed {seed}"
         );
-        let path = shortest(&w, w.entities[0].tile, w.entities[3].tile);
+        // Walkers step diagonally, so the diagonal centre route beats any edge route.
+        let path = shortest(&w, w.entities[0].tile, w.entities[3].tile, true);
         let near = path
             .iter()
             .any(|t| (i32::from(t.x) - 24).abs() <= 5 && (i32::from(t.y) - 24).abs() <= 5);
@@ -283,6 +301,24 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
             "seed {seed}: base-to-base path avoids the centre: {path:?}"
         );
     }
+    // Most maps keep side lanes: the bases stay connected with the centre blocked off.
+    let mut multi_lane = 0;
+    for seed in 0..20u64 {
+        let mut config = config.clone();
+        config.seed = seed.try_into().unwrap();
+        let mut w = map::generate(&config, &content).unwrap();
+        for y in 16..32u16 {
+            for x in 16..32u16 {
+                let i = idx(&w, Tile { x, y });
+                w.terrain.cells[i] = TerrainCell::Wall;
+            }
+        }
+        let (from, to) = (w.entities[0].tile, w.entities[3].tile);
+        if shortest(&w, from, to, false).contains(&from) {
+            multi_lane += 1;
+        }
+    }
+    assert!(multi_lane >= 12, "side lanes on {multi_lane}/20 maps");
     // Squared weights give about two thirds of clusters three tiles or fewer; check across seeds.
     let mut pooled = vec![];
     for seed in 0..6u64 {
@@ -294,6 +330,10 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
     assert!(
         small * 2 > pooled.len(),
         "weighted toward small: {pooled:?}"
+    );
+    assert!(
+        pooled.iter().any(|s| *s >= 5),
+        "some larger deposits: {pooled:?}"
     );
     for (i, ore) in w.ore.iter().enumerate() {
         let (x, y) = ((i % 48) as i32, (i / 48) as i32);

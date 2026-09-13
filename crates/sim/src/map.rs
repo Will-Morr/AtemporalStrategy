@@ -16,6 +16,9 @@ const SMOOTHING_PASSES: usize = 4;
 const MAX_ROCK: u16 = 4;
 /// Rock cost relative to floor when routing each start to the central clearing.
 const ROCK_COST: u32 = 3;
+/// Share of maps with side lanes, and their rock cost (higher: reuse caves, tunnel less).
+const SIDE_LANE_PERCENT: u64 = 80;
+const SIDE_ROCK_COST: u32 = 6;
 /// Radius of the round open clearing around each start anchor.
 const START_CLEARING: i32 = 7;
 /// Chebyshev radius within which each start is guaranteed a first ore cluster.
@@ -140,9 +143,19 @@ impl Grid {
             y: y as u16,
         })
     }
-    /// Cheapest four-neighbour route where floor costs one and rock costs `rock`, ties broken
+    /// Cheapest four-neighbour route where floor costs about one and rock about `rock`, each
+    /// jittered per tile by `noise` so routes wander; `avoid_center` makes the middle quarter
+    /// of the map four times as expensive; `diagonal` allows eight-neighbour steps. Ties break
     /// by tile order.
-    fn route(&self, from: Tile, to: Tile, rock: u32) -> Vec<Tile> {
+    fn route(
+        &self,
+        from: Tile,
+        to: Tile,
+        rock: u32,
+        noise: u64,
+        avoid_center: bool,
+        diagonal: bool,
+    ) -> Vec<Tile> {
         let cells = self.n() * self.n();
         let mut cost = vec![u32::MAX; cells];
         let mut parent: Vec<Option<Tile>> = vec![None; cells];
@@ -156,15 +169,42 @@ impl Grid {
             if t == to {
                 break;
             }
-            for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+            let steps: &[(i32, i32)] = if diagonal {
+                &[
+                    (0, -1),
+                    (1, 0),
+                    (0, 1),
+                    (-1, 0),
+                    (1, -1),
+                    (1, 1),
+                    (-1, 1),
+                    (-1, -1),
+                ]
+            } else {
+                &[(0, -1), (1, 0), (0, 1), (-1, 0)]
+            };
+            for &(dx, dy) in steps {
                 let Some(n) = self.tile(i32::from(t.x) + dx, i32::from(t.y) + dy) else {
                     continue;
                 };
-                let step = if self.cells[self.idx(n)] == TerrainCell::Floor {
+                let base = if self.cells[self.idx(n)] == TerrainCell::Floor {
                     1
                 } else {
                     rock
                 };
+                // The direct centre lane wanders a little; side lanes wander a lot.
+                let wander = if diagonal { 4 } else { 9 };
+                let mut step =
+                    base * (4 + (mix(noise, u64::from(n.x), u64::from(n.y)) % wander) as u32);
+                let half = i32::from(self.size / 2);
+                if avoid_center
+                    && (i32::from(n.x) - half)
+                        .abs()
+                        .max((i32::from(n.y) - half).abs())
+                        <= i32::from(self.size) / 4
+                {
+                    step *= 4;
+                }
                 if c + step < cost[self.idx(n)] {
                     cost[self.idx(n)] = c + step;
                     parent[self.idx(n)] = Some(t);
@@ -392,17 +432,41 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
             }
         }
     }
-    for t in grid.route(starts[0].anchor, center, ROCK_COST) {
-        for (dx, dy) in [(0, 0), (1, 0), (0, 1)] {
-            if let Some(o) = grid.tile(i32::from(t.x) + dx, i32::from(t.y) + dy)
-                && o.x > 0
-                && o.y > 0
-                && o.x < size - 1
-                && o.y < size - 1
-            {
-                grid.carve(o, &turns);
+    // The centre lane steps diagonally under a plus-shaped stamp so walkers can take it at
+    // full diagonal speed; side lanes are two-wide four-neighbour routes that wind more.
+    let lane = |grid: &mut Grid, from: Tile, to: Tile, rock: u32, side: bool| {
+        let stamp: &[(i32, i32)] = if side {
+            &[(0, 0), (1, 0), (0, 1)]
+        } else {
+            &[(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)]
+        };
+        for t in grid.route(from, to, rock, seed ^ 0x1A7E, side, !side) {
+            for &(dx, dy) in stamp {
+                if let Some(o) = grid.tile(i32::from(t.x) + dx, i32::from(t.y) + dy)
+                    && o.x > 0
+                    && o.y > 0
+                    && o.x < size - 1
+                    && o.y < size - 1
+                {
+                    grid.carve(o, &turns);
+                }
             }
         }
+    };
+    lane(&mut grid, starts[0].anchor, center, ROCK_COST, false);
+    // Side lanes on most seeds: from the first start through a waypoint in a neighbouring
+    // corner region to the opposite start, tunnelling reluctantly so they wind through the
+    // caves. Rotations mirror the lane to the other side; a minority of maps stay one-lane.
+    let lanes = seed ^ 0x51DE_1A4E;
+    if mix(lanes, 0, 0) % 100 < SIDE_LANE_PERCENT {
+        let quarter = i32::from(size) / 4;
+        let jitter = |k: u64| (mix(lanes, k, 1) % (quarter as u64 / 2 + 1)) as i32 - quarter / 4;
+        let via = grid
+            .tile(3 * quarter + jitter(1), quarter + jitter(2))
+            .unwrap_or(center);
+        let opposite = rotate(starts[0].anchor, size, 2);
+        lane(&mut grid, starts[0].anchor, via, SIDE_ROCK_COST, true);
+        lane(&mut grid, via, opposite, SIDE_ROCK_COST, true);
     }
     // Dig the shortest corridor from each remaining room to the connected body, with its
     // rotations, until every floor cell is reachable from the first start.
