@@ -78,6 +78,8 @@ impl World {
         config.map_size = (width.max(height).max(8) + 1) & !1;
         config.max_tick = 2000;
         config.stall_ticks = 50;
+        // Harness worlds rarely field buildings; mechanics tests run to inactivity.
+        config.stop_when_decided = false;
         config.snapshot_interval = 1;
         config.checkpoint_interval = 10;
         config.simulation_threads = 1;

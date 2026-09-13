@@ -47,6 +47,9 @@ pub fn run_with_hook(
         if now >= request.end_tick_exclusive {
             return Ok(sim.finish(StopReason::AbsoluteHorizon, emit));
         }
+        if request.config.stop_when_decided && now >= request.minimum_end_tick && sim.decided() {
+            return Ok(sim.finish(StopReason::Elimination, emit));
+        }
         if now >= request.minimum_end_tick && sim.inactive() {
             return Ok(sim.finish(StopReason::Inactivity, emit));
         }

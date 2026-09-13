@@ -1076,3 +1076,97 @@ fn unfunded_production_does_not_defer_inactivity() {
     assert_eq!(run.result.outcome.stop_reason, StopReason::Inactivity);
     assert_eq!(run.result.outcome.terminal_state_tick, w.config.stall_ticks);
 }
+
+#[test]
+fn miners_claim_ore_tiles_and_spread_across_a_patch() {
+    // A walled patch with one entry at its corner: the first miner holds the entry tile and,
+    // without claims, every later miner targets that same tile and settles behind it.
+    let mut w = World::new(&[
+        "..............",
+        "..............",
+        ".....#######..",
+        ".....#...#....",
+        ".....#...#....",
+        ".....#...#....",
+        ".....#.###....",
+        "..............",
+    ]);
+    for y in 3..=5 {
+        for x in 6..=8 {
+            w.ore(tile(x, y), 10000.0);
+        }
+    }
+    let miners: Vec<EntityId> = (0..4).map(|i| w.spawn(0, "miner", 1 + i, 7)).collect();
+    w.turn(
+        1,
+        0,
+        0,
+        vec![Command::AssignOrder {
+            entities: miners.clone(),
+            order: Order::Mine {
+                area: rect(6, 3, 8, 5),
+            },
+        }],
+    );
+    let run = w.run();
+    let settled = w.at(80);
+    let tiles: std::collections::BTreeSet<Tile> =
+        miners.iter().map(|m| entity(&settled, m).tile).collect();
+    assert_eq!(tiles.len(), 4, "every miner holds its own tile: {tiles:?}");
+    for t in &tiles {
+        assert!(
+            (6..=8).contains(&t.x) && (3..=5).contains(&t.y),
+            "{t:?} is on the patch"
+        );
+    }
+    let churn: Vec<Tick> = run
+        .displacements()
+        .into_iter()
+        .filter(|t| *t >= 40)
+        .collect();
+    assert!(
+        churn.is_empty(),
+        "no holder is shoved off its tile: {churn:?}"
+    );
+}
+
+#[test]
+fn a_decided_run_stops_once_every_other_side_cannot_act() {
+    // Idle remnant with no buildings: decided at once.
+    let mut w = World::new(&OPEN);
+    w.config.stop_when_decided = true;
+    w.spawn(0, "turret", 1, 1);
+    w.spawn(0, "constructor", 1, 3);
+    w.spawn(1, "grunt", 12, 6);
+    let run = w.run();
+    assert_eq!(run.result.outcome.stop_reason, StopReason::Elimination);
+    assert_eq!(run.result.outcome.terminal_state_tick, 1);
+    assert_eq!(run.result.outcome.kind, OutcomeKind::Win);
+    assert_eq!(run.result.outcome.survivors, vec![0]);
+
+    // A queued command keeps the losing side in play until it has run.
+    let mut w = World::new(&OPEN);
+    w.config.stop_when_decided = true;
+    w.spawn(0, "turret", 1, 1);
+    w.spawn(0, "constructor", 1, 3);
+    let grunt = w.spawn(1, "grunt", 12, 6);
+    w.turn(
+        1,
+        1,
+        5,
+        vec![Command::AssignOrder {
+            entities: vec![grunt],
+            order: attack_move(12, 1),
+        }],
+    );
+    let run = w.run();
+    assert!(run.result.outcome.terminal_state_tick > 5);
+
+    // No units at all on one side ends the run even while the other side still acts.
+    let mut w = World::new(&OPEN);
+    w.config.stop_when_decided = true;
+    w.spawn_with(0, "grunt", 1, 1, attack_move(12, 1));
+    let run = w.run();
+    assert_eq!(run.result.outcome.stop_reason, StopReason::Elimination);
+    assert_eq!(run.result.outcome.terminal_state_tick, 1);
+}

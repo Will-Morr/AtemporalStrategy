@@ -28,7 +28,7 @@ Range queries: `get_snapshot_range` → `snapshot_range` (dictionary plus sample
 
 ## Content, guide and configuration
 
-Content loading/normalization is shared; the sim reads capability data only. The server generates the guide once at startup with `write_guide` from the effective content and serves it at `/guide/`; `/guide/content.json` is the client's type table. `config/game.yaml` pins seed, map, players, objective, control limit, future-order window, horizon/stall, snapshot/checkpoint intervals, starting matter and ore per start; the map generator currently supports two players on a 180°-symmetric fixture map.
+Content loading/normalization is shared; the sim reads capability data only. The server generates the guide once at startup with `write_guide` from the effective content and serves it at `/guide/`; `/guide/content.json` is the client's type table. `config/game.yaml` pins seed, map, players, objective, control limit, future-order window, horizon/stall, the decided stop, snapshot/checkpoint intervals, starting matter and ore per start; the map generator currently supports two players on a 180°-symmetric fixture map.
 
 ## Still provisional
 

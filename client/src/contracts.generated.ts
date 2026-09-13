@@ -276,7 +276,7 @@ export type OutcomeKind = "stalemate" | "win" | "draw";
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "StopReason".
  */
-export type StopReason = "inactivity" | "absolute_horizon";
+export type StopReason = "inactivity" | "absolute_horizon" | "elimination";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "Reason".
@@ -1151,6 +1151,7 @@ export interface MatchConfig {
   snapshot_interval: number;
   stall_ticks: number;
   starting_matter: number;
+  stop_when_decided: boolean;
   symmetric: boolean;
   ticks_per_second: number;
   transport: Transport;

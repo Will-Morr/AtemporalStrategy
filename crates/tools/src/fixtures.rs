@@ -371,7 +371,7 @@ pub fn generate() -> Result<()> {
 
     let mut draw = base(
         "mutual-elimination",
-        "Adjacent one-HP turrets fire simultaneously on tick 0. Constructors persist; no early exit at zero survivors. Stop at S[4] after three quiet ticks.",
+        "Adjacent one-HP turrets fire simultaneously on tick 0. Both sides are eliminated with only idle constructors and no future commands, so the run is decided at S[1].",
         12,
     );
     let a = id(&draw, 0, "turret");
@@ -395,7 +395,7 @@ pub fn generate() -> Result<()> {
         e.tile = position;
         e.action = Order::Idle {};
     }
-    draw.expected.outcome = result(4, 0, &[], StopReason::Inactivity);
+    draw.expected.outcome = result(1, 0, &[], StopReason::Elimination);
     draw.expected.outcome.survival_transitions = (0..2)
         .map(|player_id| SurvivalTransition {
             player_id,

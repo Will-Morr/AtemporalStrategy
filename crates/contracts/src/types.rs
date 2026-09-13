@@ -213,6 +213,7 @@ record!(MatchConfig {
     future_orders: FutureOrdersConfig,
     max_tick: Tick,
     stall_ticks: Tick,
+    stop_when_decided: bool,
     ticks_per_second: u32,
     starting_matter: f64,
     ore_matter_per_start: f64,
@@ -445,7 +446,8 @@ choices!(OutcomeKind {
 });
 choices!(StopReason {
     Inactivity,
-    AbsoluteHorizon
+    AbsoluteHorizon,
+    Elimination
 });
 choices!(SurvivalStatus { Alive, Eliminated });
 record!(SurvivalTransition { player_id: PlayerId, resolved_tick: Tick, status: SurvivalStatus, reasons: Vec<Reason> });

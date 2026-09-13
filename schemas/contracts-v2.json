@@ -2196,6 +2196,9 @@
           "format": "double",
           "type": "number"
         },
+        "stop_when_decided": {
+          "type": "boolean"
+        },
         "symmetric": {
           "type": "boolean"
         },
@@ -2221,6 +2224,7 @@
         "future_orders",
         "max_tick",
         "stall_ticks",
+        "stop_when_decided",
         "ticks_per_second",
         "starting_matter",
         "ore_matter_per_start",
@@ -4562,7 +4566,8 @@
     "StopReason": {
       "enum": [
         "inactivity",
-        "absolute_horizon"
+        "absolute_horizon",
+        "elimination"
       ],
       "type": "string"
     },
