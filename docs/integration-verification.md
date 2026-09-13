@@ -1,5 +1,22 @@
 # Browser integration verification — 2026-09-13
 
+## Work targeting, fogged ore and selection
+
+Implemented on `agent/pathing-selection` from main `e79ec1b`. Mining acquires reachable ore by walking distance with exclusive claims. Construction ranks usable adjacent work positions by legal walking distance for both planned and funded buildings; creation precedence only breaks equal paths. Source fields rank candidates without generating a separate BFS for each candidate. Dedicated work-goal fields guide the selected constructor, while factory-output clearing retains ordinary movement. Grinders now cost 100 matter with 275 HP, 25 damage per five ticks and movement every two ticks; tanks retain 250 HP, the same cost/damage rate and movement every four ticks.
+
+Ore appears through fog on the field and minimap, with a remaining-matter hover readout; enemy entities stay hidden. All army and All units select owned entities across the viewed map. Type chips retain/drop an owner/type, and clear recalled-group routing before later commands.
+
+Verification:
+
+- `scripts/check.sh` passed on the committed implementation and refreshed authored content fixtures: workspace and serial simulator tests, strict Clippy, client generation/build, JavaScript fixtures, plot/score checks, guide and generated-file drift. The first check detected the expected grinder content changes in generated tiny-world fixtures; those were committed before the clean run.
+- Five new simulator tests cover four/eight-neighbor wall detours, unreachable and claimed ore, planned/funded site choice, grinder relationships, and cold-checkpoint/evicting-cache equivalence. Existing factory-output clearance caught and prevented a work-field regression.
+- Both focused desktop/narrow scenarios passed through a real native peripheral (`artifacts/ui/2026-09-13T22-09-42.536Z-925060`). Inputs cover fogged numeric ore, canvas ore color, hidden enemies, owned army/all-unit selection, type removal/retention, group recall filtering, and authoritative attack-order recipients after commit. Both traces passed ZIP integrity checks.
+- The final full Chromium run passed **44/44** desktop/narrow scenarios with peripheral mode enabled (`artifacts/ui/2026-09-13T22-13-23.277Z-929525`), covering multiplayer, single-order/hybrid modes, restore/recovery, production, fog, progressive replay and game-end results. All 44 traces passed ZIP integrity checks. Full factory frames were also manually reviewed on both viewport sizes.
+- Manually inspected full 1440×1000 and 390×844 frames for fogged ore readouts, all-type selection and army selection. Narrow panels scroll to expose longer selection/control lists. The initial scenario used an invalid seven-unit starting roster; the lobby rejected it visibly. The corrected valid three-slot custom roster is miner/factory/grunt; failure evidence is retained in `artifacts/ui/2026-09-13T22-06-03.391Z-920073`.
+
+Rules stamp 4 prevents replaying older work-targeting rules as if they were identical. The separate 2,000-live-entity end-to-end measurement remains open. Missile silos are the next requested feature.
+
+
 ## Production, turret repair and persistent scoreboard
 
 Implemented on `agent/production-priority`, rebased onto `0b61078` without conflicts. Factories capture repeat flags per queue item, including blueprint settings and active production; Shift-click adds five. Mixed blueprint selections only receive compatible recipe/loop edits. A shared bottom priority dropdown supports High/Medium/Low/Off with no battlefield priority labels. Off pauses spending; complete turrets automatically repair at 0.5 HP/tick for 1 matter/HP, half their construction efficiency, independently of firing. Terrain is darkest for walls, medium for unseen floor, lightest for seen floor; miners have blocky owner-colored silhouettes.
