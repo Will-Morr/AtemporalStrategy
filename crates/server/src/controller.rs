@@ -16,6 +16,8 @@ use tokio::sync::{broadcast, mpsc};
 
 pub const TIMELINE_BUCKET: Tick = 20;
 const EXACT_CACHE: usize = 64;
+pub const DEFAULT_MEMORY_BUDGET: u64 = 512 << 20;
+pub const DEFAULT_DISK_BUDGET: u64 = 2048 << 20;
 
 #[derive(Clone)]
 pub struct RevisionData {
@@ -41,6 +43,9 @@ pub struct RevisionData {
     pub started: Option<Instant>,
     /// False once the regenerable body (samples, checkpoints, stats, events, timeline) was evicted.
     pub loaded: bool,
+    /// Body size proxy: JSON bytes of the result cache (or an estimate before it is written).
+    pub bytes: u64,
+    pub last_used: u64,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -56,6 +61,8 @@ pub struct RoundMeasurement {
     pub commit_to_publish_ms: u64,
     pub sizes: ResultSizes,
     pub timeline_index_bytes: usize,
+    pub resident_bytes: u64,
+    pub evictions: u64,
 }
 
 pub struct Controller {
@@ -91,6 +98,10 @@ pub struct Controller {
     pending: Option<RevisionData>,
     pub match_winners: Vec<SideId>,
     pub measurements: Vec<RoundMeasurement>,
+    pub memory_budget: u64,
+    pub disk_budget: u64,
+    use_counter: u64,
+    pub evictions: u64,
 }
 
 fn now_ms() -> u64 {
@@ -172,6 +183,10 @@ impl Controller {
             pending: None,
             match_winners: vec![],
             measurements: vec![],
+            memory_budget: DEFAULT_MEMORY_BUDGET,
+            disk_budget: DEFAULT_DISK_BUDGET,
+            use_counter: 0,
+            evictions: 0,
         })
     }
 
@@ -740,6 +755,7 @@ impl Controller {
         let mut sizes = ResultSizes::default();
         if let Some(archive) = &self.archive {
             sizes = archive.write_results(&data)?;
+            data.bytes = sizes.total();
             fail_point("after_results");
             let precedence = data
                 .precedence
@@ -793,6 +809,8 @@ impl Controller {
                 .map(|v| v.len())
                 .unwrap_or(0),
             sizes,
+            resident_bytes: self.resident_bytes() + data.bytes,
+            evictions: self.evictions,
         };
         println!(
             "round {round} → revision {revision}: {}",
@@ -802,9 +820,16 @@ impl Controller {
             let _ = archive.append_measurement(&measurement);
         }
         self.measurements.push(measurement);
+        data.bytes = if data.bytes == 0 {
+            data.estimate_bytes()
+        } else {
+            data.bytes
+        };
+        data.last_used = self.next_use();
         self.revisions.insert(revision, data);
         self.current = revision;
         self.exact_cache.clear();
+        self.enforce_budgets(None);
         if let Some(message) = self.revision_published(revision) {
             self.send(message);
         }
@@ -1222,6 +1247,126 @@ impl Controller {
         self.exact_cache.push_back(((revision, tick), state));
     }
 
+    fn next_use(&mut self) -> u64 {
+        self.use_counter += 1;
+        self.use_counter
+    }
+
+    /// Make a revision's body resident for a query. `Ok(None)` means ready; `Ok(Some(request))`
+    /// means the caller must regenerate it on the sim thread and `install_body` the result.
+    pub fn ensure_loaded(&mut self, revision: Revision) -> Result<Option<SimRequest>> {
+        let stamp = self.next_use();
+        let data = self
+            .revisions
+            .get_mut(&revision)
+            .ok_or_else(|| format!("unknown revision {revision}"))?;
+        data.last_used = stamp;
+        if data.loaded {
+            return Ok(None);
+        }
+        if let Some(cache) = self.archive.as_ref().and_then(|a| a.read_results(revision)) {
+            let bytes = self
+                .archive
+                .as_ref()
+                .map(|a| {
+                    a.results_usage()
+                        .into_iter()
+                        .find(|(r, _)| *r == revision)
+                        .map_or(0, |(_, b)| b)
+                })
+                .unwrap_or(0);
+            let data = self
+                .revisions
+                .get_mut(&revision)
+                .ok_or("unknown revision")?;
+            data.dictionary = cache.dictionary;
+            data.samples = cache.samples.into_iter().map(|s| (s.tick, s)).collect();
+            data.checkpoints = cache.checkpoints.into_iter().map(|c| (c.tick, c)).collect();
+            data.stats = cache.stats.into_iter().map(|s| (s.tick, s)).collect();
+            data.events = cache.events;
+            data.timeline = cache.timeline;
+            data.loaded = true;
+            data.bytes = if bytes == 0 {
+                data.estimate_bytes()
+            } else {
+                bytes
+            };
+            self.enforce_budgets(Some(revision));
+            return Ok(None);
+        }
+        self.replay_request(revision).map(Some)
+    }
+
+    /// Drop a revision's regenerable body; the initial state and all metadata stay resident.
+    fn evict_body(&mut self, revision: Revision) {
+        let Some(data) = self.revisions.get_mut(&revision) else {
+            return;
+        };
+        let initial = (revision == 0)
+            .then(|| data.checkpoints.get(&0).cloned())
+            .flatten();
+        data.dictionary = vec![];
+        data.samples = BTreeMap::new();
+        data.checkpoints = initial
+            .map(|s| BTreeMap::from([(0, s)]))
+            .unwrap_or_default();
+        data.stats = BTreeMap::new();
+        data.events = vec![];
+        data.timeline = vec![];
+        data.loaded = false;
+        self.exact_cache.retain(|((r, _), _)| *r != revision);
+        self.evictions += 1;
+    }
+
+    /// Memory: evict least-recently-used bodies other than the current revision until the sum of
+    /// resident bodies fits. Disk: remove the oldest result caches other than the current and
+    /// pending revisions until `results/` fits. Turns and round records are never touched.
+    pub fn enforce_budgets(&mut self, keep: Option<Revision>) {
+        loop {
+            let resident: u64 = self
+                .revisions
+                .values()
+                .filter(|d| d.loaded)
+                .map(|d| d.bytes)
+                .sum();
+            if resident <= self.memory_budget {
+                break;
+            }
+            let victim = self
+                .revisions
+                .values()
+                .filter(|d| d.loaded && d.revision != self.current && Some(d.revision) != keep)
+                .min_by_key(|d| d.last_used)
+                .map(|d| d.revision);
+            match victim {
+                Some(revision) => self.evict_body(revision),
+                None => break,
+            }
+        }
+        let Some(archive) = &self.archive else { return };
+        let usage = archive.results_usage();
+        let mut total: u64 = usage.iter().map(|(_, b)| b).sum();
+        let pending = self.pending.as_ref().map(|p| p.revision);
+        for (revision, bytes) in usage {
+            if total <= self.disk_budget {
+                break;
+            }
+            if revision == self.current || Some(revision) == pending {
+                continue;
+            }
+            archive.remove_results(revision);
+            total -= bytes;
+        }
+    }
+
+    pub fn resident_bytes(&self) -> u64 {
+        self.revisions
+            .values()
+            .filter(|d| d.loaded)
+            .map(|d| d.bytes)
+            .sum()
+    }
+
     pub fn stop_and_archive(
         &mut self,
         token: &str,
@@ -1476,9 +1621,11 @@ impl Controller {
         data.timeline = fresh.timeline;
         data.timeline_index = fresh.timeline_index;
         data.loaded = true;
+        data.bytes = data.estimate_bytes();
         if let Some(archive) = &self.archive {
-            archive.write_results(data)?;
+            data.bytes = archive.write_results(data)?.total();
         }
+        self.enforce_budgets(Some(revision));
         Ok(())
     }
 }
@@ -1519,6 +1666,10 @@ pub fn ledger(loaded: &Loaded, round: u32) -> Result<(Vec<AcceptedTurn>, Vec<Rou
 /// Run a job to completion on the calling thread, collecting its outputs into `data`.
 pub fn collect_run(request: &SimRequest, data: &mut RevisionData, players: u8) -> Result<()> {
     let cancel = AtomicBool::new(false);
+    // The engine emits checkpoints at interval ticks; the base state is the first one.
+    data.checkpoints
+        .entry(request.checkpoint.tick)
+        .or_insert_with(|| request.checkpoint.clone());
     let result = atemporal_sim::run(request, &cancel, &mut |o| match o {
         Output::Dictionary(d) => data.dictionary.extend(d),
         Output::Sample(s) => {
@@ -1610,7 +1761,27 @@ impl RevisionData {
             timed: None,
             started: None,
             loaded: true,
+            bytes: 0,
+            last_used: 0,
         }
+    }
+    fn estimate_bytes(&self) -> u64 {
+        let checkpoints: usize = self
+            .checkpoints
+            .values()
+            .map(|c| 256 + c.terrain.cells.len() + c.ore.len() * 8 + c.entities.len() * 400)
+            .sum();
+        let samples: usize = self
+            .samples
+            .values()
+            .map(|s| 32 + s.entities.len() * 40 + s.ore.len() * 16)
+            .sum();
+        (checkpoints
+            + samples
+            + self.stats.len() * 256
+            + self.events.len() * 96
+            + self.timeline.len() * 48
+            + self.dictionary.len() * 64) as u64
     }
 }
 
@@ -2058,6 +2229,48 @@ pub(crate) mod tests {
         .err()
         .unwrap();
         assert!(err.contains("different content/config"), "{err}");
+    }
+
+    #[test]
+    fn budgets_evict_regenerable_bodies_only_and_regenerate_on_demand() {
+        let mut c = started(false, |_| {});
+        c.memory_budget = 1;
+        assert!(commit(&mut c, 0, "a1", 0).is_none());
+        let rx = commit(&mut c, 1, "b1", 0).unwrap();
+        run_round(&mut c, rx);
+        let root = c.replay_root.join(&c.match_id);
+        // The current revision is pinned; the previous body went, the initial state stayed.
+        assert!(c.revisions[&1].loaded && !c.revisions[&0].loaded);
+        assert!(c.revisions[&0].checkpoints.contains_key(&0) && c.revisions[&0].samples.is_empty());
+        assert_eq!(c.evictions, 1);
+        assert!(
+            c.ensure_loaded(0).unwrap().is_none(),
+            "disk cache reloads without a replay"
+        );
+        assert!(c.revisions[&0].loaded);
+        assert!(c.snapshot_range(0, 0, 300, 5).is_ok());
+        // Disk budget removes only result caches of other revisions; ledger files stay.
+        c.disk_budget = 1;
+        c.enforce_budgets(None);
+        assert!(!root.join("results/0/complete.json").exists());
+        assert!(root.join("results/1/complete.json").exists());
+        assert!(root.join("rounds/0.json").exists() && root.join("turns/1-0.json").exists());
+        c.evict_body(0);
+        let request = c
+            .ensure_loaded(0)
+            .unwrap()
+            .expect("no cache left: replay needed");
+        let mut fresh = RevisionData::new(0, 0, None, 0);
+        collect_run(&request, &mut fresh, 2).unwrap();
+        let mut wrong = RevisionData::new(0, 0, None, 0);
+        wrong.final_hash = "bad".into();
+        assert!(c.install_body(0, wrong).unwrap_err().contains("recorded"));
+        c.install_body(0, fresh).unwrap();
+        assert!(
+            c.revisions[&0].loaded,
+            "kept resident right after regeneration"
+        );
+        assert_eq!(c.exact_request(0, 7).map(|_| ()), Ok(()));
     }
 
     #[test]

@@ -28,7 +28,7 @@ fn run() -> Result<()> {
     while let Some(key) = args.next() {
         if key == "--help" {
             println!(
-                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--resume MATCH_ID | --verify MATCH_ID]"
+                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--memory-budget-mb N] [--results-budget-mb N] [--resume MATCH_ID | --verify MATCH_ID]"
             );
             return Ok(());
         }
@@ -116,7 +116,7 @@ fn run() -> Result<()> {
     atemporal_content::write_guide(&content, &prose, &guide_dir)?;
     let replay_root = PathBuf::from(option("--replays", &setup.match_defaults.replay_directory));
     let sim = adapter::SimThread::spawn();
-    let (controller, mode) = match resume {
+    let (mut controller, mode) = match resume {
         Some((match_id, (archive, loaded))) => (
             controller::Controller::resume(
                 setup,
@@ -143,6 +143,17 @@ fn run() -> Result<()> {
             "new match",
         ),
     };
+    let budget = |key: &str, default: u64| -> Result<u64> {
+        match options.get(key) {
+            Some(v) => v
+                .parse::<u64>()
+                .map(|mb| mb << 20)
+                .map_err(|_| format!("{key} must be a whole number of MiB")),
+            None => Ok(default),
+        }
+    };
+    controller.memory_budget = budget("--memory-budget-mb", controller::DEFAULT_MEMORY_BUDGET)?;
+    controller.disk_budget = budget("--results-budget-mb", controller::DEFAULT_DISK_BUDGET)?;
     let match_id = controller.match_id.clone();
     let app = ws::App {
         controller: Arc::new(Mutex::new(controller)),

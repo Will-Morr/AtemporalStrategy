@@ -83,6 +83,17 @@ pub struct ResultCache {
     pub timeline: Vec<TimelineBucket>,
 }
 
+impl ResultSizes {
+    pub fn total(&self) -> u64 {
+        self.samples_bytes
+            + self.checkpoints_bytes
+            + self.stats_bytes
+            + self.events_bytes
+            + self.timeline_bytes
+            + self.dictionary_bytes
+    }
+}
+
 pub struct Archive {
     pub root: PathBuf,
 }
@@ -323,6 +334,32 @@ impl Archive {
             events: load(&dir, "events.json")?,
             timeline: load(&dir, "timeline.json")?,
         })
+    }
+    pub fn remove_results(&self, revision: Revision) {
+        let _ = fs::remove_dir_all(self.root.join(format!("results/{revision}")));
+    }
+    /// Bytes per result directory on disk, oldest revision first.
+    pub fn results_usage(&self) -> Vec<(Revision, u64)> {
+        let mut usage = vec![];
+        if let Ok(entries) = fs::read_dir(self.root.join("results")) {
+            for entry in entries.flatten() {
+                let Ok(revision) = entry.file_name().to_string_lossy().parse::<Revision>() else {
+                    continue;
+                };
+                let bytes = fs::read_dir(entry.path())
+                    .map(|files| {
+                        files
+                            .flatten()
+                            .filter_map(|f| f.metadata().ok())
+                            .map(|m| m.len())
+                            .sum()
+                    })
+                    .unwrap_or(0);
+                usage.push((revision, bytes));
+            }
+        }
+        usage.sort();
+        usage
     }
     pub fn append_measurement<T: Serialize>(&self, record: &T) -> Result<()> {
         let path = self.root.join("measurements.jsonl");

@@ -1,5 +1,7 @@
 //! Dedicated simulation thread: owned jobs in, bounded typed batches out, per-tick cancellation.
-//! Short exact-state jobs are serviced at tick boundaries of a running job.
+//! Short exact-state jobs are serviced at tick boundaries of a running job. Batches are flushed
+//! by estimated bytes as well as ticks, so the bounded channel caps in-flight memory at about
+//! `OUT_CAPACITY × BATCH_BYTES` regardless of population.
 use atemporal_sim::{Output, SimRequest, Tick, WorkerMessage, WorldState};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
@@ -16,6 +18,12 @@ pub enum Job {
         tick: Tick,
         reply: oneshot::Sender<Result<WorldState, String>>,
     },
+    /// Regenerate an evicted revision's body from its full ledger; queued behind running jobs.
+    Replay {
+        request: Box<SimRequest>,
+        players: u8,
+        reply: oneshot::Sender<Result<crate::controller::RevisionData, String>>,
+    },
 }
 
 #[derive(Clone)]
@@ -24,7 +32,23 @@ pub struct SimThread {
 }
 
 const BATCH_TICKS: Tick = 250;
+const BATCH_BYTES: usize = 4 << 20;
 pub const OUT_CAPACITY: usize = 8;
+
+/// Cheap upper-bound estimate of an output's in-memory footprint, used for channel accounting.
+pub fn estimate_bytes(output: &Output) -> usize {
+    match output {
+        Output::Dictionary(d) => d.len() * 64,
+        Output::Sample(s) => 32 + s.entities.len() * 40 + s.ore.len() * 16,
+        Output::Checkpoint(c) => {
+            256 + c.terrain.cells.len() + c.ore.len() * 8 + c.entities.len() * 400
+        }
+        Output::Stats(s) => 16 + s.players.len() * 120,
+        Output::Events(e) => e.len() * 96,
+        Output::Timeline(t) => t.len() * 48,
+        Output::Progress { .. } => 0,
+    }
+}
 
 impl SimThread {
     pub fn spawn() -> Self {
@@ -48,6 +72,29 @@ impl SimThread {
         rx.await
             .map_err(|_| "simulation thread stopped".to_string())?
     }
+    pub async fn replay(
+        &self,
+        request: SimRequest,
+        players: u8,
+    ) -> Result<crate::controller::RevisionData, String> {
+        let (reply, rx) = oneshot::channel();
+        self.submit(Job::Replay {
+            request: Box::new(request),
+            players,
+            reply,
+        });
+        rx.await
+            .map_err(|_| "simulation thread stopped".to_string())?
+    }
+}
+
+fn service_replay(
+    request: &SimRequest,
+    players: u8,
+    reply: oneshot::Sender<Result<crate::controller::RevisionData, String>>,
+) {
+    let mut data = crate::controller::RevisionData::new(request.revision, 0, None, 0);
+    let _ = reply.send(crate::controller::collect_run(request, &mut data, players).map(|_| data));
 }
 
 fn service_exact(
@@ -74,6 +121,11 @@ fn worker(rx: mpsc::Receiver<Job>) {
                 tick,
                 reply,
             } => service_exact(&request, tick, reply),
+            Job::Replay {
+                request,
+                players,
+                reply,
+            } => service_replay(&request, players, reply),
             Job::Run {
                 request,
                 cancel,
@@ -98,6 +150,7 @@ fn worker(rx: mpsc::Receiver<Job>) {
 }
 
 struct Batch {
+    bytes: usize,
     dictionary: Vec<atemporal_sim::EntityRef>,
     samples: Vec<atemporal_sim::Sample>,
     checkpoints: Vec<WorldState>,
@@ -108,6 +161,7 @@ struct Batch {
 impl Batch {
     fn new() -> Self {
         Self {
+            bytes: 0,
             dictionary: vec![],
             samples: vec![],
             checkpoints: vec![],
@@ -154,6 +208,7 @@ fn run_job(
         if closed {
             return;
         }
+        batch.bytes += estimate_bytes(&o);
         match o {
             Output::Dictionary(d) => batch.dictionary.extend(d),
             Output::Sample(s) => batch.samples.push(s),
@@ -162,7 +217,7 @@ fn run_job(
             Output::Events(e) => batch.events.extend(e),
             Output::Timeline(t) => batch.timeline.extend(t),
             Output::Progress { tick } => {
-                if tick.saturating_sub(last_flush) >= BATCH_TICKS {
+                if tick.saturating_sub(last_flush) >= BATCH_TICKS || batch.bytes >= BATCH_BYTES {
                     last_flush = tick;
                     // A slow consumer throttles the simulation, never the IO loop.
                     if out.blocking_send(batch.message(&job_id, revision)).is_err()

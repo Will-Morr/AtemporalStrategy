@@ -335,16 +335,22 @@ async fn handle(
             to_tick,
             stride,
         } => {
-            let result = app
-                .controller
-                .lock()
-                .unwrap()
-                .snapshot_range(revision, from_tick, to_tick, stride);
+            let result = match prepare(app, revision).await {
+                Ok(()) => app
+                    .controller
+                    .lock()
+                    .unwrap()
+                    .snapshot_range(revision, from_tick, to_tick, stride),
+                Err(e) => Err(e),
+            };
             respond(tx, result);
         }
         ClientMessage::GetExactState { revision, tick } => {
             let started = Instant::now();
-            let exact = app.controller.lock().unwrap().exact_request(revision, tick);
+            let exact = match prepare(app, revision).await {
+                Ok(()) => app.controller.lock().unwrap().exact_request(revision, tick),
+                Err(e) => Err(e),
+            };
             let result = match exact {
                 Ok(exact) => exact_state(app, exact, revision, tick)
                     .await
@@ -366,12 +372,15 @@ async fn handle(
             to_tick,
             bucket_width,
         } => {
-            let result = app.controller.lock().unwrap().stats_range(
-                revision,
-                from_tick,
-                to_tick,
-                bucket_width,
-            );
+            let result = match prepare(app, revision).await {
+                Ok(()) => app.controller.lock().unwrap().stats_range(
+                    revision,
+                    from_tick,
+                    to_tick,
+                    bucket_width,
+                ),
+                Err(e) => Err(e),
+            };
             respond(tx, result);
         }
         ClientMessage::GetCommands {
@@ -391,11 +400,14 @@ async fn handle(
             from_tick,
             to_tick,
         } => {
-            let result = app
-                .controller
-                .lock()
-                .unwrap()
-                .events_range(revision, from_tick, to_tick);
+            let result = match prepare(app, revision).await {
+                Ok(()) => app
+                    .controller
+                    .lock()
+                    .unwrap()
+                    .events_range(revision, from_tick, to_tick),
+                Err(e) => Err(e),
+            };
             respond(tx, result);
         }
         ClientMessage::GetControlGroups {
@@ -403,7 +415,10 @@ async fn handle(
             tick,
             player: owner,
         } => {
-            let exact = app.controller.lock().unwrap().exact_request(revision, tick);
+            let exact = match prepare(app, revision).await {
+                Ok(()) => app.controller.lock().unwrap().exact_request(revision, tick),
+                Err(e) => Err(e),
+            };
             let result = match exact {
                 Ok(exact) => exact_state(app, exact, revision, tick).await.map(|state| {
                     ServerMessage::ControlGroups {
@@ -444,6 +459,26 @@ fn respond(tx: &mpsc::UnboundedSender<ServerMessage>, result: Result<ServerMessa
         }
         Err(message) => reject(tx, "", "query_failed", message),
     }
+}
+
+/// Make a revision's body resident before a range/exact query: disk cache first, otherwise a
+/// full ledger replay on the sim thread whose result is hash-checked and written back.
+async fn prepare(app: &App, revision: Revision) -> Result<()> {
+    let request = app.controller.lock().unwrap().ensure_loaded(revision)?;
+    if let Some(request) = request {
+        let (sim, players) = {
+            let c = app.controller.lock().unwrap();
+            (c.sim.clone(), c.config.player_count)
+        };
+        let started = Instant::now();
+        let data = sim.replay(request, players).await?;
+        app.controller
+            .lock()
+            .unwrap()
+            .install_body(revision, data)?;
+        println!("regenerated revision {revision} in {:?}", started.elapsed());
+    }
+    Ok(())
 }
 
 /// Exact S[tick]: cached checkpoint/LRU hit, otherwise in-process reconstruction on the sim thread.
