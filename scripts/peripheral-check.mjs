@@ -122,6 +122,10 @@ await round(2, 1, tick2, [
 const events2 = await a.request({ kind: 'get_events', revision: 2, from_tick: 0, to_tick: 20000 }, 'events', m => m.revision === 2);
 summary.checks.attack_events_rev2 = events2.events.filter(e => e.event.kind === 'attack').length;
 assert(summary.checks.attack_events_rev2 > 0, 'no attacks in the local reproduction');
+const effects2 = await a.request({ kind: 'get_events', revision: 2, from_tick: 0, to_tick: 20000, effects_only: true }, 'events', m => m.revision === 2);
+assert(JSON.stringify(effects2.events) === JSON.stringify(events2.events.filter(e => ['attack', 'impact', 'destroyed'].includes(e.event.kind))), 'peripheral effects filter changed replay effects');
+summary.checks.filtered_effects = effects2.events.length;
+
 // Retroactive rewrite at tick 40: the local job restarts from checkpoint 0 like the controller's.
 await round(3, 2, 40, [{ kind: 'assign_order', entities: [constructor.id], order: { kind: 'idle' }, future_orders: 'drop_all' }]);
 const exact3 = await a.request({ kind: 'get_exact_state', revision: 3, tick: tick2 }, 'exact_state', m => m.tick === tick2 && m.revision === 3);

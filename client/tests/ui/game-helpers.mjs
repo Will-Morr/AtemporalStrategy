@@ -41,3 +41,25 @@ export async function seek(p,t){await p.fill('#tick-input',String(t));await p.lo
 export async function tile(p,t){const point=await p.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5);},t);await p.mouse.click(...point);}
 export async function area(p,t){const point=await p.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5);},t);await p.mouse.move(...point);await p.mouse.down();await p.mouse.up();}
 
+
+// Exercise the same real input scenario through inputs-only replication when requested.
+export async function isolatedPeripheral(testInfo, edit = () => {}, env = {}) {
+  const controller = await isolatedServer(testInfo, edit, () => {}, ['--inputs-only']);
+  const root = new URL('../../../', import.meta.url).pathname;
+  const probe = createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r));
+  const port = probe.address().port; await new Promise(r => probe.close(r));
+  const child = spawn(`${root}target/release/atemporal-runner`, ['--controller', controller.url.replace('http:', 'ws:').replace(/\/$/, ''), '--port', String(port), '--guide-dir', `${controller.dir}/runner-guide`], {cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: {...process.env, ...env}});
+  const stop = async () => {
+    if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill('SIGTERM'); await exited; }
+    await controller.stop();
+  };
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Peripheral startup timeout')), 15000);
+      child.stdout.on('data', d => { void appendFile(`${controller.dir}/runner.log`, d); if (String(d).includes('listening')) { clearTimeout(timeout); resolve(); } });
+      child.stderr.on('data', d => void appendFile(`${controller.dir}/runner.log`, d));
+      child.once('exit', c => { clearTimeout(timeout); reject(new Error(`Peripheral exited ${c}`)); });
+    });
+    return {url: `http://127.0.0.1:${port}/`, dir: controller.dir, stop};
+  } catch (error) { await stop(); throw error; }
+}

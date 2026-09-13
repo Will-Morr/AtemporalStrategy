@@ -75,6 +75,7 @@ export class Game {
   types = new Map<string, TypeDefinition>();
   revisions = new Map<number, RevisionView>();
   current = -1;
+  replayErrors = new Map<number, string>();
   terrain: WorldState['terrain'] | null = null;
   initialOre: number[] = [];
   phase: ServerMessage & { kind: 'planning_opened' } | null = null;
@@ -127,7 +128,7 @@ export class Game {
   async start(): Promise<void> {
     this.content = await (await fetch('/guide/content.json')).json();
     for (const t of this.content.types) this.types.set(t.key, t);
-    this.net.on('revision_published', m => this.onPublished(m));
+    this.net.on('revision_published', m => { void this.onPublished(m).catch(error => this.failReplay(m.revision, error)); });
     this.net.on('planning_opened', m => {
       if (this.phase?.round !== m.round) this.planningSince = performance.now();
       this.phase = m;
@@ -205,6 +206,12 @@ export class Game {
     if (this.player !== null && this.phase && this.phase.revision === m.revision) this.net.send({ kind: 'planning_ready', round: this.phase.round, revision: m.revision });
   }
 
+  failReplay(revision: number, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.replayErrors.set(revision, message);
+    if (this.current === revision) { this.playing = false; this.updatePanels(); }
+  }
+
   startTile(player: number): Tile {
     const e = this.exact?.state.entities.find(e => e.owner === player);
     return e?.tile ?? { x: 0, y: 0 };
@@ -216,7 +223,7 @@ export class Game {
 
   async ensureChunk(k: number): Promise<void> {
     const rev = this.rev();
-    if (!rev || rev.chunks.has(k) || rev.loading.has(k) || k * CHUNK > rev.outcome.terminal_state_tick) return;
+    if (!rev || this.replayErrors.has(rev.revision) || rev.chunks.has(k) || rev.loading.has(k) || k * CHUNK > rev.outcome.terminal_state_tick) return;
     rev.loading.add(k);
     const from = k * CHUNK;
     const to = Math.min(from + CHUNK - 1, rev.outcome.terminal_state_tick);
@@ -235,7 +242,8 @@ export class Game {
       }
       console.log(`chunk ${k} of revision ${rev.revision}: ${range.samples.length} samples, ${events.events.length} events in ${Math.round(performance.now() - t0)} ms`);
     } catch (err) {
-      this.toast(`Loading replay: ${(err as Error).message}`);
+      if (/mismatch/i.test(String(err))) this.failReplay(rev.revision, err);
+      else this.toast(`Loading replay: ${(err as Error).message}`);
     } finally {
       rev.loading.delete(k);
     }
@@ -243,7 +251,7 @@ export class Game {
 
   requestExact(): void {
     const rev = this.rev();
-    if (!rev) return;
+    if (!rev || this.replayErrors.has(rev.revision)) return;
     const tick = Math.min(Math.floor(this.playhead), rev.outcome.terminal_state_tick);
     if (this.exact && this.exact.revision === rev.revision && this.exact.tick === tick) return;
     if (this.exactPending && this.exactPending.revision === rev.revision && this.exactPending.tick === tick) return;
@@ -262,7 +270,8 @@ export class Game {
       })
       .catch(err => {
         this.exactPending = null;
-        this.toast(String(err.message ?? err));
+        if (/mismatch/i.test(String(err))) this.failReplay(rev.revision, err);
+        else this.toast(String(err.message ?? err));
       });
   }
 
@@ -445,6 +454,7 @@ export class Game {
   }
 
   canStage(): { ok: boolean; reason: string } {
+    if (this.replayErrors.has(this.current)) return {ok: false, reason: 'Replay verification failed. Restart the peripheral and refresh.'};
     if (!this.net.connected) return { ok:false, reason:'Disconnected. Draft retained; reconnect before staging.' };
     if (this.current !== this.latest) return { ok: false, reason: 'Historical replay is read-only. Return to live.' };
     if (this.spectator) return { ok: false, reason: 'Spectators cannot stage orders.' };
@@ -924,7 +934,7 @@ export class Game {
 
   updateTop(): void {
     const rev = this.rev();
-    const phase = this.current !== this.latest ? `Historical round ${this.experience?.rounds.get(this.current)?.round ?? '…'} (read-only)` : this.finished ? this.finished : this.committed.includes(this.player ?? -1) ? `Round ${this.round}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${this.round}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
+    const phase = this.replayErrors.has(this.current) ? `Replay unavailable: ${/mismatch/i.test(this.replayErrors.get(this.current)!) ? 'local replay mismatch' : 'loading failed'}` : this.current !== this.latest ? `Historical round ${this.experience?.rounds.get(this.current)?.round ?? '…'} (read-only)` : this.finished ? this.finished : this.committed.includes(this.player ?? -1) ? `Round ${this.round}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${this.round}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
     $('top-phase').textContent = `${this.spectator ? 'Spectator' : this.name(this.player!)} · ${phase} · revision ${this.current}`;
     $('top-tick').innerHTML = `tick <b>${Math.floor(this.playhead)}</b> / ${rev?.outcome.terminal_state_tick ?? 0} · editable ${this.editableFrom}–${this.availableThrough}`;
     const sample = this.sampleAt(this.playhead);
@@ -965,6 +975,12 @@ export class Game {
       if (this.phase) lines.push(`committed: ${this.committed.map(p => this.name(p)).join(', ') || 'nobody yet'}`);
       if (this.finished) lines.push(this.finished);
       result.replaceChildren(); for (const line of lines) {const row=document.createElement('div');row.textContent=line.replace(/<\/?b>/g,'');result.append(row);}
+    }
+    if (this.replayErrors.has(this.current)) {
+      const banner = $('outcome-banner');
+      banner.dataset.outcome = 'loss';
+      banner.textContent = /mismatch/i.test(this.replayErrors.get(this.current)!) ? 'REPLAY MISMATCH · Local replay differs from the controller. Orders disabled. Restart the peripheral, then refresh.' : 'REPLAY UNAVAILABLE · Loading failed. Orders disabled. Reconnect and refresh.';
+      result.textContent = this.replayErrors.get(this.current)!;
     }
     // Selection panel.
     const body = $('selection-body');

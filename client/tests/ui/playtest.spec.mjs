@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures.mjs';
-import { isolatedServer, players, revision, seek, tile, area } from './game-helpers.mjs';
+import { isolatedServer, isolatedPeripheral, players, revision, seek, tile, area } from './game-helpers.mjs';
 
 test('playtest fixes: reachable map, contextual production, ghosts, fog and applied ticks',async({review},testInfo)=>{
   test.setTimeout(120000);
-  const server=await isolatedServer(testInfo,c=>{c.match_defaults.starting_matter=2000;c.match_defaults.max_tick=2000;});
+  const server=await (process.env.ATEMPORAL_UI_PERIPHERAL ? isolatedPeripheral : isolatedServer)(testInfo,c=>{c.match_defaults.starting_matter=2000;c.match_defaults.max_tick=2000;});
   review.afterClose(server.stop);
   {
     const [a,b]=await players(review,server.url);
@@ -50,4 +50,14 @@ test('playtest fixes: reachable map, contextual production, ghosts, fog and appl
     expect(await a.evaluate(()=>window.atemporal.renderer.camera.scale)).toBe(camera.scale);
     await review.capture('configured-factory-live-and-timeline',a);
   }
+});
+
+if (process.env.ATEMPORAL_UI_PERIPHERAL) test('peripheral mismatch visibly blocks planning without browser errors', async ({review}, testInfo) => {
+  const server = await isolatedPeripheral(testInfo, () => {}, {ATEMPORAL_PERIPHERAL_CORRUPT: '0'});
+  review.afterClose(server.stop);
+  const [a] = await players(review, server.url);
+  await a.getByRole('button', {name: 'Start match', exact: true}).click();
+  await expect(a.locator('#top-phase')).toContainText('mismatch');
+  await expect(a.locator('#commit')).toBeDisabled();
+  await review.capture('peripheral-mismatch-blocks-planning', a);
 });
