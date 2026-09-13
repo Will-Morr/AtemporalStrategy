@@ -17,7 +17,7 @@ fn local_draft() -> TurnDraft {
     ]})).unwrap()
 }
 #[test]
-fn action_only_removal_and_exact_interval_edges() {
+fn action_only_lock_and_exact_interval_edges() {
     let command = DraftCommand {
         local_id: "priority".into(),
         command: Command::SetPriority {
@@ -37,7 +37,7 @@ fn action_only_removal_and_exact_interval_edges() {
         )
         .is_ok()
     );
-    let interval = removal_interval(20, FutureOrderPolicy::DropWindow, Some(10), 100)
+    let interval = lock_interval(20, FutureOrderPolicy::DropWindow, Some(10), 100)
         .unwrap()
         .unwrap();
     for (tick, removed) in [(20, false), (21, true), (30, true), (31, false)] {
@@ -47,16 +47,16 @@ fn action_only_removal_and_exact_interval_edges() {
         );
     }
     assert_eq!(
-        removal_interval(20, FutureOrderPolicy::DropAll, None, 100)
+        lock_interval(20, FutureOrderPolicy::DropAll, None, 100)
             .unwrap()
             .unwrap()
             .through_tick,
         99
     );
-    assert!(removal_interval(20, FutureOrderPolicy::DropWindow, None, 100).is_err());
-    assert!(removal_interval(20, FutureOrderPolicy::DropWindow, Some(0), 100).is_err());
+    assert!(lock_interval(20, FutureOrderPolicy::DropWindow, None, 100).is_err());
+    assert!(lock_interval(20, FutureOrderPolicy::DropWindow, Some(0), 100).is_err());
     assert_eq!(
-        removal_interval(
+        lock_interval(
             u32::MAX - 2,
             FutureOrderPolicy::DropWindow,
             Some(10),
@@ -71,9 +71,8 @@ fn action_only_removal_and_exact_interval_edges() {
 #[test]
 fn earlier_local_references_resolve_to_causal_ids_and_fail_atomically() {
     let mut draft = local_draft();
-    let mut registry = IdentityRegistry::new();
-    let commands = resolve_local_references(&draft, 2, 0, &mut registry).unwrap();
-    let expected = blueprint(&mut IdentityRegistry::new(), "r2:p0:c0", 0).unwrap();
+    let commands = resolve_local_references(&draft, 2, 0).unwrap();
+    let expected = blueprint(&command_id(2, 0, 0), 0).unwrap();
     assert_eq!(
         commands[1],
         Command::CancelBlueprints {
@@ -81,12 +80,10 @@ fn earlier_local_references_resolve_to_causal_ids_and_fail_atomically() {
         }
     );
     draft.commands.swap(0, 1);
-    let before = registry.clone();
-    assert!(resolve_local_references(&draft, 2, 0, &mut registry).is_err());
-    assert_eq!(registry, before);
+    assert!(resolve_local_references(&draft, 2, 0).is_err());
     let mut draft = local_draft();
     draft.commands[1].local_id = "place".into();
-    assert!(resolve_local_references(&draft, 2, 0, &mut registry).is_err());
+    assert!(resolve_local_references(&draft, 2, 0).is_err());
     let mut draft = local_draft();
     draft.commands[1].command = Command::CancelBlueprints {
         blueprint_ids: vec![DraftItemRef::Draft {
@@ -94,15 +91,15 @@ fn earlier_local_references_resolve_to_causal_ids_and_fail_atomically() {
             item_index: 1,
         }],
     };
-    assert!(resolve_local_references(&draft, 2, 0, &mut registry).is_err());
+    assert!(resolve_local_references(&draft, 2, 0).is_err());
 }
 #[test]
 fn local_queue_items_are_scoped_by_factory() {
     let draft:TurnDraft=serde_json::from_value(json!({"based_on_revision":0,"tick":0,"commands":[
-        {"local_id":"queue","future_orders":"keep","command":{"kind":"edit_production","factories":["factory-a","factory-b"],"edit":{"kind":"append","items":["grunt"]}}},
-        {"local_id":"remove","future_orders":"keep","command":{"kind":"edit_production","factories":["factory-a","factory-b"],"edit":{"kind":"remove_pending","item_ids":[{"kind":"draft","local_id":"queue","item_index":0}]}}}
+        {"local_id":"queue","future_orders":"keep","command":{"kind":"edit_production","factories":[genesis(0, 3).unwrap(),genesis(0, 4).unwrap()],"edit":{"kind":"append","items":["grunt"]}}},
+        {"local_id":"remove","future_orders":"keep","command":{"kind":"edit_production","factories":[genesis(0, 3).unwrap(),genesis(0, 4).unwrap()],"edit":{"kind":"remove_pending","item_ids":[{"kind":"draft","local_id":"queue","item_index":0}]}}}
     ]})).unwrap();
-    let result = resolve_local_references(&draft, 1, 0, &mut IdentityRegistry::new()).unwrap();
+    let result = resolve_local_references(&draft, 1, 0).unwrap();
     let Command::EditProduction {
         edit: ProductionEdit::RemovePending { item_ids },
         ..
@@ -112,6 +109,27 @@ fn local_queue_items_are_scoped_by_factory() {
     };
     assert_eq!(item_ids.len(), 2);
     assert_ne!(item_ids[0], item_ids[1]);
+    assert_eq!(item_ids[1].birth_command.target_index, 1);
+    let mut subset = draft.clone();
+    if let Command::EditProduction { factories, .. } = &mut subset.commands[1].command {
+        factories.remove(0);
+    }
+    let subset_result = resolve_local_references(&subset, 1, 0).unwrap();
+    if let Command::EditProduction {
+        edit: ProductionEdit::RemovePending {
+            item_ids: subset_ids,
+        },
+        ..
+    } = &subset_result[1]
+    {
+        assert_eq!(subset_ids, &vec![item_ids[1].clone()]);
+    } else {
+        panic!("wrong command");
+    }
+    if let Command::EditProduction { factories, .. } = &mut subset.commands[0].command {
+        factories.reverse();
+    }
+    assert!(resolve_local_references(&subset, 1, 0).is_err());
 }
 #[test]
 fn timed_uses_locked_build_ability_not_sim_elimination_or_future_endpoint() {

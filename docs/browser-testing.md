@@ -14,7 +14,7 @@ npm run ui:review --prefix client
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.
 
-Every run allocates a local port, launches the current browser build, runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
+Every run allocates a local port, builds the browser assets and starts the preview server (which generates its guide from effective content), runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
 
 ```sh
 ATEMPORAL_UI_PORT=8090 npm run ui:review --prefix client

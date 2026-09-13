@@ -8,16 +8,9 @@ fn decode<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> T {
 fn tile(x: u16, y: u16) -> Tile {
     Tile { x, y }
 }
-fn entity(
-    registry: &mut IdentityRegistry,
-    player: u8,
-    slot: u32,
-    key: &str,
-    position: Tile,
-    hp: f64,
-) -> EntityState {
+fn entity(player: u8, slot: u32, key: &str, position: Tile, hp: f64) -> EntityState {
     EntityState {
-        id: genesis(registry, player, slot).unwrap(),
+        id: genesis(player, slot).unwrap(),
         owner: player,
         type_key: key.into(),
         tile: position,
@@ -41,6 +34,9 @@ fn entity(
         failed_move_attempts: 0,
         blocked_step: None,
         born_at_tick: None,
+        order_locks: vec![],
+        goal_settled: false,
+        local_detour: vec![],
     }
 }
 fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
@@ -60,14 +56,13 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
     config.checkpoint_interval = 2;
     config.simulation_threads = 1;
     config.starting_matter = 0.;
-    let mut registry = IdentityRegistry::new();
     let entities = vec![
-        entity(&mut registry, 0, 0, "miner", tile(1, 1), 60.),
-        entity(&mut registry, 0, 1, "constructor", tile(1, 2), 80.),
-        entity(&mut registry, 0, 2, "turret", tile(0, 0), 200.),
-        entity(&mut registry, 1, 0, "miner", tile(6, 6), 60.),
-        entity(&mut registry, 1, 1, "constructor", tile(6, 5), 80.),
-        entity(&mut registry, 1, 2, "turret", tile(7, 7), 200.),
+        entity(0, 0, "miner", tile(1, 1), 60.),
+        entity(0, 1, "constructor", tile(1, 2), 80.),
+        entity(0, 2, "turret", tile(0, 0), 200.),
+        entity(1, 0, "miner", tile(6, 6), 60.),
+        entity(1, 1, "constructor", tile(6, 5), 80.),
+        entity(1, 2, "turret", tile(7, 7), 200.),
     ];
     let players=(0..2).map(|p|decode(json!({"player_id":p,"bank":0.,"counters":{"mined":0.,"total_spend":0.,"unit_spend":0.,"structure_spend":0.,"lost_invested_matter":0.,"destroyed_replacement_value":0.,"damage_dealt":0.},"currently_eliminated":false,"status_since_tick":0,"elimination_reasons":[]}))).collect();
     let control_groups = (0..2)
@@ -79,6 +74,7 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
                 },
                 members: vec![],
                 latest_order: None,
+                order_locks: vec![],
             })
         })
         .collect();
@@ -98,8 +94,7 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
         blueprints: vec![],
         control_groups,
         survival_transitions: vec![],
-        deterministic_identity_state: registry,
-        rng_state: "fixture:no_rng:v1".into(),
+        rng_state: "fixture:no_rng:v2".into(),
     };
     let request = SimRequest {
         schema_version: Version::default(),
@@ -107,7 +102,7 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
         revision: 1,
         fingerprint: Fingerprint {
             schema_version: Version::default(),
-            sim_build: "tiny-world-contract-v1".into(),
+            sim_build: "tiny-world-contract-v2".into(),
             target: "x86_64-unknown-linux-gnu".into(),
             config_hash: String::new(),
             content_hash: String::new(),
@@ -117,7 +112,6 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
         checkpoint,
         events: vec![],
         precedence: vec![],
-        suppressions: vec![],
         end_tick_exclusive: max_tick,
         minimum_end_tick: 0,
     };
@@ -150,7 +144,7 @@ fn result(end: u32, last: u32, alive: &[u8], reason: StopReason) -> Outcome {
         survival_transitions: vec![],
     }
 }
-fn id(f: &GoldenWorldFixture, p: u8, key: &str) -> String {
+fn id(f: &GoldenWorldFixture, p: u8, key: &str) -> EntityId {
     f.request
         .checkpoint
         .entities
@@ -160,12 +154,12 @@ fn id(f: &GoldenWorldFixture, p: u8, key: &str) -> String {
         .id
         .clone()
 }
-fn get<'a>(f: &'a mut GoldenWorldFixture, id: &str) -> &'a mut EntityState {
+fn get<'a>(f: &'a mut GoldenWorldFixture, id: &EntityId) -> &'a mut EntityState {
     f.request
         .checkpoint
         .entities
         .iter_mut()
-        .find(|e| e.id == id)
+        .find(|e| &e.id == id)
         .unwrap()
 }
 fn add_turn(
@@ -173,7 +167,7 @@ fn add_turn(
     round: u32,
     tick: u32,
     commands: Vec<Command>,
-) -> Vec<String> {
+) -> Vec<CommandId> {
     let ids: Vec<_> = (0..commands.len())
         .map(|i| command_id(round, 0, i as u32))
         .collect();
@@ -184,7 +178,6 @@ fn add_turn(
             id: id.clone(),
             command,
             future_orders: FutureOrderPolicy::Keep,
-            suppressions: vec![],
         })
         .collect();
     f.request.events.push(AcceptedTurn {
@@ -206,9 +199,9 @@ fn add_turn(
         .push(round_precedence(round, 2).unwrap());
     ids
 }
-fn entity_expect(id: &str, action: Option<Order>, position: Option<Tile>) -> ExpectedEntity {
+fn entity_expect(id: &EntityId, action: Option<Order>, position: Option<Tile>) -> ExpectedEntity {
     ExpectedEntity {
-        entity_id: id.into(),
+        entity_id: id.clone(),
         present: true,
         tile: position,
         hp: None,
@@ -455,15 +448,8 @@ pub fn generate() -> Result<()> {
         .unwrap();
     factory_type.matter_cost = 8.;
     factory_type.max_hp = 16.;
-    let bp = blueprint(
-        &mut recovery.request.checkpoint.deterministic_identity_state,
-        &command_id(0, 0, 0),
-        0,
-    )?;
-    let factory_id = structure(
-        &mut recovery.request.checkpoint.deterministic_identity_state,
-        &bp,
-    )?;
+    let bp = blueprint(&command_id(1, 0, 88), 0)?;
+    let factory_id = structure(&bp);
     let template_id = id(&recovery, 0, "constructor");
     let mut factory = get(&mut recovery, &template_id).clone();
     // Template is an existing owned entity; all authoritative fields below are explicit.
@@ -492,7 +478,7 @@ pub fn generate() -> Result<()> {
         type_key: "factory".into(),
         tile: tile(2, 2),
         priority: Priority::Medium,
-        source_command_id: command_id(0, 0, 0),
+        source_command_id: command_id(1, 0, 88),
         precedence: EventKey {
             tick: 0,
             round: 0,
@@ -536,11 +522,7 @@ pub fn generate() -> Result<()> {
         "A historical assignment to an absent causal entity skips it; it never redirects an existing miner or constructor.",
         12,
     );
-    let absent = genesis(
-        &mut dormant.request.checkpoint.deterministic_identity_state,
-        0,
-        99,
-    )?;
+    let absent = genesis(0, 99)?;
     let commands = add_turn(
         &mut dormant,
         1,
@@ -597,27 +579,9 @@ pub fn generate() -> Result<()> {
         .find(|g| g.id == group)
         .unwrap()
         .members = vec![constructor.clone()];
-    let factory_id = genesis(
-        &mut inheritance.request.checkpoint.deterministic_identity_state,
-        0,
-        3,
-    )?;
-    let item = queue_item(
-        &mut inheritance.request.checkpoint.deterministic_identity_state,
-        &factory_id,
-        &command_id(0, 0, 0),
-        0,
-    )?;
-    let newborn = production(
-        &mut inheritance
-            .request
-            .checkpoint
-            .deterministic_identity_state
-            .clone(),
-        &factory_id,
-        &item,
-        0,
-    )?;
+    let factory_id = genesis(0, 3)?;
+    let item = queue_item(&command_id(1, 0, 99), 0, 0)?;
+    let newborn = production(&item, 0);
     let mut factory = get(&mut inheritance, &constructor).clone();
     factory.id = factory_id.clone();
     factory.type_key = "factory".into();
@@ -636,7 +600,10 @@ pub fn generate() -> Result<()> {
         loop_enabled: false,
         stored_order: Order::Idle {},
         output_tile: tile(3, 4),
-        occurrence_counters: std::collections::BTreeMap::from([(item, 0)]),
+        occurrence_counters: vec![OccurrenceCounter {
+            item_id: item,
+            next_occurrence: 0,
+        }],
         spawn_group: Some(group.clone()),
         output_direction: CardinalDirection::E,
     });
@@ -720,6 +687,7 @@ pub fn generate() -> Result<()> {
         vec![],
     );
     expected.groups.push(ControlGroupState {
+        order_locks: vec![],
         id: group.clone(),
         members,
         latest_order: Some(SavedOrder {
@@ -732,16 +700,16 @@ pub fn generate() -> Result<()> {
     inheritance.expected.outcome = result(3, 2, &[0, 1], StopReason::AbsoluteHorizon);
     worlds.push(inheritance);
 
-    let mut suppression = base(
-        "partial-group-suppression",
-        "A t=0 individual rewrite masks only the constructor delivery of a historical t=5 group event. The miner receives the retained order and the group still saves it for future births.",
+    let mut locked_group = base(
+        "partial-group-lock",
+        "A successful t=0 individual assignment locks only the constructor delivery of a historical t=5 group event. The miner receives the retained order and the group still saves it for future births.",
         6,
     );
-    let miner = id(&suppression, 0, "miner");
-    let constructor = id(&suppression, 0, "constructor");
+    let miner = id(&locked_group, 0, "miner");
+    let constructor = id(&locked_group, 0, "constructor");
     let mut members = vec![miner.clone(), constructor.clone()];
     members.sort();
-    suppression
+    locked_group
         .request
         .checkpoint
         .control_groups
@@ -753,7 +721,7 @@ pub fn generate() -> Result<()> {
         destination: tile(1, 1),
     };
     let historical = add_turn(
-        &mut suppression,
+        &mut locked_group,
         1,
         5,
         vec![Command::AssignGroupOrder {
@@ -762,7 +730,7 @@ pub fn generate() -> Result<()> {
         }],
     );
     let replacement = add_turn(
-        &mut suppression,
+        &mut locked_group,
         2,
         0,
         vec![Command::AssignOrder {
@@ -770,14 +738,7 @@ pub fn generate() -> Result<()> {
             order: Order::Idle {},
         }],
     );
-    let mask = Suppression {
-        source_command_id: replacement[0].clone(),
-        historical_command_id: historical[0].clone(),
-        target: SuppressionTarget::EntityComponent {
-            entity_id: constructor.clone(),
-        },
-    };
-    let committed = &mut suppression
+    let committed = &mut locked_group
         .request
         .events
         .iter_mut()
@@ -785,10 +746,8 @@ pub fn generate() -> Result<()> {
         .unwrap()
         .commands[0];
     committed.future_orders = FutureOrderPolicy::DropAll;
-    committed.suppressions = vec![mask.clone()];
-    suppression.request.suppressions = vec![mask];
-    suppression.request.revision = 2;
-    suppression.expected.command_outcomes = vec![
+    locked_group.request.revision = 2;
+    locked_group.expected.command_outcomes = vec![
         CommandOutcome {
             command_id: replacement[0].clone(),
             applied_entities: vec![constructor.clone()],
@@ -797,7 +756,10 @@ pub fn generate() -> Result<()> {
         CommandOutcome {
             command_id: historical[0].clone(),
             applied_entities: vec![miner.clone()],
-            skipped: vec![],
+            skipped: vec![SkippedTarget {
+                entity_id: Some(constructor.clone()),
+                reason: SkipReason::LockedByLaterRound,
+            }],
         },
     ];
     let mut expected = state(
@@ -809,6 +771,7 @@ pub fn generate() -> Result<()> {
         vec![],
     );
     expected.groups.push(ControlGroupState {
+        order_locks: vec![],
         id: group,
         members,
         latest_order: Some(SavedOrder {
@@ -817,9 +780,9 @@ pub fn generate() -> Result<()> {
             order,
         }),
     });
-    suppression.expected.states.push(expected);
-    suppression.expected.outcome = result(6, 0, &[0, 1], StopReason::AbsoluteHorizon);
-    worlds.push(suppression);
+    locked_group.expected.states.push(expected);
+    locked_group.expected.outcome = result(6, 0, &[0, 1], StopReason::AbsoluteHorizon);
+    worlds.push(locked_group);
 
     let mut manifest: Vec<serde_json::Value> = serde_json::from_str(
         &fs::read_to_string("fixtures/manifest.json").map_err(|e| e.to_string())?,

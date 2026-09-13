@@ -1,0 +1,10 @@
+{
+  "schema_version": 2,
+  "content_hash": "5763da246f428dc172609483b54844619d4418068ff8a9af827c5479d6582938",
+  "rules_build": "41e2706229672df54f476a1dba969b5cc2ce40f64ac7f8346dd797d7d73ff75a",
+  "locale": "en",
+  "generated_files": {
+    "content.json": "e534560eeb3d0c48009d00108a0b601b4895548bb441cee6fbe5272cc85d9420",
+    "index.html": "f9a001b2703e5faefee2f40e59d324ef623b6a4a2e1d9af21f7f8dcb68118497"
+  }
+}

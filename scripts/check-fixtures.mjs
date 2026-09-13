@@ -2,11 +2,10 @@ import Ajv2020 from '../client/node_modules/ajv/dist/2020.js';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 const root=new URL('../',import.meta.url);
 const json=async path=>JSON.parse(await readFile(new URL(path,root),'utf8'));
-const schema=await json('schemas/contracts-v1.json');
+const schema=await json('schemas/contracts-v2.json');
 const ajv=new Ajv2020({strict:false,validateFormats:false,allErrors:true});
 ajv.addSchema(schema,'contracts');
 const validate=type=>ajv.compile({$ref:`contracts#/$defs/${type}`});
@@ -21,14 +20,9 @@ for(const [index,fixture] of manifest.entries()) {
   const roundtrip=JSON.parse(JSON.stringify(value));
   assert.deepEqual(roundtrip,value);
   await writeFile(new URL(`${index}.json`,roundtripDirectory),JSON.stringify(roundtrip));
-  if(fixture.type==='GoldenWorldFixture') {
-    for(const [id,preimage] of Object.entries(value.request.checkpoint.deterministic_identity_state)) {
-      const prefix=id.split(':')[0];
-      assert.equal(id,`${prefix}:${createHash('sha256').update(preimage).digest('hex')}`);
-    }
-  }
+
 }
-for(const [type,value] of [['Version',2],['Version',0],['GroupSlot',10],['SafeInt',9007199254740992],['Order',{kind:'idle',extra:true}],['Tile',{x:65536,y:0}],['ClientEnvelope',{schema_version:1,message:{kind:'get_exact_state',revision:4294967296,tick:0}}]]) {
+for(const [type,value] of [['Version',1],['Version',0],['GroupSlot',10],['SafeInt',9007199254740992],['Order',{kind:'idle',extra:true}],['Tile',{x:65536,y:0}],['ClientEnvelope',{schema_version:2,message:{kind:'get_exact_state',revision:4294967296,tick:0}}]]) {
   assert(!validate(type)(value),`${type} wrongly accepted ${JSON.stringify(value)}`);
 }
 console.log(`Validated ${manifest.length} shared fixtures and 7 malformed boundary cases in JavaScript.`);

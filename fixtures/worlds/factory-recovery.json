@@ -1,20 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "factory-recovery",
   "description": "A previously eliminated owner keeps constructing. Four remaining matter completes a factory at tick 0, restoring the owner in S[1]. Both players alive at the endpoint is a non-scoring stalemate.",
   "request": {
-    "schema_version": 1,
+    "schema_version": 2,
     "job_id": "factory-recovery",
     "revision": 1,
     "fingerprint": {
-      "schema_version": 1,
-      "sim_build": "tiny-world-contract-v1",
+      "schema_version": 2,
+      "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
-      "config_hash": "5808107737c7394633fa2d467e8e60fc93eaff932f8aefb223b7fd8c9348c834",
-      "content_hash": "34eb1fb4b8f9b3057a3c1c383f2c29f996b0fdee2a371463562f939dfa29987d"
+      "config_hash": "03b287442c23aa35dac30a775280826b193af8385c0b2c03baeb4eea83363ddd",
+      "content_hash": "790009b81e758ef5ffdceed077e2f6c3827ec2b103b82a59235dc2e28525f995"
     },
     "config": {
-      "schema_version": 1,
+      "schema_version": 2,
       "seed": 42,
       "map_size": 8,
       "player_count": 2,
@@ -42,6 +42,7 @@
       "stall_ticks": 3,
       "ticks_per_second": 10,
       "starting_matter": 0.0,
+      "ore_matter_per_start": 24000.0,
       "simulation_threads": 1,
       "checkpoint_interval": 2,
       "snapshot_interval": 1,
@@ -49,7 +50,7 @@
       "replay_directory": "replays"
     },
     "content": {
-      "schema_version": 1,
+      "schema_version": 2,
       "types": [
         {
           "key": "artillery",
@@ -260,7 +261,7 @@
       ]
     },
     "checkpoint": {
-      "schema_version": 1,
+      "schema_version": 2,
       "tick": 0,
       "last_progress_tick": 0,
       "inactivity_deadline": 3,
@@ -438,48 +439,59 @@
       ],
       "entities": [
         {
-          "id": "entity:0d77e10fffc8d6479ededb0d9f03d9b6665c716db6ed7b8ae74a6f1e46821f19",
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 0,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
           "owner": 0,
-          "type_key": "factory",
+          "type_key": "miner",
           "tile": {
-            "x": 2,
-            "y": 2
+            "x": 1,
+            "y": 1
           },
           "last_move_direction": "se",
-          "hp": 8.0,
-          "paid_matter": 4.0,
-          "lifecycle": "site",
-          "blueprint_id": "blueprint:809c99aab7d46d04f3a138748475fa2c91544abed14562520180741665c314bd",
+          "hp": 60.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
           "action": {
             "kind": "idle"
           },
           "priority": "medium",
           "next_action_tick": 0,
           "next_move_tick": 0,
-          "production": {
-            "pending_items": [],
-            "active_item": null,
-            "loop_enabled": false,
-            "stored_order": {
-              "kind": "idle"
-            },
-            "output_tile": {
-              "x": 3,
-              "y": 2
-            },
-            "occurrence_counters": {},
-            "spawn_group": null,
-            "output_direction": "e"
-          },
+          "production": null,
           "support_target": null,
           "engaged_target": null,
           "resolved_destination": null,
           "failed_move_attempts": 0,
           "blocked_step": null,
-          "born_at_tick": null
+          "born_at_tick": null,
+          "order_locks": [],
+          "goal_settled": false,
+          "local_detour": []
         },
         {
-          "id": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 0,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 1,
+            "occurrence": 0
+          },
           "owner": 0,
           "type_key": "constructor",
           "tile": {
@@ -513,91 +525,24 @@
           "resolved_destination": null,
           "failed_move_attempts": 0,
           "blocked_step": null,
-          "born_at_tick": null
+          "born_at_tick": null,
+          "order_locks": [],
+          "goal_settled": false,
+          "local_detour": []
         },
         {
-          "id": "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3",
-          "owner": 1,
-          "type_key": "constructor",
-          "tile": {
-            "x": 6,
-            "y": 5
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 1,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
           },
-          "last_move_direction": "nw",
-          "hp": 80.0,
-          "paid_matter": 0.0,
-          "lifecycle": "complete",
-          "blueprint_id": null,
-          "action": {
-            "kind": "idle"
-          },
-          "priority": "medium",
-          "next_action_tick": 0,
-          "next_move_tick": 0,
-          "production": null,
-          "support_target": null,
-          "engaged_target": null,
-          "resolved_destination": null,
-          "failed_move_attempts": 0,
-          "blocked_step": null,
-          "born_at_tick": null
-        },
-        {
-          "id": "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc",
-          "owner": 1,
-          "type_key": "turret",
-          "tile": {
-            "x": 7,
-            "y": 7
-          },
-          "last_move_direction": "nw",
-          "hp": 200.0,
-          "paid_matter": 0.0,
-          "lifecycle": "complete",
-          "blueprint_id": null,
-          "action": {
-            "kind": "idle"
-          },
-          "priority": "medium",
-          "next_action_tick": 0,
-          "next_move_tick": 0,
-          "production": null,
-          "support_target": null,
-          "engaged_target": null,
-          "resolved_destination": null,
-          "failed_move_attempts": 0,
-          "blocked_step": null,
-          "born_at_tick": null
-        },
-        {
-          "id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
-          "owner": 0,
-          "type_key": "miner",
-          "tile": {
-            "x": 1,
-            "y": 1
-          },
-          "last_move_direction": "se",
-          "hp": 60.0,
-          "paid_matter": 0.0,
-          "lifecycle": "complete",
-          "blueprint_id": null,
-          "action": {
-            "kind": "idle"
-          },
-          "priority": "medium",
-          "next_action_tick": 0,
-          "next_move_tick": 0,
-          "production": null,
-          "support_target": null,
-          "engaged_target": null,
-          "resolved_destination": null,
-          "failed_move_attempts": 0,
-          "blocked_step": null,
-          "born_at_tick": null
-        },
-        {
-          "id": "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236",
           "owner": 1,
           "type_key": "miner",
           "tile": {
@@ -621,12 +566,174 @@
           "resolved_destination": null,
           "failed_move_attempts": 0,
           "blocked_step": null,
-          "born_at_tick": null
+          "born_at_tick": null,
+          "order_locks": [],
+          "goal_settled": false,
+          "local_detour": []
+        },
+        {
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 1,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 1,
+            "occurrence": 0
+          },
+          "owner": 1,
+          "type_key": "constructor",
+          "tile": {
+            "x": 6,
+            "y": 5
+          },
+          "last_move_direction": "nw",
+          "hp": 80.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null,
+          "order_locks": [],
+          "goal_settled": false,
+          "local_detour": []
+        },
+        {
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 1,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 2,
+            "occurrence": 0
+          },
+          "owner": 1,
+          "type_key": "turret",
+          "tile": {
+            "x": 7,
+            "y": 7
+          },
+          "last_move_direction": "nw",
+          "hp": 200.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null,
+          "order_locks": [],
+          "goal_settled": false,
+          "local_detour": []
+        },
+        {
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 1,
+                "player": 0,
+                "index": 88
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
+          "owner": 0,
+          "type_key": "factory",
+          "tile": {
+            "x": 2,
+            "y": 2
+          },
+          "last_move_direction": "se",
+          "hp": 8.0,
+          "paid_matter": 4.0,
+          "lifecycle": "site",
+          "blueprint_id": {
+            "birth_command": {
+              "command": {
+                "round": 1,
+                "player": 0,
+                "index": 88
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": {
+            "pending_items": [],
+            "active_item": null,
+            "loop_enabled": false,
+            "stored_order": {
+              "kind": "idle"
+            },
+            "output_tile": {
+              "x": 3,
+              "y": 2
+            },
+            "occurrence_counters": [],
+            "spawn_group": null,
+            "output_direction": "e"
+          },
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null,
+          "order_locks": [],
+          "goal_settled": false,
+          "local_detour": []
         }
       ],
       "blueprints": [
         {
-          "id": "blueprint:809c99aab7d46d04f3a138748475fa2c91544abed14562520180741665c314bd",
+          "id": {
+            "birth_command": {
+              "command": {
+                "round": 1,
+                "player": 0,
+                "index": 88
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
           "owner": 0,
           "type_key": "factory",
           "tile": {
@@ -634,14 +741,29 @@
             "y": 2
           },
           "priority": "medium",
-          "source_command_id": "r0:p0:c0",
+          "source_command_id": {
+            "round": 1,
+            "player": 0,
+            "index": 88
+          },
           "precedence": {
             "tick": 0,
             "round": 0,
             "player_rank": 0,
             "command_index": 0
           },
-          "site_id": "entity:0d77e10fffc8d6479ededb0d9f03d9b6665c716db6ed7b8ae74a6f1e46821f19",
+          "site_id": {
+            "birth_command": {
+              "command": {
+                "round": 1,
+                "player": 0,
+                "index": 88
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
           "output_direction": "e"
         }
       ],
@@ -652,7 +774,8 @@
             "slot": 0
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -660,7 +783,8 @@
             "slot": 1
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -668,7 +792,8 @@
             "slot": 2
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -676,7 +801,8 @@
             "slot": 3
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -684,7 +810,8 @@
             "slot": 4
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -692,7 +819,8 @@
             "slot": 5
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -700,7 +828,8 @@
             "slot": 6
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -708,7 +837,8 @@
             "slot": 7
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -716,7 +846,8 @@
             "slot": 8
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -724,7 +855,8 @@
             "slot": 9
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -732,7 +864,8 @@
             "slot": 0
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -740,7 +873,8 @@
             "slot": 1
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -748,7 +882,8 @@
             "slot": 2
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -756,7 +891,8 @@
             "slot": 3
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -764,7 +900,8 @@
             "slot": 4
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -772,7 +909,8 @@
             "slot": 5
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -780,7 +918,8 @@
             "slot": 6
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -788,7 +927,8 @@
             "slot": 7
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -796,7 +936,8 @@
             "slot": 8
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         },
         {
           "id": {
@@ -804,29 +945,19 @@
             "slot": 9
           },
           "members": [],
-          "latest_order": null
+          "latest_order": null,
+          "order_locks": []
         }
       ],
       "survival_transitions": [],
-      "deterministic_identity_state": {
-        "blueprint:809c99aab7d46d04f3a138748475fa2c91544abed14562520180741665c314bd": "[\"atemporal\",1,\"blueprint\",[\"r0:p0:c0\",0]]",
-        "entity:0d77e10fffc8d6479ededb0d9f03d9b6665c716db6ed7b8ae74a6f1e46821f19": "[\"atemporal\",1,\"entity\",[\"structure\",\"blueprint:809c99aab7d46d04f3a138748475fa2c91544abed14562520180741665c314bd\"]]",
-        "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57": "[\"atemporal\",1,\"entity\",[\"genesis\",0,1]]",
-        "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3": "[\"atemporal\",1,\"entity\",[\"genesis\",1,1]]",
-        "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc": "[\"atemporal\",1,\"entity\",[\"genesis\",1,2]]",
-        "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce": "[\"atemporal\",1,\"entity\",[\"genesis\",0,0]]",
-        "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236": "[\"atemporal\",1,\"entity\",[\"genesis\",1,0]]",
-        "entity:ce95d8c988db5e06e057be3e83399e7b62bec662509b7c38d779b255e08ad29a": "[\"atemporal\",1,\"entity\",[\"genesis\",0,2]]"
-      },
-      "rng_state": "fixture:no_rng:v1"
+      "rng_state": "fixture:no_rng:v2"
     },
     "events": [],
     "precedence": [],
-    "suppressions": [],
     "end_tick_exclusive": 12,
     "minimum_end_tick": 0
   },
-  "initial_hash": "d27e0c2b9bbb43777278cacbf44f0ddb8806ae40d2a67454c9bf206df17dee56",
+  "initial_hash": "336280b5900c7a09a5dc19b2464562f387f778ecda74f9e076c4ee57890ef935",
   "expected": {
     "final_hash": null,
     "outcome": {
@@ -863,7 +994,18 @@
         "state_tick": 1,
         "entities": [
           {
-            "entity_id": "entity:0d77e10fffc8d6479ededb0d9f03d9b6665c716db6ed7b8ae74a6f1e46821f19",
+            "entity_id": {
+              "birth_command": {
+                "command": {
+                  "round": 1,
+                  "player": 0,
+                  "index": 88
+                },
+                "target_index": 0
+              },
+              "item_index": 0,
+              "occurrence": 0
+            },
             "present": true,
             "tile": {
               "x": 2,

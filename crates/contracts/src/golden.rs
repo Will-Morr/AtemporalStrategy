@@ -23,7 +23,7 @@ pub fn verify(
     }
     for expected in &fixture.expected.command_outcomes {
         if by_command.get(&expected.command_id).copied() != Some(expected) {
-            return Err(fail(&format!("command {} differs", expected.command_id)));
+            return Err(fail(&format!("command {:?} differs", expected.command_id)));
         }
     }
     for expected in &fixture.expected.states {
@@ -37,7 +37,7 @@ pub fn verify(
                 .find(|actual| actual.id == e.entity_id);
             if actual.is_some() != e.present {
                 return Err(fail(&format!(
-                    "entity {} presence differs at S[{}]",
+                    "entity {:?} presence differs at S[{}]",
                     e.entity_id, state.tick
                 )));
             }
@@ -48,7 +48,7 @@ pub fn verify(
                     || e.action.as_ref().is_some_and(|v| actual.action != *v))
             {
                 return Err(fail(&format!(
-                    "entity {} state differs at S[{}]",
+                    "entity {:?} state differs at S[{}]",
                     e.entity_id, state.tick
                 )));
             }

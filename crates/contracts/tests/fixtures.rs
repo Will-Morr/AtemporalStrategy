@@ -66,7 +66,7 @@ fn canonical_world_hash_ignores_set_order_but_tracks_future_state() {
     assert_ne!(identity::world_hash(&changed).unwrap(), hash);
     let mut changed = state.clone();
     changed.control_groups[0].latest_order = Some(SavedOrder {
-        source_command_id: "r1:p0:c0".into(),
+        source_command_id: identity::command_id(1, 0, 0),
         tick: 0,
         order: Order::Idle {},
     });

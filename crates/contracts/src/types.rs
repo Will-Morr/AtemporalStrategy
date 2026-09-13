@@ -5,10 +5,32 @@ use std::collections::BTreeMap;
 pub type Tick = u32;
 pub type PlayerId = u8;
 pub type Revision = u32;
-pub type EntityId = String;
-pub type CommandId = String;
-pub type BlueprintId = String;
-pub type QueueItemId = String;
+macro_rules! identity_record {
+    ($name:ident { $($field:ident : $ty:ty),* }) => {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+        #[serde(deny_unknown_fields)]
+        pub struct $name { $(pub $field: $ty),* }
+    };
+}
+identity_record!(CommandId {
+    round: u32,
+    player: PlayerId,
+    index: u32
+});
+identity_record!(BirthCommandId {
+    command: CommandId,
+    target_index: u16
+});
+identity_record!(EntityId {
+    birth_command: BirthCommandId,
+    item_index: u16,
+    occurrence: u32
+});
+identity_record!(QueueItemId {
+    birth_command: BirthCommandId,
+    item_index: u16
+});
+pub type BlueprintId = EntityId;
 pub type TypeKey = String;
 pub type TeamId = String;
 
@@ -42,13 +64,13 @@ impl SafeInt {
 pub struct Version(u32);
 impl Default for Version {
     fn default() -> Self {
-        Self(1)
+        Self(2)
     }
 }
 impl TryFrom<u32> for Version {
     type Error = String;
     fn try_from(n: u32) -> Result<Self, String> {
-        if n == 1 {
+        if n == 2 {
             Ok(Self(n))
         } else {
             Err(format!("unsupported schema version {n}"))
@@ -193,6 +215,7 @@ record!(MatchConfig {
     stall_ticks: Tick,
     ticks_per_second: u32,
     starting_matter: f64,
+    ore_matter_per_start: f64,
     simulation_threads: u16,
     checkpoint_interval: Tick,
     snapshot_interval: Tick,
@@ -267,7 +290,7 @@ pub enum MemberEdit {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ProductionEdit<Reference = String> {
+pub enum ProductionEdit<Reference = QueueItemId> {
     Append { items: Vec<TypeKey> },
     ReplacePending { items: Vec<TypeKey> },
     RemovePending { item_ids: Vec<Reference> },
@@ -275,7 +298,7 @@ pub enum ProductionEdit<Reference = String> {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Command<Reference = String> {
+pub enum Command<BlueprintReference = BlueprintId, QueueReference = QueueItemId> {
     AssignOrder {
         entities: Vec<EntityId>,
         order: Order,
@@ -303,11 +326,11 @@ pub enum Command<Reference = String> {
         output_directions: Option<Vec<CardinalDirection>>,
     },
     CancelBlueprints {
-        blueprint_ids: Vec<Reference>,
+        blueprint_ids: Vec<BlueprintReference>,
     },
     EditProduction {
         factories: Vec<EntityId>,
-        edit: ProductionEdit<Reference>,
+        edit: ProductionEdit<QueueReference>,
     },
     SetQueueLoop {
         factories: Vec<EntityId>,
@@ -320,22 +343,20 @@ pub enum Command<Reference = String> {
 }
 record!(DraftCommand {
     local_id: String,
-    command: Command<DraftItemRef>,
+    command: Command<DraftItemRef<BlueprintId>, DraftItemRef<QueueItemId>>,
     future_orders: FutureOrderPolicy
 });
 record!(TurnDraft { based_on_revision: Revision, tick: Tick, commands: Vec<DraftCommand> });
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum SuppressionTarget {
-    EntityComponent { entity_id: EntityId },
-    EntireGroupOrder { group: ControlGroupId },
-}
-record!(Suppression {
-    source_command_id: CommandId,
-    historical_command_id: CommandId,
-    target: SuppressionTarget
+record!(OrderLock {
+    from_tick: Tick,
+    until_tick: Tick,
+    issued_round: u32
 });
-record!(CommittedCommand { id: CommandId, command: Command, future_orders: FutureOrderPolicy, suppressions: Vec<Suppression> });
+record!(CommittedCommand {
+    id: CommandId,
+    command: Command,
+    future_orders: FutureOrderPolicy
+});
 record!(CommitRequest {
     request_id: String,
     slot_token: String,
@@ -349,7 +370,8 @@ choices!(SkipReason {
     WrongOwner,
     Incompatible,
     Blocked,
-    MissingSupportTarget
+    MissingSupportTarget,
+    LockedByLaterRound
 });
 record!(CommandOutcome { command_id: CommandId, applied_entities: Vec<EntityId>, skipped: Vec<SkippedTarget> });
 record!(SavedOrder {
@@ -357,7 +379,7 @@ record!(SavedOrder {
     tick: Tick,
     order: Order
 });
-record!(ControlGroupState { id: ControlGroupId, members: Vec<EntityId>, latest_order: Option<SavedOrder> });
+record!(ControlGroupState { id: ControlGroupId, members: Vec<EntityId>, latest_order: Option<SavedOrder>, order_locks: Vec<OrderLock> });
 choices!(Lifecycle { Site, Complete });
 choices!(Direction {
     N,
@@ -380,12 +402,16 @@ record!(ActiveItem {
     paid_matter: f64,
     awaiting_output: bool
 });
+record!(OccurrenceCounter {
+    item_id: QueueItemId,
+    next_occurrence: u32
+});
 record!(Production { pending_items: Vec<QueueItem>, active_item: Option<ActiveItem>, loop_enabled: bool, stored_order: Order,
-    output_tile: Tile, occurrence_counters: BTreeMap<QueueItemId, u32>, spawn_group: Option<ControlGroupId>, output_direction: CardinalDirection });
+    output_tile: Tile, occurrence_counters: Vec<OccurrenceCounter>, spawn_group: Option<ControlGroupId>, output_direction: CardinalDirection });
 record!(EntityState { id: EntityId, owner: PlayerId, type_key: TypeKey, tile: Tile, last_move_direction: Direction,
     hp: f64, paid_matter: f64, lifecycle: Lifecycle, blueprint_id: Option<BlueprintId>, action: Order, priority: Priority,
     next_action_tick: Tick, next_move_tick: Tick, production: Option<Production>, support_target: Option<EntityId>,
-    engaged_target: Option<EntityId>, resolved_destination: Option<Tile>, failed_move_attempts: u8, blocked_step: Option<Tile>, born_at_tick: Option<Tick> });
+    engaged_target: Option<EntityId>, resolved_destination: Option<Tile>, failed_move_attempts: u8, blocked_step: Option<Tile>, born_at_tick: Option<Tick>, order_locks: Vec<OrderLock>, goal_settled: bool, local_detour: Vec<Tile> });
 record!(Blueprint { id: BlueprintId, owner: PlayerId, type_key: TypeKey, tile: Tile, priority: Priority,
     source_command_id: CommandId, precedence: EventKey, site_id: Option<EntityId>, output_direction: Option<CardinalDirection> });
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
@@ -409,11 +435,9 @@ record!(PlayerState { player_id: PlayerId, bank: f64, counters: SpendCounters, c
     status_since_tick: Tick, elimination_reasons: Vec<Reason> });
 choices!(TerrainCell { Floor, Wall });
 record!(Terrain { width: u16, height: u16, cells: Vec<TerrainCell> });
-/// Digest => canonical preimage, persisted for collision detection across checkpoints.
-pub type IdentityRegistry = BTreeMap<EntityId, String>;
 record!(WorldState { schema_version: Version, tick: Tick, last_progress_tick: Tick, inactivity_deadline: Tick,
     terrain: Terrain, ore: Vec<f64>, players: Vec<PlayerState>, entities: Vec<EntityState>, blueprints: Vec<Blueprint>,
-    control_groups: Vec<ControlGroupState>, survival_transitions: Vec<SurvivalTransition>, deterministic_identity_state: IdentityRegistry, rng_state: String });
+    control_groups: Vec<ControlGroupState>, survival_transitions: Vec<SurvivalTransition>, rng_state: String });
 choices!(OutcomeKind {
     Stalemate,
     Win,
@@ -445,7 +469,7 @@ record!(PlayerRatio {
 });
 record!(SimRequest { schema_version: Version, job_id: String, revision: Revision, fingerprint: Fingerprint, config: MatchConfig,
     content: Content, checkpoint: WorldState, events: Vec<AcceptedTurn>, precedence: Vec<RoundPrecedence>,
-    suppressions: Vec<Suppression>, end_tick_exclusive: Tick, minimum_end_tick: Tick });
+    end_tick_exclusive: Tick, minimum_end_tick: Tick });
 record!(RoundPrecedence { round: u32, players: Vec<PlayerId> });
 record!(PlayerStats {
     player_id: PlayerId,
@@ -558,7 +582,6 @@ choices!(Phase {
 });
 record!(GuideManifest { schema_version: Version, content_hash: String, rules_build: String, locale: String,
     generated_files: BTreeMap<String, String> });
-record!(HistoryComponent { tick: Tick, command_id: CommandId, command: Command, suppressed_by: Vec<Suppression> });
 record!(PreviewInterval {
     after_tick: Tick,
     through_tick: Tick
@@ -614,27 +637,20 @@ pub enum ClientMessage {
         to_tick: Tick,
         bucket_width: Tick,
     },
-    PreviewFutureOrders {
-        draft: TurnDraft,
-        command_index: u32,
+    GetCommands {
+        revision: Revision,
+        from_tick: Tick,
+        to_tick: Tick,
     },
     StopAndArchive {
         request_id: String,
         based_on_revision: Revision,
         slot_token: String,
     },
-    GetEntityOrderHistory {
-        revision: Revision,
-        entity_ids: Vec<EntityId>,
-    },
     GetControlGroups {
         revision: Revision,
         tick: Tick,
         player: PlayerId,
-    },
-    GetGroupOrderHistory {
-        revision: Revision,
-        group: ControlGroupId,
     },
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -715,15 +731,9 @@ pub enum ServerMessage {
         final_outcome: Outcome,
         reason: String,
     },
-    FutureOrdersPreview {
+    Commands {
         revision: Revision,
-        affected_components: Vec<Suppression>,
-        counts_by_kind: BTreeMap<String, u32>,
-        interval: Option<PreviewInterval>,
-    },
-    OrderHistory {
-        revision: Revision,
-        components: Vec<HistoryComponent>,
+        turns: Vec<AcceptedTurn>,
     },
     ControlGroups {
         revision: Revision,
@@ -750,7 +760,7 @@ pub enum ServerMessage {
         hash: String,
     },
 }
-// Every frame carries a version, including worker frames and messages without a Hello.
+// Network envelopes carry versions. WorkerEnvelope is a fixture/archive wrapper, not simulation IPC.
 record!(ClientEnvelope {
     schema_version: Version,
     message: ClientMessage
@@ -786,7 +796,7 @@ macro_rules! bounded_schema {
         }
     };
 }
-bounded_schema!(Version, 1, 1);
+bounded_schema!(Version, 2, 2);
 bounded_schema!(GroupSlot, 0, 9);
 bounded_schema!(SafeInt, 0, 9007199254740991_u64);
 
@@ -810,8 +820,8 @@ record!(GoldenWorldFixture {
 choices!(CardinalDirection { N, E, S, W });
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum DraftItemRef {
-    Persistent { id: String },
+pub enum DraftItemRef<Id> {
+    Persistent { id: Id },
     Draft { local_id: String, item_index: u32 },
 }
 choices!(TimedStatus {

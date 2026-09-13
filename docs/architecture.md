@@ -4,7 +4,7 @@
 
 ## Processes and modules
 
-The coordinator foundation and generated wire format are implemented; see [contracts v1](contracts-v1.md) and [development](development.md). Engine/transport behavior below remains the subsystem implementation plan.
+The coordinator foundation and generated wire format are implemented; see [provisional contracts v2](contracts-v2.md) and [development](development.md). Engine/transport behavior below remains the subsystem implementation plan.
 
 Use one Rust workspace with `content`, `contracts`, `sim`, `server`, and `runner` crates, plus a small TypeScript browser client. Server serves static game and player-guide files, HTTP bootstrap/archive endpoints and a WebSocket for live state. It owns slots, planning phases, accepted commands, scores, timing, and durable match revisions. No database; one match per server process is sufficient.
 

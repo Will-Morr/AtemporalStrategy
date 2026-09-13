@@ -1,13 +1,10 @@
-//! Shared normalized content, setup validation, and content-keyed static guides.
-use atemporal_contracts::{
-    identity::{canonical_hash, sha256},
-    scoring, *,
-};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::{Path, PathBuf},
-};
+//! Shared normalized content, setup validation, and optional startup guide generation.
+use atemporal_contracts::{identity::canonical_hash, scoring, *};
+use std::collections::BTreeSet;
+#[cfg(feature = "guide")]
+mod guide;
+#[cfg(feature = "guide")]
+pub use guide::*;
 
 fn nonnegative(n: f64, field: &str) -> Result<()> {
     if n.is_finite() && n >= 0.0 {
@@ -122,10 +119,12 @@ pub fn load_archived_content(yaml: &str, expected_hash: &str) -> Result<Content>
 pub fn validate_config(c: &MatchConfig) -> Result<()> {
     // Explicit v1 map-generator scope proposal, not a user-imposed player cap.
     if !(2..=4).contains(&c.player_count) || !(8..=512).contains(&c.map_size) {
-        return Err("v1 supports 2–4 players and square maps of 8–512 tiles".into());
+        return Err(
+            "current configuration supports 2–4 players and square maps of 8–512 tiles".into(),
+        );
     }
     if c.symmetric && (c.player_count == 3 || !c.map_size.is_multiple_of(2)) {
-        return Err("symmetric v1 maps require 2 or 4 players and an even map size".into());
+        return Err("symmetric maps require 2 or 4 players and an even map size".into());
     }
     scoring::sides(c.player_count, &c.multiplayer)?;
     match &c.objective {
@@ -150,6 +149,7 @@ pub fn validate_config(c: &MatchConfig) -> Result<()> {
         cooldown(n)?;
     }
     nonnegative(c.starting_matter, "starting_matter")?;
+    nonnegative(c.ore_matter_per_start, "ore_matter_per_start")?;
     if c.replay_directory.trim().is_empty() {
         return Err("replay directory is empty".into());
     }
@@ -195,171 +195,4 @@ pub fn load_setup(yaml: &str) -> Result<Setup> {
         }
     }
     Ok(setup)
-}
-fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
-fn readable_range(value: f64) -> String {
-    if (value * 1000.0).round() / 1000.0 == value {
-        return value.to_string();
-    }
-    format!("≈{value:.3}")
-}
-fn work(rate: &Option<WorkRate>) -> String {
-    rate.as_ref().map_or_else(
-        || "—".into(),
-        |w| format!("{} / {} ticks", w.rate, w.cooldown),
-    )
-}
-/// Prose is trusted repository-authored HTML. All content-derived labels are escaped.
-pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
-    let content = normalize_content(content.clone())?;
-    let mut rows = String::new();
-    for t in &content.types {
-        let movement = t.movement.as_ref().map_or_else(
-            || "Static".into(),
-            |m| {
-                format!(
-                    "{} neighbors / {} ticks",
-                    if m.neighbors == Neighbors::Four { 4 } else { 8 },
-                    m.cooldown
-                )
-            },
-        );
-        let weapon = t.weapon.as_ref().map_or_else(
-            || "—".into(),
-            |w| {
-                format!(
-                    "{} damage / {} range / {} ticks; {}",
-                    w.damage,
-                    readable_range(w.range),
-                    w.cooldown,
-                    if w.indirect { "indirect" } else { "direct" }
-                )
-            },
-        );
-        let production = t.production.as_ref().map_or_else(
-            || "—".into(),
-            |p| format!("{} / tick; {}", p.rate, p.recipes.join(", ")),
-        );
-        let healing = t.healing.as_ref().map_or_else(
-            || "—".into(),
-            |h| {
-                format!(
-                    "{} HP/matter; {} demand / {} ticks; range {}",
-                    h.hp_per_matter, h.demand, h.cooldown, h.range
-                )
-            },
-        );
-        let values = vec![
-            t.key.clone(),
-            format!("{:?}", t.kind),
-            t.matter_cost.to_string(),
-            t.max_hp.to_string(),
-            t.vision.to_string(),
-            movement,
-            weapon,
-            work(&t.mining),
-            work(&t.construction),
-            production,
-            healing,
-            format!("{} / {}", t.counts_for_survival, t.provides_build_ability),
-        ];
-        rows.push_str("<tr>");
-        for value in values {
-            rows.push_str(&format!("<td>{}</td>", escape(&value)));
-        }
-        rows.push_str("</tr>\n");
-    }
-    let hash = content_hash(&content)?;
-    Ok(format!(
-        r#"<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal Strategy — How to play</title>
-<style>body{{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}}a{{color:#79d7ff}}.table-scroll{{overflow:auto}}table{{border-collapse:collapse;font-size:.85rem}}th,td{{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}}th{{background:#333}}code{{overflow-wrap:anywhere}}</style></head>
-<body><a href="/">Back to lobby</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
-<div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Survival flags</th></tr></thead><tbody>{rows}</tbody></table></div>
-<footer><p>Content: <code>{hash}</code></p></footer></body></html>
-"#
-    ))
-}
-fn rules_build(prose: &str) -> String {
-    sha256(format!("atemporal-guide-renderer-v2\n{prose}").as_bytes())
-}
-fn artifacts(content: &Content, prose: &str) -> Result<(GuideManifest, BTreeMap<String, Vec<u8>>)> {
-    let content = normalize_content(content.clone())?;
-    let files: BTreeMap<String, Vec<u8>> = BTreeMap::from([
-        (
-            "index.html".into(),
-            render_guide(&content, prose)?.into_bytes(),
-        ),
-        (
-            "content.json".into(),
-            serde_json::to_vec_pretty(&content).map_err(|e| e.to_string())?,
-        ),
-    ]);
-    let manifest = GuideManifest {
-        schema_version: Version::default(),
-        content_hash: content_hash(&content)?,
-        rules_build: rules_build(prose),
-        locale: "en".into(),
-        generated_files: files
-            .iter()
-            .map(|(name, bytes)| (name.clone(), sha256(bytes)))
-            .collect(),
-    };
-    Ok((manifest, files))
-}
-pub fn write_guide(content: &Content, prose: &str, directory: &Path) -> Result<GuideManifest> {
-    let (manifest, files) = artifacts(content, prose)?;
-    fs::create_dir_all(directory).map_err(|e| e.to_string())?;
-    for (name, bytes) in files {
-        atomic_write(&directory.join(name), &bytes)?;
-    }
-    atomic_write(
-        &directory.join("manifest.json"),
-        &serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
-    )?;
-    Ok(manifest)
-}
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    let temp = path.with_extension(format!("tmp-{}", std::process::id()));
-    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    fs::rename(temp, path).map_err(|e| e.to_string())
-}
-pub fn guide_matches(content: &Content, prose: &str, directory: &Path) -> Result<bool> {
-    let (expected, _) = artifacts(content, prose)?;
-    let actual = fs::read(directory.join("manifest.json"))
-        .ok()
-        .and_then(|b| serde_json::from_slice::<GuideManifest>(&b).ok());
-    if actual.as_ref() != Some(&expected) {
-        return Ok(false);
-    }
-    Ok(expected.generated_files.iter().all(|(name, hash)| {
-        fs::read(directory.join(name)).is_ok_and(|bytes| sha256(&bytes) == *hash)
-    }))
-}
-/// Server calls before publishing guide_url. Works for runtime overrides and pinned archives.
-/// Returns a verified directory to mount, not an HTTP route or a publication side effect.
-pub fn select_guide(
-    content: &Content,
-    prose: &str,
-    bundled: &Path,
-    cache: &Path,
-) -> Result<PathBuf> {
-    if guide_matches(content, prose, bundled)? {
-        return Ok(bundled.to_path_buf());
-    }
-    let (manifest, _) = artifacts(content, prose)?;
-    let directory = cache.join(canonical_hash(&manifest)?);
-    if !guide_matches(content, prose, &directory)? {
-        write_guide(content, prose, &directory)?;
-    }
-    if !guide_matches(content, prose, &directory)? {
-        return Err("generated guide failed content validation".into());
-    }
-    Ok(directory)
 }

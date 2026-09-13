@@ -1,0 +1,9 @@
+{
+  "schema_version": 2,
+  "message": {
+    "kind": "get_commands",
+    "revision": 1,
+    "from_tick": 0,
+    "to_tick": 40
+  }
+}

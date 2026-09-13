@@ -6,6 +6,6 @@ license.workspace = true
 [dependencies]
 atemporal-contracts.workspace = true
 serde_json.workspace = true
-atemporal-content.workspace = true
+atemporal-content = { workspace = true, features = ["guide"] }
 schemars.workspace = true
 serde.workspace = true

@@ -1,19 +1,19 @@
 [
   {
-    "file": "client/public/guide/content.json",
-    "type": "Content"
-  },
-  {
-    "file": "client/public/guide/manifest.json",
-    "type": "GuideManifest"
-  },
-  {
     "file": "config/game.yaml",
     "type": "Setup"
   },
   {
     "file": "config/teams.yaml",
     "type": "Setup"
+  },
+  {
+    "file": "fixtures/guide/content.json",
+    "type": "Content"
+  },
+  {
+    "file": "fixtures/guide/manifest.json",
+    "type": "GuideManifest"
   },
   {
     "file": "fixtures/protocol/command-variants.json",
@@ -24,7 +24,7 @@
     "type": "ServerEnvelope"
   },
   {
-    "file": "fixtures/protocol/group-preview.json",
+    "file": "fixtures/protocol/get-commands.json",
     "type": "ClientEnvelope"
   },
   {
@@ -96,7 +96,7 @@
     "type": "GoldenWorldFixture"
   },
   {
-    "file": "fixtures/worlds/partial-group-suppression.json",
+    "file": "fixtures/worlds/partial-group-lock.json",
     "type": "GoldenWorldFixture"
   },
   {

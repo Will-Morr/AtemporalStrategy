@@ -1,11 +1,15 @@
-//! SHA-256 causal identities and canonical JSON hashing (same pinned build/platform).
+//! Fixed-size causal identities and SHA-256 canonical JSON hashing (same pinned build/platform).
 use crate::*;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 pub fn command_id(round: u32, player: PlayerId, index: u32) -> CommandId {
-    format!("r{round}:p{player}:c{index}")
+    CommandId {
+        round,
+        player,
+        index,
+    }
 }
 pub fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -30,76 +34,41 @@ pub fn canonical_json(value: &impl Serialize) -> Result<Vec<u8>> {
 pub fn canonical_hash(value: &impl Serialize) -> Result<String> {
     Ok(sha256(&canonical_json(value)?))
 }
-fn register(
-    registry: &mut IdentityRegistry,
-    kind: &str,
-    parts: serde_json::Value,
-) -> Result<String> {
-    let preimage = String::from_utf8(canonical_json(&serde_json::json!([
-        "atemporal",
-        1,
-        kind,
-        parts
-    ]))?)
-    .map_err(|e| e.to_string())?;
-    let id = format!("{kind}:{}", sha256(preimage.as_bytes()));
-    if let Some(old) = registry.get(&id) {
-        if old != &preimage {
-            return Err("causal identity collision".into());
-        }
-    } else {
-        registry.insert(id.clone(), preimage);
+pub fn genesis(player: PlayerId, slot: u32) -> Result<EntityId> {
+    blueprint(&command_id(0, player, 0), slot)
+}
+pub fn blueprint(command: &CommandId, tile_index: u32) -> Result<BlueprintId> {
+    Ok(EntityId {
+        birth_command: BirthCommandId {
+            command: command.clone(),
+            target_index: 0,
+        },
+        item_index: u16::try_from(tile_index).map_err(|_| "blueprint index exceeds u16")?,
+        occurrence: 0,
+    })
+}
+pub fn structure(blueprint: &BlueprintId) -> EntityId {
+    blueprint.clone()
+}
+/// target_index is in the complete sorted/frozen factory list, including absent factories.
+pub fn queue_item(command: &CommandId, target_index: u32, item_index: u32) -> Result<QueueItemId> {
+    if command.round == 0 {
+        return Err("round zero is reserved for genesis".into());
     }
-    Ok(id)
+    Ok(QueueItemId {
+        birth_command: BirthCommandId {
+            command: command.clone(),
+            target_index: u16::try_from(target_index).map_err(|_| "target index exceeds u16")?,
+        },
+        item_index: u16::try_from(item_index).map_err(|_| "item index exceeds u16")?,
+    })
 }
-pub fn genesis(registry: &mut IdentityRegistry, player: PlayerId, slot: u32) -> Result<EntityId> {
-    register(
-        registry,
-        "entity",
-        serde_json::json!(["genesis", player, slot]),
-    )
-}
-pub fn blueprint(
-    registry: &mut IdentityRegistry,
-    command: &str,
-    tile_index: u32,
-) -> Result<BlueprintId> {
-    register(
-        registry,
-        "blueprint",
-        serde_json::json!([command, tile_index]),
-    )
-}
-pub fn structure(registry: &mut IdentityRegistry, blueprint: &str) -> Result<EntityId> {
-    register(
-        registry,
-        "entity",
-        serde_json::json!(["structure", blueprint]),
-    )
-}
-pub fn queue_item(
-    registry: &mut IdentityRegistry,
-    factory: &str,
-    command: &str,
-    item_index: u32,
-) -> Result<QueueItemId> {
-    register(
-        registry,
-        "queue",
-        serde_json::json!([factory, command, item_index]),
-    )
-}
-pub fn production(
-    registry: &mut IdentityRegistry,
-    factory: &str,
-    item: &str,
-    occurrence: u32,
-) -> Result<EntityId> {
-    register(
-        registry,
-        "entity",
-        serde_json::json!(["production", factory, item, occurrence]),
-    )
+pub fn production(item: &QueueItemId, occurrence: u32) -> EntityId {
+    EntityId {
+        birth_command: item.birth_command.clone(),
+        item_index: item.item_index,
+        occurrence,
+    }
 }
 /// Normalize sets only; never reorder queues, terrain cells, or command item/tile arrays.
 pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
@@ -148,7 +117,20 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
         });
         p.elimination_reasons.dedup();
     }
-    for e in &state.entities {
+    for e in &mut state.entities {
+        crate::locks::canonicalize(&mut e.order_locks, state.tick)?;
+        if let Some(production) = &mut e.production {
+            production
+                .occurrence_counters
+                .sort_by(|a, b| a.item_id.cmp(&b.item_id));
+            if production
+                .occurrence_counters
+                .windows(2)
+                .any(|p| p[0].item_id == p[1].item_id)
+            {
+                return Err("duplicate occurrence counter".into());
+            }
+        }
         if !e.hp.is_finite() || !e.paid_matter.is_finite() || e.hp <= 0.0 || e.paid_matter < 0.0 {
             return Err("invalid entity health/payment".into());
         }
@@ -168,6 +150,7 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
         }
     }
     for g in &mut state.control_groups {
+        crate::locks::canonicalize(&mut g.order_locks, state.tick)?;
         g.members.sort();
         g.members.dedup();
     }
@@ -190,14 +173,6 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
             Reason::NoBuildAbility => 1,
         });
         transition.reasons.dedup();
-    }
-    for (id, preimage) in &state.deterministic_identity_state {
-        let prefix = id.split(':').next().ok_or("invalid identity")?;
-        if !["entity", "blueprint", "queue"].contains(&prefix)
-            || *id != format!("{prefix}:{}", sha256(preimage.as_bytes()))
-        {
-            return Err("invalid causal identity registry".into());
-        }
     }
     Ok(state)
 }

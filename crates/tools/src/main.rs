@@ -28,14 +28,7 @@ fn run() -> Result<()> {
     }
     let allowed: &[&str] = match command.as_str() {
         "schema" => &["--out"],
-        "guide" => &["--content", "--prose", "--out"],
-        "select-guide" => &[
-            "--content",
-            "--prose",
-            "--bundled",
-            "--cache",
-            "--expected-hash",
-        ],
+        "guide" => &["--content", "--prose", "--out", "--expected-hash"],
         "normalize" => &["--content", "--setup", "--out"],
         "fixtures" | "help" => &[],
         _ => return Err(format!("unknown command {command}; use help")),
@@ -52,11 +45,11 @@ fn run() -> Result<()> {
         "schema" => {
             let schema = atemporal_contracts::json_schema();
             write(
-                Path::new(&option("--out", "schemas/contracts-v1.json")),
+                Path::new(&option("--out", "schemas/contracts-v2.json")),
                 serde_json::to_vec_pretty(&schema).map_err(|e| e.to_string())?,
             )?;
         }
-        "guide" | "select-guide" => {
+        "guide" => {
             let yaml = read(&option("--content", "config/content.yaml"))?;
             let content = if let Some(hash) = options.get("--expected-hash") {
                 atemporal_content::load_archived_content(&yaml, hash)?
@@ -64,20 +57,11 @@ fn run() -> Result<()> {
                 atemporal_content::load_content(&yaml)?
             };
             let prose = read(&option("--prose", "client/guide/introduction.html"))?;
-            if command == "guide" {
-                let out = option("--out", "client/public/guide");
-                let manifest = atemporal_content::write_guide(&content, &prose, Path::new(&out))?;
-                println!("{} {}", out, manifest.content_hash);
-            } else {
-                let selected = atemporal_content::select_guide(
-                    &content,
-                    &prose,
-                    Path::new(&option("--bundled", "client/public/guide")),
-                    Path::new(&option("--cache", ".guide-cache")),
-                )?;
-                println!("{}", selected.display());
-            }
+            let out = option("--out", "target/guide");
+            let manifest = atemporal_content::write_guide(&content, &prose, Path::new(&out))?;
+            println!("{} {}", out, manifest.content_hash);
         }
+
         "normalize" => {
             let content = atemporal_content::load_content(&read(&option(
                 "--content",
@@ -100,7 +84,7 @@ fn run() -> Result<()> {
             );
         }
         _ => println!(
-            "Commands: fixtures (regenerate authored golden data); schema [--out PATH]; guide [--content YAML --prose HTML --out DIR]; normalize [--content YAML --setup YAML --out DIR]; select-guide [--content YAML --expected-hash HASH --prose HTML --bundled DIR --cache DIR]. Run from repository root; errors exit nonzero."
+            "Commands: fixtures (regenerate authored golden data); schema [--out PATH]; guide [--content YAML --expected-hash HASH --prose HTML --out DIR]; normalize [--content YAML --setup YAML --out DIR]. Run from repository root; errors exit nonzero."
         ),
     }
     Ok(())

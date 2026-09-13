@@ -64,9 +64,10 @@ export type ClientMessage =
       to_tick: number;
     }
   | {
-      command_index: number;
-      draft: TurnDraft;
-      kind: "preview_future_orders";
+      from_tick: number;
+      kind: "get_commands";
+      revision: number;
+      to_tick: number;
     }
   | {
       based_on_revision: number;
@@ -75,20 +76,10 @@ export type ClientMessage =
       slot_token: string;
     }
   | {
-      entity_ids: string[];
-      kind: "get_entity_order_history";
-      revision: number;
-    }
-  | {
       kind: "get_control_groups";
       player: number;
       revision: number;
       tick: number;
-    }
-  | {
-      group: ControlGroupId;
-      kind: "get_group_order_history";
-      revision: number;
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -101,7 +92,7 @@ export type Version = number;
  */
 export type Command =
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "assign_order";
       order: Order;
     }
@@ -116,12 +107,12 @@ export type Command =
       kind: "edit_group_members";
     }
   | {
-      factories: string[];
+      factories: EntityId[];
       group?: ControlGroupId | null;
       kind: "bind_factory_group";
     }
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "set_priority";
       priority: Priority;
     }
@@ -138,16 +129,16 @@ export type Command =
     }
   | {
       edit: ProductionEdit;
-      factories: string[];
+      factories: EntityId[];
       kind: "edit_production";
     }
   | {
       enabled: boolean;
-      factories: string[];
+      factories: EntityId[];
       kind: "set_queue_loop";
     }
   | {
-      factories: string[];
+      factories: EntityId[];
       kind: "set_stored_order";
       order: Order;
     };
@@ -165,7 +156,7 @@ export type Order =
     }
   | {
       kind: "support";
-      target: string;
+      target: EntityId;
     }
   | {
       area: Rect;
@@ -186,15 +177,15 @@ export type GroupSlot = number;
  */
 export type MemberEdit =
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "replace";
     }
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "add";
     }
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "remove";
     };
 /**
@@ -213,7 +204,7 @@ export type CardinalDirection = "n" | "e" | "s" | "w";
  */
 export type DraftItemRef =
   | {
-      id: string;
+      id: EntityId;
       kind: "persistent";
     }
   | {
@@ -235,11 +226,25 @@ export type ProductionEdit =
       kind: "replace_pending";
     }
   | {
-      item_ids: DraftItemRef[];
+      item_ids: DraftItemRef2[];
       kind: "remove_pending";
     }
   | {
       kind: "cancel_active";
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "DraftItemRef2".
+ */
+export type DraftItemRef2 =
+  | {
+      id: QueueItemId;
+      kind: "persistent";
+    }
+  | {
+      item_index: number;
+      kind: "draft";
+      local_id: string;
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -250,7 +255,8 @@ export type FutureOrderPolicy = "keep" | "drop_all" | "drop_window";
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "SkipReason".
  */
-export type SkipReason = "absent" | "dead" | "wrong_owner" | "incompatible" | "blocked" | "missing_support_target";
+export type SkipReason =
+  "absent" | "dead" | "wrong_owner" | "incompatible" | "blocked" | "missing_support_target" | "locked_by_later_round";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "OutcomeKind".
@@ -393,7 +399,7 @@ export type VisualStyle = "direct" | "artillery" | "melee";
  */
 export type Command2 =
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "assign_order";
       order: Order;
     }
@@ -408,12 +414,12 @@ export type Command2 =
       kind: "edit_group_members";
     }
   | {
-      factories: string[];
+      factories: EntityId[];
       group?: ControlGroupId | null;
       kind: "bind_factory_group";
     }
   | {
-      entities: string[];
+      entities: EntityId[];
       kind: "set_priority";
       priority: Priority;
     }
@@ -425,21 +431,21 @@ export type Command2 =
       type_key: string;
     }
   | {
-      blueprint_ids: string[];
+      blueprint_ids: EntityId[];
       kind: "cancel_blueprints";
     }
   | {
       edit: ProductionEdit2;
-      factories: string[];
+      factories: EntityId[];
       kind: "edit_production";
     }
   | {
       enabled: boolean;
-      factories: string[];
+      factories: EntityId[];
       kind: "set_queue_loop";
     }
   | {
-      factories: string[];
+      factories: EntityId[];
       kind: "set_stored_order";
       order: Order;
     };
@@ -457,24 +463,11 @@ export type ProductionEdit2 =
       kind: "replace_pending";
     }
   | {
-      item_ids: string[];
+      item_ids: QueueItemId[];
       kind: "remove_pending";
     }
   | {
       kind: "cancel_active";
-    };
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "SuppressionTarget".
- */
-export type SuppressionTarget =
-  | {
-      entity_id: string;
-      kind: "entity_component";
-    }
-  | {
-      group: ControlGroupId;
-      kind: "entire_group_order";
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -576,18 +569,9 @@ export type ServerMessage =
       reason: string;
     }
   | {
-      affected_components: Suppression[];
-      counts_by_kind: {
-        [k: string]: number;
-      };
-      interval?: PreviewInterval | null;
-      kind: "future_orders_preview";
+      kind: "commands";
       revision: number;
-    }
-  | {
-      components: HistoryComponent[];
-      kind: "order_history";
-      revision: number;
+      turns: AcceptedTurn[];
     }
   | {
       groups: ControlGroupState[];
@@ -686,25 +670,25 @@ export type WorkerMessage =
 export type PresentationEvent =
   | {
       blocker_from: Tile;
-      blocker_id: string;
+      blocker_id: EntityId;
       blocker_to: Tile;
-      involuntary_entity_id: string;
+      involuntary_entity_id: EntityId;
       kind: "displacement";
       mover_from: Tile;
-      mover_id: string;
+      mover_id: EntityId;
       mover_to: Tile;
     }
   | {
-      entity_id: string;
+      entity_id: EntityId;
       from: Tile;
       kind: "move";
       to: Tile;
     }
   | {
-      attacker_id: string;
+      attacker_id: EntityId;
       kind: "attack";
       source_tile: Tile;
-      target_id: string;
+      target_id: EntityId;
       target_tile: Tile;
       visual_style: VisualStyle;
     }
@@ -714,7 +698,7 @@ export type PresentationEvent =
       visual_style: VisualStyle;
     }
   | {
-      entity_id: string;
+      entity_id: EntityId;
       kind: "destroyed";
       tile: Tile;
       visual_style: VisualStyle;
@@ -771,6 +755,32 @@ export interface DraftCommand {
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "EntityId".
+ */
+export interface EntityId {
+  birth_command: BirthCommandId;
+  item_index: number;
+  occurrence: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "BirthCommandId".
+ */
+export interface BirthCommandId {
+  command: CommandId;
+  target_index: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "CommandId".
+ */
+export interface CommandId {
+  index: number;
+  player: number;
+  round: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "Tile".
  */
 export interface Tile {
@@ -792,6 +802,14 @@ export interface Rect {
 export interface ControlGroupId {
   owner: number;
   slot: GroupSlot;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "QueueItemId".
+ */
+export interface QueueItemId {
+  birth_command: BirthCommandId;
+  item_index: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -820,8 +838,8 @@ export interface GoldenExpectation {
  * via the `definition` "CommandOutcome".
  */
 export interface CommandOutcome {
-  applied_entities: string[];
-  command_id: string;
+  applied_entities: EntityId[];
+  command_id: CommandId;
   skipped: SkippedTarget[];
 }
 /**
@@ -829,7 +847,7 @@ export interface CommandOutcome {
  * via the `definition` "SkippedTarget".
  */
 export interface SkippedTarget {
-  entity_id?: string | null;
+  entity_id?: EntityId | null;
   reason: SkipReason;
 }
 /**
@@ -881,7 +899,7 @@ export interface ExpectedBank {
  */
 export interface ExpectedEntity {
   action?: Order | null;
-  entity_id: string;
+  entity_id: EntityId;
   hp?: number | null;
   paid_matter?: number | null;
   present: boolean;
@@ -894,7 +912,8 @@ export interface ExpectedEntity {
 export interface ControlGroupState {
   id: ControlGroupId;
   latest_order?: SavedOrder | null;
-  members: string[];
+  members: EntityId[];
+  order_locks: OrderLock[];
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -902,8 +921,17 @@ export interface ControlGroupState {
  */
 export interface SavedOrder {
   order: Order;
-  source_command_id: string;
+  source_command_id: CommandId;
   tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "OrderLock".
+ */
+export interface OrderLock {
+  from_tick: number;
+  issued_round: number;
+  until_tick: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -921,7 +949,6 @@ export interface SimRequest {
   precedence: RoundPrecedence[];
   revision: number;
   schema_version: Version;
-  suppressions: Suppression[];
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -930,9 +957,6 @@ export interface SimRequest {
 export interface WorldState {
   blueprints: Blueprint[];
   control_groups: ControlGroupState[];
-  deterministic_identity_state: {
-    [k: string]: string;
-  };
   entities: EntityState[];
   inactivity_deadline: number;
   last_progress_tick: number;
@@ -949,13 +973,13 @@ export interface WorldState {
  * via the `definition` "Blueprint".
  */
 export interface Blueprint {
-  id: string;
+  id: EntityId;
   output_direction?: CardinalDirection | null;
   owner: number;
   precedence: EventKey;
   priority: Priority;
-  site_id?: string | null;
-  source_command_id: string;
+  site_id?: EntityId | null;
+  source_command_id: CommandId;
   tile: Tile;
   type_key: string;
 }
@@ -976,22 +1000,25 @@ export interface EventKey {
 export interface EntityState {
   action: Order;
   blocked_step?: Tile | null;
-  blueprint_id?: string | null;
+  blueprint_id?: EntityId | null;
   born_at_tick?: number | null;
-  engaged_target?: string | null;
+  engaged_target?: EntityId | null;
   failed_move_attempts: number;
+  goal_settled: boolean;
   hp: number;
-  id: string;
+  id: EntityId;
   last_move_direction: Direction;
   lifecycle: Lifecycle;
+  local_detour: Tile[];
   next_action_tick: number;
   next_move_tick: number;
+  order_locks: OrderLock[];
   owner: number;
   paid_matter: number;
   priority: Priority;
   production?: Production | null;
   resolved_destination?: Tile | null;
-  support_target?: string | null;
+  support_target?: EntityId | null;
   tile: Tile;
   type_key: string;
 }
@@ -1002,9 +1029,7 @@ export interface EntityState {
 export interface Production {
   active_item?: ActiveItem | null;
   loop_enabled: boolean;
-  occurrence_counters: {
-    [k: string]: number;
-  };
+  occurrence_counters: OccurrenceCounter[];
   output_direction: CardinalDirection;
   output_tile: Tile;
   pending_items: QueueItem[];
@@ -1017,17 +1042,25 @@ export interface Production {
  */
 export interface ActiveItem {
   awaiting_output: boolean;
-  item_id: string;
+  item_id: QueueItemId;
   occurrence: number;
   paid_matter: number;
   type_key: string;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "OccurrenceCounter".
+ */
+export interface OccurrenceCounter {
+  item_id: QueueItemId;
+  next_occurrence: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "QueueItem".
  */
 export interface QueueItem {
-  item_id: string;
+  item_id: QueueItemId;
   type_key: string;
 }
 /**
@@ -1076,6 +1109,7 @@ export interface MatchConfig {
   max_tick: number;
   multiplayer: Multiplayer;
   objective: Objective;
+  ore_matter_per_start: number;
   player_count: number;
   replay_directory: string;
   schema_version: Version;
@@ -1205,17 +1239,7 @@ export interface AcceptedTurn {
 export interface CommittedCommand {
   command: Command2;
   future_orders: FutureOrderPolicy;
-  id: string;
-  suppressions: Suppression[];
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "Suppression".
- */
-export interface Suppression {
-  historical_command_id: string;
-  source_command_id: string;
-  target: SuppressionTarget;
+  id: CommandId;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -1393,24 +1417,6 @@ export interface PlayerStats {
   living_army_value: number;
   living_infrastructure_value: number;
   player_id: number;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "PreviewInterval".
- */
-export interface PreviewInterval {
-  after_tick: number;
-  through_tick: number;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "HistoryComponent".
- */
-export interface HistoryComponent {
-  command: Command2;
-  command_id: string;
-  suppressed_by: Suppression[];
-  tick: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema

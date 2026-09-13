@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "match_defaults": {
-    "schema_version": 1,
+    "schema_version": 2,
     "seed": 42,
     "map_size": 48,
     "player_count": 4,
@@ -43,7 +43,7 @@
     "future_orders": {
       "window_ticks": 100
     },
-    "max_tick": 100000,
+    "max_tick": 20000,
     "stall_ticks": 300,
     "ticks_per_second": 10,
     "starting_matter": 200.0,
@@ -51,7 +51,8 @@
     "checkpoint_interval": 100,
     "snapshot_interval": 5,
     "transport": "authoritative",
-    "replay_directory": "replays"
+    "replay_directory": "replays",
+    "ore_matter_per_start": 24000
   },
   "available_teams": [
     {

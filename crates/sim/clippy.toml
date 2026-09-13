@@ -1,0 +1,4 @@
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "Simulation iteration must be deterministic; use tile arrays, sorted Vecs or BTreeMap." },
+  { path = "std::collections::HashSet", reason = "Simulation iteration must be deterministic; use tile arrays, sorted Vecs or BTreeSet." },
+]

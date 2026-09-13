@@ -15,7 +15,7 @@ npm run build --prefix client
 npm test --prefix client
 ```
 
-The browser build regenerates JSON Schema, TypeScript declarations, and guide artifacts. These generated sources are checked in for subsystem handoffs. Review their diffs alongside contract/content edits. `client/dist` is disposable build output. The static preview is local-only and contains no game transport:
+The browser build regenerates JSON Schema and TypeScript declarations. The preview server generates its guide once at startup from effective content. These generated sources are checked in for subsystem handoffs. Review their diffs alongside contract/content edits. `client/dist` is disposable build output. The static preview is local-only and contains no game transport:
 
 ```sh
 PORT=8090 npm run dev --prefix client
@@ -29,24 +29,23 @@ Useful implemented Rust commands:
 cargo run --locked -p atemporal-tools -- schema
 cargo run --locked -p atemporal-tools -- normalize --setup config/teams.yaml --out target/normalized-teams
 cargo run --locked -p atemporal-tools -- guide --content config/content.yaml --out target/custom-guide
-cargo run --locked -p atemporal-tools -- select-guide --content config/content.yaml --bundled client/public/guide --cache .guide-cache
 ```
 
-For an archived content file, add `--expected-hash <manifest content_hash>` to `select-guide`. It rejects mismatching saved data. The selected directory must be mounted by the server before the match bootstrap publishes its guide URL. The reusable library is `atemporal-content`; these commands exercise the same loader and fallback.
+For an archived content file, add `--expected-hash <manifest content_hash>` to `guide`. It rejects mismatching saved data. The generated directory must be mounted by the server before the match bootstrap publishes its guide URL. The reusable library is `atemporal-content`; these commands exercise the same loader and startup generator.
 
-See [contracts v1](contracts-v1.md) for encoding, scoring interpretations, subsystem ownership, and version-change rules. See [fixtures](../fixtures/README.md) for golden-world acceptance and its current limits.
+See [provisional contracts v2](contracts-v2.md) for encoding, scoring interpretations, subsystem ownership, and version-change rules. See [fixtures](../fixtures/README.md) for golden-world acceptance and its current limits.
 
 
 ## Validation record
 
 Coordinator worktree: `/home/will/atemporal-coordinator`, branch `coordinator/contracts-v1`.
 
-- Rust workspace tests, strict Clippy, and formatting pass. They cover score rules/idempotent last-round retry, identity/canonical state hashing, malformed boundaries, shared content/setup validation, guide overrides/resume/corruption, fixture inputs and the golden comparator.
-- Browser TypeScript checking and esbuild build pass. JavaScript validates 26 shared fixtures and seven malformed cases, checks causal SHA-256 preimages, and sends serialized fixtures back through Rust for equality checks.
-- Eight authored tiny worlds define quiet stopping, mining ratio, future-input guards, mutual elimination, factory recovery, dormant IDs, group birth inheritance, and partial group suppression. Only input/expectation consistency and the comparator are tested here; actual engine execution, checkpoint/parallel replay equivalence, and performance remain simulation handoff work.
+- Rust workspace tests, strict Clippy, and formatting pass. They cover score rules/idempotent last-round retry, identity/canonical state hashing, malformed boundaries, shared content/setup validation, startup guide overrides/resume/corruption, fixture inputs and the golden comparator.
+- Browser TypeScript checking and esbuild build pass. JavaScript validates 26 shared fixtures and malformed cases, checks tuple records, and sends serialized fixtures back through Rust for equality checks.
+- Eight authored tiny worlds define quiet stopping, mining ratio, future-input guards, mutual elimination, factory recovery, dormant IDs, group birth inheritance, and partial group locks. Only input/expectation consistency and the comparator are tested here; actual engine execution, checkpoint/parallel replay equivalence, and performance remain simulation handoff work.
 - Local HTTP smoke checks on port 8097 returned the scaffold, JavaScript, guide, content JSON, and manifest with expected content types. Missing routes returned 404; an occupied port failed with EADDRINUSE. The session’s built-in UI browser was unavailable; the project now supplies real Playwright browser review and independent MCP smoke verification.
 - All four Chromium UI cases pass across desktop and narrow viewports, covering keyboard navigation, guide content, layout overflow, and isolated browser contexts. Screenshots were inspected. The vendor-neutral MCP smoke client also passes tool discovery, navigation, link interaction, rendered snapshot inspection, and screenshot capture.
-- Runtime routing, durable score application/crash recovery, real server/worker launches, complete player controls, and end-to-end playtests remain their separate checklist tasks. The guide prose is a baseline for the client handoff, to be reviewed against actual controls.
+- Runtime routing, durable score application/crash recovery, real server/simulation-thread execution, complete player controls, and end-to-end playtests remain their separate checklist tasks. The guide prose is a baseline for the client handoff, to be reviewed against actual controls.
 
 Run `scripts/check.sh` for the complete reproducible coordinator check (including generated-artifact drift). Regenerate authored tiny-world data deliberately with `cargo run --locked -p atemporal-tools -- fixtures`; this writes expectations from `crates/tools/src/fixtures.rs`, not results from a hidden engine.
 

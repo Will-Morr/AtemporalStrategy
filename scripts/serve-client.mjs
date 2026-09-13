@@ -1,4 +1,5 @@
 // Local scaffold preview only. The server handoff owns game routes and WebSocket.
+import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
@@ -6,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 const root=fileURLToPath(new URL('../client/dist/',import.meta.url));
 const port=Number(process.env.PORT ?? '8080');
 if (!Number.isInteger(port)||port<1||port>65535) throw new Error('PORT must be 1..65535');
+// Generate the static guide once from loaded content before publishing this origin.
+execFileSync('cargo',['run','--locked','--quiet','-p','atemporal-tools','--','guide','--content',process.env.ATEMPORAL_CONTENT??'config/content.yaml','--out',resolve(root,'guide')],{cwd:fileURLToPath(new URL('../',import.meta.url)),stdio:'inherit'});
 const server=createServer(async(req,res)=>{
   try {
     let path=resolve(root,'.'+decodeURIComponent(new URL(req.url,'http://localhost').pathname));

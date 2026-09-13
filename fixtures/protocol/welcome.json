@@ -1,11 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "server_instance_id": "fixture-instance",
   "message": {
     "kind": "welcome",
     "match_id": "fixture-match",
     "config": {
-      "schema_version": 1,
+      "schema_version": 2,
       "seed": 42,
       "map_size": 8,
       "player_count": 2,
@@ -37,7 +37,8 @@
       "checkpoint_interval": 2,
       "snapshot_interval": 1,
       "transport": "authoritative",
-      "replay_directory": "replays"
+      "replay_directory": "replays",
+      "ore_matter_per_start": 24000
     },
     "phase": "lobby",
     "lobby": {
@@ -71,7 +72,7 @@
       "rule_summary": "First to 5; ties continue; draws do not score."
     },
     "fingerprint": {
-      "schema_version": 1,
+      "schema_version": 2,
       "sim_build": "tiny-world-contract-v1",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "5808107737c7394633fa2d467e8e60fc93eaff932f8aefb223b7fd8c9348c834",

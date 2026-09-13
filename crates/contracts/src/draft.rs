@@ -8,7 +8,7 @@ pub fn validate_policy(command: &DraftCommand, window: Option<Tick>) -> Result<(
             command.command,
             Command::AssignOrder { .. } | Command::AssignGroupOrder { .. }
         ) {
-            return Err("only action assignments may remove future orders".into());
+            return Err("only action assignments may install future-order locks".into());
         }
         if command.future_orders == FutureOrderPolicy::DropWindow && window.is_none_or(|w| w == 0) {
             return Err("drop_window requires a positive configured window".into());
@@ -17,7 +17,7 @@ pub fn validate_policy(command: &DraftCommand, window: Option<Tick>) -> Result<(
     Ok(())
 }
 /// Interval excludes t and includes the returned end. None means Keep or no future ticks.
-pub fn removal_interval(
+pub fn lock_interval(
     tick: Tick,
     policy: FutureOrderPolicy,
     window: Option<Tick>,
@@ -43,16 +43,23 @@ pub fn removal_interval(
     }))
 }
 /// Resolves earlier blueprint/queue causes only; it never creates predicted entities or ticks.
-/// Registry writes are atomic on success. Server still validates projected ownership/capabilities,
-/// selects output directions, and resolves suppression against the common base revision.
+/// Server still validates projected ownership/capabilities and selects output directions.
+/// The simulation decides assignment eligibility and installs locks at execution.
 pub fn resolve_local_references(
     draft: &TurnDraft,
     round: u32,
     player: PlayerId,
-    registry: &mut IdentityRegistry,
 ) -> Result<Vec<Command>> {
-    let mut registry_candidate = registry.clone();
-    let mut earlier = BTreeMap::<String, (u32, &Command<DraftItemRef>)>::new();
+    if round == 0 {
+        return Err("round zero is reserved for genesis".into());
+    }
+    let mut earlier = BTreeMap::<
+        String,
+        (
+            u32,
+            &Command<DraftItemRef<BlueprintId>, DraftItemRef<QueueItemId>>,
+        ),
+    >::new();
     let mut resolved = vec![];
     for (index, entry) in draft.commands.iter().enumerate() {
         if entry.local_id.is_empty()
@@ -61,36 +68,42 @@ pub fn resolve_local_references(
         {
             return Err("draft local IDs must be nonempty, unique and at most 64 bytes".into());
         }
+        if let Command::EditProduction { factories, edit } = &entry.command {
+            if factories.len() > 65536 || factories.windows(2).any(|p| p[0] >= p[1]) {
+                return Err("factory targets must be sorted, unique and fit u16 indices".into());
+            }
+            if matches!(edit, ProductionEdit::Append { items } | ProductionEdit::ReplacePending { items } if items.len() > 65536)
+            {
+                return Err("too many queue items".into());
+            }
+        }
         let index = u32::try_from(index).map_err(|_| "too many draft commands")?;
-        let blueprint_ref =
-            |reference: &DraftItemRef, registry: &mut IdentityRegistry| -> Result<String> {
-                match reference {
-                    DraftItemRef::Persistent { id } => Ok(id.clone()),
-                    DraftItemRef::Draft {
-                        local_id,
-                        item_index,
-                    } => {
-                        let (source_index, source) = earlier
-                            .get(local_id)
-                            .ok_or("unknown, forward or cyclic draft reference")?;
-                        let Command::PlaceBlueprints { tiles, .. } = source else {
-                            return Err("blueprint reference must point to placement".into());
-                        };
-                        if *item_index as usize >= tiles.len() {
-                            return Err("blueprint item_index out of range".into());
-                        }
-                        identity::blueprint(
-                            registry,
-                            &identity::command_id(round, player, *source_index),
-                            *item_index,
-                        )
+        let blueprint_ref = |reference: &DraftItemRef<BlueprintId>| -> Result<BlueprintId> {
+            match reference {
+                DraftItemRef::Persistent { id } => Ok(id.clone()),
+                DraftItemRef::Draft {
+                    local_id,
+                    item_index,
+                } => {
+                    let (source_index, source) = earlier
+                        .get(local_id)
+                        .ok_or("unknown, forward or cyclic draft reference")?;
+                    let Command::PlaceBlueprints { tiles, .. } = source else {
+                        return Err("blueprint reference must point to placement".into());
+                    };
+                    if *item_index as usize >= tiles.len() {
+                        return Err("blueprint item_index out of range".into());
                     }
+                    identity::blueprint(
+                        &identity::command_id(round, player, *source_index),
+                        *item_index,
+                    )
                 }
-            };
-        let queue_refs = |references: &[DraftItemRef],
-                          factories: &[EntityId],
-                          registry: &mut IdentityRegistry|
-         -> Result<Vec<String>> {
+            }
+        };
+        let queue_refs = |references: &[DraftItemRef<QueueItemId>],
+                          factories: &[EntityId]|
+         -> Result<Vec<QueueItemId>> {
             let mut ids = vec![];
             for reference in references {
                 match reference {
@@ -124,9 +137,11 @@ pub fn resolve_local_references(
                                 );
                             }
                             ids.push(identity::queue_item(
-                                registry,
-                                factory,
                                 &identity::command_id(round, player, *source_index),
+                                source_factories
+                                    .iter()
+                                    .position(|id| id == factory)
+                                    .unwrap() as u32,
                                 *item_index,
                             )?);
                         }
@@ -164,6 +179,9 @@ pub fn resolve_local_references(
                 priority,
                 output_directions,
             } => {
+                if tiles.len() > 65536 {
+                    return Err("too many blueprint tiles".into());
+                }
                 if output_directions
                     .as_ref()
                     .is_some_and(|dirs| dirs.len() != tiles.len())
@@ -180,7 +198,7 @@ pub fn resolve_local_references(
             Command::CancelBlueprints { blueprint_ids } => Command::CancelBlueprints {
                 blueprint_ids: blueprint_ids
                     .iter()
-                    .map(|r| blueprint_ref(r, &mut registry_candidate))
+                    .map(blueprint_ref)
                     .collect::<Result<_>>()?,
             },
             Command::EditProduction { factories, edit } => Command::EditProduction {
@@ -193,7 +211,7 @@ pub fn resolve_local_references(
                         items: items.clone(),
                     },
                     ProductionEdit::RemovePending { item_ids } => ProductionEdit::RemovePending {
-                        item_ids: queue_refs(item_ids, factories, &mut registry_candidate)?,
+                        item_ids: queue_refs(item_ids, factories)?,
                     },
                     ProductionEdit::CancelActive {} => ProductionEdit::CancelActive {},
                 },
@@ -210,6 +228,5 @@ pub fn resolve_local_references(
         earlier.insert(entry.local_id.clone(), (index, &entry.command));
         resolved.push(command);
     }
-    *registry = registry_candidate;
     Ok(resolved)
 }

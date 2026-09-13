@@ -45,10 +45,6 @@ fn golden_requests_have_valid_content_state_fingerprints_and_endpoint_accounting
         for outcome in &fixture.expected.command_outcomes {
             assert!(ids.contains(&outcome.command_id));
         }
-        for mask in &request.suppressions {
-            assert!(ids.contains(&mask.source_command_id));
-            assert!(ids.contains(&mask.historical_command_id));
-        }
         for p in 0..request.config.player_count {
             assert_eq!(
                 request

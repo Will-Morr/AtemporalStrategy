@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "message": {
     "kind": "batch",
     "job_id": "displacement-example",
@@ -13,8 +13,30 @@
         "sequence": 0,
         "event": {
           "kind": "displacement",
-          "mover_id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
-          "blocker_id": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+          "mover_id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 0,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
+          "blocker_id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 0,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 1,
+            "occurrence": 0
+          },
           "mover_from": {
             "x": 1,
             "y": 1
@@ -31,7 +53,18 @@
             "x": 2,
             "y": 2
           },
-          "involuntary_entity_id": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57"
+          "involuntary_entity_id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 0,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 1,
+            "occurrence": 0
+          }
         }
       }
     ]

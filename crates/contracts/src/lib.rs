@@ -1,12 +1,13 @@
-//! Version 1 interchange types. Simulation policy lives outside these records.
+//! Provisional version 2 interchange types. Simulation policy lives outside these records.
 pub mod draft;
 pub mod golden;
 pub mod identity;
+pub mod locks;
 pub mod scoring;
 pub mod timed;
 mod types;
 pub use types::*;
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 pub type Error = String;
 pub type Result<T> = std::result::Result<T, Error>;
 

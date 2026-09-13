@@ -100,17 +100,11 @@ fn rejects_malformed_caps_recipes_and_setup() {
     setup.match_defaults.symmetric = false;
     assert!(validate_config(&setup.match_defaults).is_ok());
 }
+#[cfg(feature = "guide")]
 #[test]
-fn guide_override_resume_and_corrupt_bundle_never_return_stale_stats() {
+fn startup_override_resume_and_corruption_use_one_generator() {
     let temp = Temp::new();
-    let bundled = temp.0.join("bundled");
-    let cache = temp.0.join("cache");
     let original = load_content(CONTENT).unwrap();
-    write_guide(&original, PROSE, &bundled).unwrap();
-    assert_eq!(
-        select_guide(&original, PROSE, &bundled, &cache).unwrap(),
-        bundled
-    );
     let mut changed = original.clone();
     changed
         .types
@@ -118,35 +112,27 @@ fn guide_override_resume_and_corrupt_bundle_never_return_stale_stats() {
         .find(|t| t.key == "miner")
         .unwrap()
         .max_hp = 12345.;
-    let selected = select_guide(&changed, PROSE, &bundled, &cache).unwrap();
-    assert_ne!(selected, bundled);
+    write_guide(&original, PROSE, &temp.0).unwrap();
+    write_guide(&changed, PROSE, &temp.0).unwrap();
     assert!(
-        fs::read_to_string(selected.join("index.html"))
+        fs::read_to_string(temp.0.join("index.html"))
             .unwrap()
             .contains("12345")
     );
-    assert!(guide_matches(&changed, PROSE, &selected).unwrap());
-    assert!(!guide_matches(&original, PROSE, &selected).unwrap());
-    assert_eq!(
-        select_guide(&changed, PROSE, &bundled, &cache).unwrap(),
-        selected
-    );
+    fs::write(temp.0.join("index.html"), "corrupt").unwrap();
     let resumed = load_archived_content(CONTENT, &content_hash(&original).unwrap()).unwrap();
-    assert_eq!(
-        select_guide(&resumed, PROSE, &bundled, &cache).unwrap(),
-        bundled
-    );
+    write_guide(&resumed, PROSE, &temp.0).unwrap();
+    let exported: Content =
+        serde_json::from_slice(&fs::read(temp.0.join("content.json")).unwrap()).unwrap();
+    assert_eq!(exported, original);
     assert!(load_archived_content(CONTENT, &content_hash(&changed).unwrap()).is_err());
-    fs::write(bundled.join("index.html"), "stale table").unwrap();
-    let repaired = select_guide(&original, PROSE, &bundled, &cache).unwrap();
-    assert_ne!(repaired, bundled);
-    assert!(guide_matches(&original, PROSE, &repaired).unwrap());
-    let new_prose = format!("{PROSE}<p>Updated rules.</p>");
-    assert_ne!(
-        select_guide(&original, &new_prose, &bundled, &cache).unwrap(),
-        repaired
+    assert!(
+        !fs::read_to_string(temp.0.join("index.html"))
+            .unwrap()
+            .contains("12345")
     );
 }
+#[cfg(feature = "guide")]
 #[test]
 fn content_schema_is_not_a_second_guide_catalog() {
     let content = load_content(CONTENT).unwrap();
