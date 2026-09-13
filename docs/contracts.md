@@ -179,14 +179,18 @@ Outcome classification uses the final survivor set over all original participant
 
 ```text
 Client -> Hello{protocol_version, last_revision?}
-          ClaimSlot{slot}, ReleaseSlot, StartMatch
+          ClaimSlot{slot, username, color, team_id?}, ReleaseSlot
+          UpdateLobbyProfile{request_id, username?, color?, team_id?}
+          StartMatch{based_on_lobby_revision}
           Commit{CommitRequest}
           GetSnapshotRange{revision, from_tick, to_tick, stride}
           GetExactState{revision, tick}
           GetStats{revision, from_tick, to_tick, bucket_width}
 
-Server -> Welcome{match_id, config_summary, phase, slots, fingerprint}
+Server -> Welcome{server_instance_id, match_id, config_summary, phase, lobby: LobbyState, fingerprint, guide_url}
           SlotClaimed{slot, private_token}
+          LobbyUpdated{lobby: LobbyState}
+          LobbyUpdateRejected{request_id, code, message, lobby: LobbyState}
           PlanningOpened{round, revision, editable_from, available_through,
                          committed_players, time_totals}
           CommitAccepted{request_id, round}
@@ -200,7 +204,7 @@ Server -> Welcome{match_id, config_summary, phase, slots, fingerprint}
           MatchFinished{match_winners: SideId[], final_outcome: Outcome, reason}
 ```
 
-Only lobby participants claim slots. First occupied slot may start once all configured slots are claimed; spectators can join anytime. Slot token saved in local browser storage permits reconnect; spectators cannot commit. No account/security system, but ordinary ownership and phase checks remain. No automatic turn timeout; a disconnect can stall planning and is displayed. Server operator can stop/archive the match; do not invent bot moves.
+Only lobby participants claim slots. First occupied slot may start once all configured slots are claimed, required profile fields are valid, and chosen teams satisfy setup constraints; spectators can join anytime. Start uses the current lobby revision. Team choices are editable in the lobby and become pinned assignments at start. Slot token saved in local browser storage permits reconnect; spectators cannot commit. No account/security system, but ordinary ownership and phase checks remain. No automatic turn timeout; a disconnect can stall planning and is displayed. Server operator can stop/archive the match; do not invent bot moves.
 
 Client discards responses for stale revisions. `request_id` provides idempotency: a retry returns the original commit response. Simultaneous mode hides committed command payloads until the round closes while sharing readiness. Commit is final for that round; undo is available in the draft only. A late reconnect receives the current revision, metadata and its own accepted-commit state.
 
@@ -254,3 +258,23 @@ User-confirmed tie default is continued play until one qualifying team leads. Pr
 ### Draw score reduction
 
 The user requires `draw_scoring: none | all_players`; default `none` is proposed. Result classification precedes scoring. Stalemate always produces zero deltas, even if someone temporarily failed the survival test, and ignores draw policy. Win credits final survivors. Draw/none credits nobody; draw/all_players credits all original participants, with proposed raw team totals equal to original team size. Keep `surviving_members` empty on draws and use `credited_players` plus `award_reason: draw` to explain points correctly. Apply any configured time adjustments to the credited players as a revisable proposal, then evaluate target/lead and tie policy on the complete vector. Persist draw/tie policies with pinned config and per-round score records so replay, recovery and peripheral displays agree.
+
+### Lobby profiles and guide identity
+
+```text
+PlayerProfile = { player_id, username, color: "#RRGGBB", team_id?: TeamId }
+LobbyState = {
+  revision, slots: [{slot, claimed, connected, profile?: PlayerProfile}],
+  available_teams: [{team_id, label, capacity?}], can_start, rule_summary
+}
+GuideManifest = {
+  content_hash, rules_build, locale,
+  ticks_per_second?, generated_files
+}
+```
+
+Profile updates are allowed before match start, validated by slot ownership, and broadcast to every connected client. Include the complete latest LobbyState on initial join/reconnect; do not depend on a client having received earlier updates. Team availability/capacity comes from YAML; MatchConfig's final assignments come from the accepted start roster. Start and profile updates serialize on the controller so stale starts cannot freeze an unseen roster. Profile values never determine entity ID, deterministic target ordering, or ownership; persist profiles in lobby storage and match/replay metadata for correct labels/colors after refresh/resume.
+
+Guide generation consumes normalized TypeDefinition records through the same loader used by the game. A matching manifest is required before publishing its guide URL. Runtime content/resumed archives differing from the bundled build trigger the proposed shared static-generation fallback. Intrinsic stats use ticks; any generated time conversions also key the artifact by effective tick rate. Future changes to unit content invalidate/rebuild the tables automatically. Unit descriptions reference capability data; exact mechanics prose is versioned alongside the sim code and reviewed at release.
+
+Proposed server CLI contract: `--port <1..65535>` selects the single listener used by assets, HTTP and WebSocket, overrides a config default, and never falls back silently. Print the chosen address and resume/new-match mode at launch. Reconnecting to an old server instance requires a fresh bootstrap; revision numbers alone cannot distinguish two process runs. Keep tokens private in individual SlotClaimed messages; public lobby snapshots expose only profile/readiness data.

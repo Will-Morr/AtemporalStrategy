@@ -27,3 +27,9 @@ Use a simple terrain map with different shades of gray for floor and walls. Ever
 Keep movement and attack animations minimal, including minimalist projectile and explosion animations.
 
 Units have health bars showing damage and rotate to indicate the direction they moved last turn. The meaning of “last turn” in playback and exact interpolation/effect timing remain implementation interpretations. The original minimalist circles/rectangles and player-color approach still applies.
+
+## Player guide and lobby
+
+Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
+
+Link the guide from the landing page where players select teams. Players enter a username and choose a color. During setup, all usernames and player colors must be clearly visible and update for everyone as they change, so the full lobby state is known before starting.

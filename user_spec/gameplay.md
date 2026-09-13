@@ -53,3 +53,7 @@ Multiplayer supports **FFA or team play**. Add an optional dynamic score-to-win 
 Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-5 rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
 
 The original request's optional time-based score penalty remains in scope. Team application of lead-N, exact penalty formulas, and other unconfirmed details remain proposals in the architecture documents.
+
+## Server launch and restart
+
+The game process must accept a command-line port argument. Restarting it on the same port should let all players return by refreshing their existing browser tab. Startup/restore behavior should preserve that stable address; specific CLI naming and default port remain implementation choices.

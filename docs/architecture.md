@@ -4,7 +4,7 @@
 
 ## Processes and modules
 
-Use one Rust workspace with `contracts`, `sim`, `server`, and `runner` crates, plus a small TypeScript browser client. Server serves static files, HTTP bootstrap/archive endpoints and a WebSocket for live state. It owns slots, planning phases, accepted commands, scores, timing, and durable match revisions. No database; one match per server process is sufficient.
+Use one Rust workspace with `contracts`, `sim`, `server`, and `runner` crates, plus a small TypeScript browser client. Server serves static game and player-guide files, HTTP bootstrap/archive endpoints and a WebSocket for live state. It owns slots, planning phases, accepted commands, scores, timing, and durable match revisions. No database; one match per server process is sufficient.
 
 The runner binary has worker and peripheral modes. The server launches a worker subprocess per resimulation, using framed messages on stdin/stdout and stderr for diagnostics. The worker receives a checkpoint, event suffix, and pinned content; emits progress, snapshot batches, then final result. It cannot mutate the authoritative archive. A failed worker leaves the last published revision intact and permits retrying the already committed inputs. Cancellation closes the process; stale revision results are discarded.
 
@@ -78,3 +78,17 @@ The worker returns all survivors and elimination reasons, not a single winner ID
 ## Minimal visual playback
 
 The client renders user-requested grayscale terrain, high-contrast entities, health bars, facing, and lightweight movement/shot/impact effects. Movement resolution updates last-move direction only for successful moves, including allied swaps; attacks do not rotate this field. Emit compact canonical combat/movement events with frozen positions alongside snapshot chunks, retaining events that occur between samples. Cosmetic projectile travel does not change tick damage resolution. Effects are derived from selected replay time and revision, so seeking, pausing and suffix replacement do not replay stale explosions or change authoritative state.
+
+## Player documentation build
+
+The player guide is a small static site served at `/guide/` and linked from the lobby. It is distinct from architecture documents under `docs/`. Proposed authored source is `client/guide/`; a small Rust generation command uses the shared content loader to emit stat tables and a content fingerprint, combined with concise prose into static HTML during the normal build. Bundle the result with the game’s static assets. Use the same normalized type definitions for simulation, client tooltips and guide tables; do not scrape prose or copy stat values into a second catalog.
+
+Build artifacts describe bundled content. At server startup, compare the effective content hash with the bundled guide. If runtime YAML overrides or a resumed match use different content, proposed fallback invokes the same generator once to emit static files keyed by that content hash. Publish them together with the match bootstrap; never serve mismatched tables as current stats. The guide route is selected for the current match, and replay links resolve against pinned archived content. The generation step can run without network access. Authored mechanics prose and hotkeys still need review against behavior; sharing stats alone does not prove every explanation is correct.
+
+Tables should use intrinsic tick-based values (health, cost, range, vision, move/attack cooldown, damage, mining/construction/production rates, movement neighbors, capabilities). If displaying derived per-second figures, calculate with the effective match tick rate using shared formulas and include that rate in the generated guide identity. Do not publish illustrative balance numbers as actual stats before content exists.
+
+## Lobby and stable server address
+
+Lobby state is versioned independently from battlefield revisions. Accepted username, color, slot and team changes broadcast one complete roster to players and spectators. Start validates the displayed lobby revision, connected/claimed slots and configured team constraints, then freezes identity/team metadata for the match. Reject a stale Start request with the refreshed roster so a last-moment team/color edit is visible before starting. No extra ready-up ceremony is required by this proposal.
+
+The server entry point parses a CLI port and binds that exact port for browser assets, guide, HTTP and WebSocket traffic. Proposed default 8080; fail instead of silently selecting another port. Relative client routes and a same-origin WebSocket keep the browser URL valid across restarts. Persist session slot tokens and roster metadata with the lobby/match; refreshing after resume restores identity and current phase. Bootstrap includes a server-instance identifier so stale jobs/responses from a previous process cannot be mistaken for the current instance. Explicit new-match startup may show a new lobby at the same address; do not promise the previous world survives without archive resume. Peripheral mode offers its own configurable local HTTP port and serves a guide matching its pinned content.

@@ -15,6 +15,7 @@ One coordinating agent owns shared contracts and integration. After contracts fr
   - [ ] Freeze versioned event/state/protocol schemas and causal identity encoding.
   - [ ] Scaffold Rust workspace/browser build, pin dependencies/toolchain, document launch commands.
   - [ ] Add normalized setup/content examples and fixture protocol messages.
+  - [ ] Shared content-loader guide generation at build; content-hash validation and runtime override/resume fallback.
   - [ ] Define golden tiny-world fixtures with expected actions and outcomes.
 - [ ] Deterministic world and simulation — simulation agent
   - [ ] Implement validated capability-based content and full initial roster.
@@ -32,7 +33,7 @@ One coordinating agent owns shared contracts and integration. After contracts fr
   - [ ] Team hostility/support/swaps with individual survival and ownership.
   - [ ] Checkpoint suffix replay equivalence and release benchmarks.
 - [ ] Match controller, worker and archive — server agent
-  - [ ] Static browser hosting, lobby slots/tokens/spectators, phase machine.
+  - [ ] Static browser/guide hosting, live lobby profiles/colors/team selection, slots/tokens/spectators, phase machine.
   - [ ] Commit validation/idempotency, future-order policy/window validation, group ownership/commands and whole-group/member suppression resolution, configured control limits.
   - [ ] Implement confirmed simultaneous Q2 turn sequencing; choose earliest changed tick across round.
   - [ ] Worker process protocol, bounded progress/batches, stale-result rejection.
@@ -40,7 +41,10 @@ One coordinating agent owns shared contracts and integration. After contracts fr
   - [ ] Q3 timed boundary, FFA/team survivor scoring, fixed-target/lead thresholds, configurable ties and draw scoring, thinking time and configurable penalties.
   - [ ] Atomic accepted-turn and round-result persistence, replay/resume CLI.
   - [ ] Reconnect, worker-failure retry and pending-round crash recovery.
+  - [ ] CLI port, same-origin routes, restart/resume at the same address with persisted roster.
 - [ ] Browser play experience — client agent
+  - [ ] Landing-page guide link, username/color input, team selection and full live roster.
+  - [ ] Concise player guide prose, generated unit tables and responsive static layout.
   - [ ] Grayscale canvas floor/walls, contrasting units/ore/structures, zoom/pan/WASD and minimap.
   - [ ] Unit health bars, last-move facing and minimal movement/attack/projectile/explosion playback.
   - [ ] Selection/shift/box, groups 0–9 with visible recipient mode, factory output binding and capability-aware panel.
@@ -73,7 +77,7 @@ One coordinating agent owns shared contracts and integration. After contracts fr
 | Coordinator | `crates/contracts`, root build files, shared fixtures/config, documentation | Settled decisions | Versioned schemas, compilable skeleton, integration harness, final assembled game |
 | Simulation | `crates/sim`, content validation implementation, sim benches | Contracts and content fixtures | Library implementing `SimRequest` to deterministic batches/result, replay tests, measured release performance |
 | Server | `crates/server`, worker-mode shell in `crates/runner`, archive code | Contracts; fake sim adapter until sim lands | Playable transport/lobby/commit flow, durable revisions, failure/recovery tests, launch command |
-| Client | `client/` | Protocol fixtures and a local mocked transport | Full interaction flow against fixtures and then server, build output and manual keyboard checklist |
+| Client | `client/` | Protocol fixtures and a local mocked transport | Full interaction flow and guide prose/layout against fixtures and then server, build output and manual keyboard checklist |
 | Peripheral (later) | Peripheral module in `crates/runner` | Integrated server/sim and frozen native fingerprint | Local endpoint, input relay, verification/reconnect demonstration |
 
 Server agent initially owns the runner entry point. Transfer runner ownership explicitly before peripheral implementation. Simulation agent must not independently change schema or fixture meanings; propose a contract change to the coordinator, who updates version/fixtures and informs all agents. Use mocks at process/library boundaries only; avoid maintaining two game engines.
@@ -105,3 +109,7 @@ Control-group acceptance: issue group order A, individually redirect member U to
 Visual acceptance: units/ore/orders contrast clearly against both gray terrain tones; health bars show damage at exact ticks; successful axis/diagonal movement updates facing while idle, blocked moves and attacks retain it. Seek/checkpoint replay restores facing after a long idle interval. Pause freezes effects, scrubbing and revision changes remove stale effects, and combat between sampled snapshots remains visible through events. Visual projectile duration never shifts damage timing or sim hashes. Dense combat/high playback rate remains readable with bounded effect counts. Inspect a replay containing death, artillery fire and allied swaps.
 
 Latest survival/scoring acceptance: an unfinished factory does not prevent elimination, but its surviving constructor continues building and restores the player on completion. A temporarily eliminated army can eliminate the opponent later, producing a draw instead of an early win. Continue even at zero current survivors if actions/future inputs can change state. Recovery followed by all players alive is stalemate and never scores. Full/checkpoint/peripheral replay preserves both transitions and final status; an immutable past elimination does not disable future recovery. For 2v2 all-eliminated endpoints, draw/none gives 0/0 and proposed draw/all_players gives 2/2; survivors remain empty in both. Default target tie at 5/5 continues, 6/5 ends; configured shared victory returns both at 5/5. Test complete same-round score reduction with draw/tie policies, and no duplicate awards after crash recovery.
+
+Guide/lobby handoff: coordinator owns shared loader/exporter and build wiring; client agent owns player-facing prose/layout; server agent owns guide selection, live roster persistence/broadcast and CLI port. Do not independently maintain a second stat schema or move fixed team selection back into YAML-only assignments.
+
+Acceptance: changing a unit stat rebuilds both sim content and guide table; runtime overrides and resumed archived stats serve a matching guide rather than bundled stale numbers. Validate guide links, readable roster tables and walkthrough against a real opening turn. In two player tabs plus spectator, username/color/team edits appear everywhere; a late join gets the complete roster and a stale Start is refreshed. Start freezes the visible accepted roster. Launch on a nondefault port, restart/resume on that port, and refresh existing tabs to recover identities/phase; reject an occupied port without changing URLs. Guide and WebSocket work at the same chosen origin. Profiles and documentation must not alter simulation hashes.
