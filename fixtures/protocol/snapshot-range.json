@@ -1,0 +1,92 @@
+{
+  "schema_version": 2,
+  "server_instance_id": "fixture-instance",
+  "message": {
+    "kind": "snapshot_range",
+    "revision": 2,
+    "index_width": 16,
+    "entity_dictionary": [
+      {
+        "id": {
+          "birth_command": {
+            "command": {
+              "round": 0,
+              "player": 0,
+              "index": 0
+            },
+            "target_index": 0
+          },
+          "item_index": 0,
+          "occurrence": 0
+        },
+        "owner": 0,
+        "type_key": "miner"
+      },
+      {
+        "id": {
+          "birth_command": {
+            "command": {
+              "round": 2,
+              "player": 0,
+              "index": 1
+            },
+            "target_index": 0
+          },
+          "item_index": 0,
+          "occurrence": 3
+        },
+        "owner": 0,
+        "type_key": "grunt"
+      }
+    ],
+    "samples": [
+      {
+        "tick": 155,
+        "players": [
+          {
+            "player_id": 0,
+            "bank": 298.0,
+            "currently_eliminated": false
+          },
+          {
+            "player_id": 1,
+            "bank": 200.0,
+            "currently_eliminated": false
+          }
+        ],
+        "entities": [
+          {
+            "index": 0,
+            "tile": {
+              "x": 4,
+              "y": 9
+            },
+            "hp": 60.0,
+            "facing": "s",
+            "lifecycle": "complete",
+            "activity": "mining",
+            "engaged": null
+          },
+          {
+            "index": 1,
+            "tile": {
+              "x": 9,
+              "y": 4
+            },
+            "hp": 45.0,
+            "facing": "e",
+            "lifecycle": "complete",
+            "activity": "movement",
+            "engaged": null
+          }
+        ],
+        "ore": [
+          {
+            "index": 434,
+            "remaining": 2360.0
+          }
+        ]
+      }
+    ]
+  }
+}

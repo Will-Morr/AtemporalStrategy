@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "server_instance_id": "fixture-instance",
+  "message": {
+    "kind": "events",
+    "revision": 2,
+    "events": [
+      {
+        "tick": 236,
+        "sequence": 12,
+        "event": {
+          "kind": "attack",
+          "attacker_id": {
+            "birth_command": {
+              "command": {
+                "round": 0,
+                "player": 1,
+                "index": 0
+              },
+              "target_index": 0
+            },
+            "item_index": 2,
+            "occurrence": 0
+          },
+          "source_tile": {
+            "x": 44,
+            "y": 44
+          },
+          "target_id": {
+            "birth_command": {
+              "command": {
+                "round": 2,
+                "player": 0,
+                "index": 1
+              },
+              "target_index": 0
+            },
+            "item_index": 0,
+            "occurrence": 0
+          },
+          "target_tile": {
+            "x": 41,
+            "y": 38
+          },
+          "visual_style": "direct"
+        }
+      },
+      {
+        "tick": 236,
+        "sequence": 13,
+        "event": {
+          "kind": "impact",
+          "target_tile": {
+            "x": 41,
+            "y": 38
+          },
+          "visual_style": "direct"
+        }
+      }
+    ]
+  }
+}

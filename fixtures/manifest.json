@@ -20,6 +20,10 @@
     "type": "ClientEnvelope"
   },
   {
+    "file": "fixtures/protocol/events.json",
+    "type": "ServerEnvelope"
+  },
+  {
     "file": "fixtures/protocol/exact-state.json",
     "type": "ServerEnvelope"
   },
@@ -45,6 +49,10 @@
   },
   {
     "file": "fixtures/protocol/revision-published.json",
+    "type": "ServerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/snapshot-range.json",
     "type": "ServerEnvelope"
   },
   {

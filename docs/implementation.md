@@ -4,7 +4,7 @@
 
 ## Execution policy
 
-The shared foundation and agent-neutral browser harness are implemented; see [provisional contracts](contracts-v2.md) and [development checks](development.md). The engine/server remain placeholders. Continue with one agent, or sequential agents sharing a real integration branch, to deliver a working sim/server/browser slice. Use real neighboring components from the outset; mocks are limited to targeted fault injection and protocol unit fixtures. Stabilize contracts after this slice works, before parallel breadth work. All engineering defaults remain revisable when implementation provides evidence.
+The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Breadth work may now start against the integrated slice. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.
 
 Complete the entire planned feature set—including roster, maps, game variants, groups, guide, graphs, replay and peripheral—before asking the user to play. Intermediate automated scenarios and agent-run browser checks are engineering verification, not a user playtest.
 
@@ -12,18 +12,18 @@ After Gate 2, the coordinator owns shared contracts/content/integration and star
 
 ## Nested implementation checklist
 
-- [ ] Establish the real vertical slice — one lead agent, before subsystem fan-out
+- [x] Establish the real vertical slice — one lead agent, before subsystem fan-out
   - [x] Scaffold the Rust workspace and browser build; pin toolchain/dependencies and document launch commands.
   - [x] Implement shared content validation and provisional contract types, causal tuple IDs and pre-tick state conventions.
-  - [ ] Use a small deterministic fixture map and enough real content for miner → constructor → factory → grunt production.
-  - [ ] Implement shared four/eight-neighbor destination BFS fields and bounded local stuck handling.
-  - [ ] Implement tick action/motion, mining/construction/production, basic combat and simple allied displacement.
-  - [ ] Run the actual sim library on a dedicated server thread with typed channels and per-tick cancellation.
-  - [ ] Serve a minimal browser with selection, attack-move, blueprint placement, queue, commit and timeline playback/seek.
-  - [ ] Stage/validate at any editable tick using exact in-process reconstruction, including non-sample ticks.
-  - [ ] Persist real accepted turns/results and rerun from a checkpoint after an earlier-tick rewrite.
-  - [ ] Measure Gate 2 round latency, cold seek and per-revision event/stat/snapshot size with export enabled.
-  - [ ] Stabilize versioned contracts and shared fixtures from the working slice, then assign breadth work.
+  - [x] Use a small deterministic fixture map and enough real content for miner → constructor → factory → grunt production.
+  - [x] Implement shared four/eight-neighbor destination BFS fields and bounded local stuck handling.
+  - [x] Implement tick action/motion, mining/construction/production, basic combat and simple allied displacement.
+  - [x] Run the actual sim library on a dedicated server thread with typed channels and per-tick cancellation.
+  - [x] Serve a minimal browser with selection, attack-move, blueprint placement, queue, commit and timeline playback/seek.
+  - [x] Stage/validate at any editable tick using exact in-process reconstruction, including non-sample ticks.
+  - [x] Persist real accepted turns/results and rerun from a checkpoint after an earlier-tick rewrite.
+  - [x] Measure Gate 2 round latency, cold seek and per-revision event/stat/snapshot size with export enabled.
+  - [x] Stabilize versioned contracts and shared fixtures from the working slice, then assign breadth work.
 - [ ] Complete deterministic simulation — simulation agent after Gate 2
   - [ ] Full capability-based roster and validated content, including constructor mining at 50% miner throughput.
   - [ ] Connected cave rooms/corridors, rotational symmetry, start access and configurable ore budgets.
@@ -88,7 +88,7 @@ Content loader/exporter has one owner. The guide depends on content; the sim nev
 
 Gate 1: provisional Rust/TypeScript schema fixtures and tiny worlds establish tick semantics, tuple identities and serialized data. Do not freeze the whole contract or fan out subsystem agents yet.
 
-Gate 2: real miner → factory blueprint → funded factory → produced grunt → attack works from browser commit through the in-process sim and back to timeline. Seek to a non-sample tick, issue an order there and verify partial resimulation against full replay. Measure actual event/stat/snapshot bytes and commit-to-playable/cold-seek latency with default-cap export before selecting retention budgets. Only then stabilize contracts and start breadth agents. This is an automated engineering milestone, not an early user playtest.
+Gate 2 (met): real miner → factory blueprint → funded factory → produced grunt → attack works from browser commit through the in-process sim and back to timeline. Seek to a non-sample tick, issue an order there and verify partial resimulation against full replay. Measure actual event/stat/snapshot bytes and commit-to-playable/cold-seek latency with default-cap export before selecting retention budgets. Verified by `crates/sim/tests`, `scripts/gate2-check.mjs` and `client/tests/ui/slice.spec.mjs`; numbers in [Gate 2 measurements](gate2-measurements.md). This was an automated engineering milestone, not an early user playtest.
 
 Gate 3: full/checkpoint/peripheral replay has identical hashes with one/four threads and cold/warm/evicted flow caches. Restore lock windows, targeting, cooldowns and bounded local detours. Clippy prohibits HashMap/HashSet in the sim. Compact transport dictionaries must not affect gameplay order or IDs.
 
@@ -114,15 +114,14 @@ Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick p
 
 ## Work that can run independently now
 
-One lead owns the real vertical slice across sim/server/client until Gate 2. The existing contracts, scoring/timed reducers, content loader, startup guide generator, authored world fixtures and browser harness are reusable foundations. They do not establish a playable slice or a durable server.
+Gate 2 is met, so the breadth assignments below are open. The slice already provides the real engine, server thread, archive, protocol and a playable client; breadth agents extend them in place rather than replacing them. Known slice limits to pick up: intents run serially (no bounded pool yet), the map generator supports two players only, archive resume and retention budgets are missing, stats are not bucketed server-side, allied displacement and radius-6 detours have no dedicated fixtures beyond the golden worlds, and the client lacks group-edit chords, graphs, per-round replay and the before/after comparison.
 
 | Timing | Bounded assignment | Ownership and handoff |
 | --- | --- | --- |
-| Now, alongside the slice lead | Browser harness/CI improvements | Browser scripts, `client/tests/ui`, CI artifact upload and browser-review docs. Coordinate shared package versions. Do not claim gameplay coverage until real controls exist. |
-| Now, alongside the slice lead | Read-only specification/contract review | Report gaps and concrete acceptance cases without independently editing shared contracts or locking proposals. |
-| After Gate 2 | Simulation breadth | `crates/sim`: roster/mechanics, flow-cache/thread/checkpoint equivalence and benchmarks. |
-| After Gate 2 | Controller/archive breadth | `crates/server`: lobby, job scheduling, durability/recovery, exact-state/range routes, runtime guide routing. |
-| After Gate 2 | Browser breadth | `client`: actual controls, timeline/graphs/replay and multi-player rendered UI review. |
+| Now | Simulation breadth | `crates/sim`: full roster/mechanics fixtures, parallel intents with cold/warm/thread equivalence, multi-player symmetric maps, benchmarks at 100/500/2,000 entities. |
+| Now | Controller/archive breadth | `crates/server`: teams/capacity in the lobby, bounded byte-accounted channels, retention/eviction with regeneration, archive resume/replay CLI, stats bucketing, failure injection. |
+| Now | Browser breadth | `client`: group-edit/binding chords, graphs, per-round replay viewer, before/after summaries, lock-effect previews, reconnect polish and multi-player rendered review. |
+| Now | Browser harness/CI improvements | Extend `client/tests/ui/slice.spec.mjs` rather than the scaffold test; keep screenshots as review evidence. |
 | Explicit later ownership transfer | Native peripheral | `crates/runner`, using the same real sim adapter/library and input contracts. |
 
 The coordinator retains shared content/contracts and merges changes sequentially. Compact transport, exact-state reconstruction and real lock application should be settled in the slice before separate owners depend on them. These assignments do not authorize an early user playtest.
