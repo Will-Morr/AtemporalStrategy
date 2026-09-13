@@ -1,0 +1,1277 @@
+/* Generated from Rust contracts by npm run generate. Do not edit. */
+
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ClientMessage".
+ */
+export type ClientMessage =
+  | {
+      kind: "hello";
+      last_revision?: number | null;
+      protocol_version: Version;
+      slot_token?: string | null;
+    }
+  | {
+      color: string;
+      kind: "claim_slot";
+      slot: number;
+      team_id?: string | null;
+      username: string;
+    }
+  | {
+      kind: "release_slot";
+      slot_token: string;
+    }
+  | {
+      color?: string | null;
+      kind: "update_lobby_profile";
+      request_id: string;
+      slot_token: string;
+      team_id?: string | null;
+      username?: string | null;
+    }
+  | {
+      based_on_lobby_revision: number;
+      kind: "start_match";
+      slot_token: string;
+    }
+  | {
+      kind: "planning_ready";
+      revision: number;
+      round: number;
+    }
+  | {
+      kind: "commit";
+      request: CommitRequest;
+    }
+  | {
+      from_tick: number;
+      kind: "get_snapshot_range";
+      revision: number;
+      stride: number;
+      to_tick: number;
+    }
+  | {
+      kind: "get_exact_state";
+      revision: number;
+      tick: number;
+    }
+  | {
+      bucket_width: number;
+      from_tick: number;
+      kind: "get_stats";
+      revision: number;
+      to_tick: number;
+    }
+  | {
+      based_on_revision: number;
+      draft_command: DraftCommand;
+      kind: "preview_future_orders";
+      preceding_commands: DraftCommand[];
+      tick: number;
+    }
+  | {
+      entity_ids: string[];
+      kind: "get_entity_order_history";
+      revision: number;
+    }
+  | {
+      kind: "get_control_groups";
+      player: number;
+      revision: number;
+      tick: number;
+    }
+  | {
+      group: ControlGroupId;
+      kind: "get_group_order_history";
+      revision: number;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Version".
+ */
+export type Version = number;
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Command".
+ */
+export type Command =
+  | {
+      entities: string[];
+      kind: "assign_order";
+      order: Order;
+    }
+  | {
+      group: ControlGroupId;
+      kind: "assign_group_order";
+      order: Order;
+    }
+  | {
+      edit: MemberEdit;
+      group: ControlGroupId;
+      kind: "edit_group_members";
+    }
+  | {
+      factories: string[];
+      group?: ControlGroupId | null;
+      kind: "bind_factory_group";
+    }
+  | {
+      entities: string[];
+      kind: "set_priority";
+      priority: Priority;
+    }
+  | {
+      kind: "place_blueprints";
+      priority: Priority;
+      tiles: Tile[];
+      type_key: string;
+    }
+  | {
+      blueprint_ids: string[];
+      kind: "cancel_blueprints";
+    }
+  | {
+      edit: ProductionEdit;
+      factories: string[];
+      kind: "edit_production";
+    }
+  | {
+      enabled: boolean;
+      factories: string[];
+      kind: "set_queue_loop";
+    }
+  | {
+      factories: string[];
+      kind: "set_stored_order";
+      order: Order;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Order".
+ */
+export type Order =
+  | {
+      kind: "idle";
+    }
+  | {
+      destination: Tile;
+      kind: "attack_move";
+    }
+  | {
+      kind: "support";
+      target: string;
+    }
+  | {
+      area: Rect;
+      kind: "mine";
+    }
+  | {
+      area: Rect;
+      kind: "construct";
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "GroupSlot".
+ */
+export type GroupSlot = number;
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MemberEdit".
+ */
+export type MemberEdit =
+  | {
+      entities: string[];
+      kind: "replace";
+    }
+  | {
+      entities: string[];
+      kind: "add";
+    }
+  | {
+      entities: string[];
+      kind: "remove";
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Priority".
+ */
+export type Priority = "high" | "medium" | "low";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ProductionEdit".
+ */
+export type ProductionEdit =
+  | {
+      items: string[];
+      kind: "append";
+    }
+  | {
+      items: string[];
+      kind: "replace_pending";
+    }
+  | {
+      item_ids: string[];
+      kind: "remove_pending";
+    }
+  | {
+      kind: "cancel_active";
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "FutureOrderPolicy".
+ */
+export type FutureOrderPolicy = "keep" | "drop_all" | "drop_window";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SkipReason".
+ */
+export type SkipReason = "absent" | "dead" | "wrong_owner" | "incompatible" | "blocked" | "missing_support_target";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "OutcomeKind".
+ */
+export type OutcomeKind = "stalemate" | "win" | "draw";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "StopReason".
+ */
+export type StopReason = "inactivity" | "absolute_horizon";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Reason".
+ */
+export type Reason = "no_active_building" | "no_build_ability";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SurvivalStatus".
+ */
+export type SurvivalStatus = "alive" | "eliminated";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SideId".
+ */
+export type SideId =
+  | {
+      kind: "player";
+      player_id: number;
+    }
+  | {
+      kind: "team";
+      team_id: string;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Direction".
+ */
+export type Direction = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Lifecycle".
+ */
+export type Lifecycle = "site" | "complete";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TerrainCell".
+ */
+export type TerrainCell = "floor" | "wall";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ControlLimit".
+ */
+export type ControlLimit = "timestamp" | "single_order";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Multiplayer".
+ */
+export type Multiplayer =
+  | {
+      kind: "ffa";
+    }
+  | {
+      assignments: TeamAssignment[];
+      kind: "teams";
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Objective".
+ */
+export type Objective =
+  | {
+      kind: "timed";
+      lock_ticks_per_round: number;
+    }
+  | {
+      kind: "scoreboard";
+      rules: ScoreboardRules;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "DrawScoring".
+ */
+export type DrawScoring = "none" | "all_players";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TiePolicy".
+ */
+export type TiePolicy = "continue_until_unique" | "shared_victory";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TimePenalty".
+ */
+export type TimePenalty = "none" | "fastest_opponent_ratio";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "VictoryRule".
+ */
+export type VictoryRule =
+  | {
+      kind: "fixed_target";
+      points: number;
+    }
+  | {
+      kind: "lead";
+      margin: number;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SafeInt".
+ */
+export type SafeInt = number;
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Transport".
+ */
+export type Transport = "authoritative" | "inputs_only";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TypeKind".
+ */
+export type TypeKind = "unit" | "structure";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Neighbors".
+ */
+export type Neighbors = "four" | "eight";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Shape".
+ */
+export type Shape = "circle" | "rectangle";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "VisualStyle".
+ */
+export type VisualStyle = "direct" | "artillery" | "melee";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SuppressionTarget".
+ */
+export type SuppressionTarget =
+  | {
+      entity_id: string;
+      kind: "entity_component";
+    }
+  | {
+      group: ControlGroupId;
+      kind: "entire_group_order";
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "AwardReason".
+ */
+export type AwardReason = "survival" | "draw" | "none";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ServerMessage".
+ */
+export type ServerMessage =
+  | {
+      config: MatchConfig;
+      fingerprint: Fingerprint;
+      guide_url: string;
+      kind: "welcome";
+      lobby: LobbyState;
+      match_id: string;
+      phase: Phase;
+    }
+  | {
+      kind: "slot_claimed";
+      private_token: string;
+      slot: number;
+    }
+  | {
+      kind: "lobby_updated";
+      lobby: LobbyState;
+    }
+  | {
+      code: string;
+      kind: "lobby_update_rejected";
+      lobby: LobbyState;
+      message: string;
+      request_id: string;
+    }
+  | {
+      available_through: number;
+      committed_players: number[];
+      editable_from: number;
+      kind: "planning_opened";
+      revision: number;
+      round: number;
+      time_totals: PlayerTime[];
+    }
+  | {
+      kind: "commit_accepted";
+      request_id: string;
+      round: number;
+    }
+  | {
+      code: string;
+      kind: "commit_rejected";
+      message: string;
+      request_id: string;
+    }
+  | {
+      end_tick: number;
+      kind: "simulation_progress";
+      revision: number;
+      tick: number;
+    }
+  | {
+      kind: "revision_published";
+      outcome: Outcome;
+      revision: number;
+      score?: RoundScore | null;
+      sim_duration_ms: SafeInt;
+      time_ratios: PlayerRatio[];
+      time_totals: PlayerTime[];
+      timeline_index: TimelineBucket[];
+    }
+  | {
+      kind: "snapshot_range";
+      revision: number;
+      samples: WorldState[];
+    }
+  | {
+      kind: "exact_state";
+      revision: number;
+      snapshot: WorldState;
+      tick: number;
+    }
+  | {
+      buckets: StatsSample[];
+      kind: "stats_range";
+      revision: number;
+    }
+  | {
+      final_outcome: Outcome;
+      kind: "match_finished";
+      match_winners: SideId[];
+      reason: string;
+    }
+  | {
+      affected_components: Suppression[];
+      counts_by_kind: {
+        [k: string]: number;
+      };
+      interval?: PreviewInterval | null;
+      kind: "future_orders_preview";
+      revision: number;
+    }
+  | {
+      components: HistoryComponent[];
+      kind: "order_history";
+      revision: number;
+    }
+  | {
+      groups: ControlGroupState[];
+      kind: "control_groups";
+      revision: number;
+      tick: number;
+    }
+  | {
+      config: MatchConfig;
+      content: Content;
+      fingerprint: Fingerprint;
+      initial_state: WorldState;
+      kind: "replay_bootstrap";
+      ledger: AcceptedTurn[];
+      precedence: RoundPrecedence[];
+    }
+  | {
+      editable_from: number;
+      kind: "round_inputs";
+      precedence: RoundPrecedence;
+      revision: number;
+      turns: AcceptedTurn[];
+    }
+  | {
+      hash: string;
+      kind: "reference_hash";
+      revision: number;
+      tick: number;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Phase".
+ */
+export type Phase = "lobby" | "planning" | "simulating" | "finished";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Activity".
+ */
+export type Activity = "combat" | "construction" | "mining" | "movement" | "idle";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorkerMessage".
+ */
+export type WorkerMessage =
+  | {
+      end_tick: number;
+      job_id: string;
+      kind: "progress";
+      revision: number;
+      tick: number;
+    }
+  | {
+      checkpoints: WorldState[];
+      events: WorldEvent[];
+      job_id: string;
+      kind: "batch";
+      revision: number;
+      snapshots: WorldState[];
+      stats: StatsSample[];
+    }
+  | {
+      command_outcomes: CommandOutcome[];
+      final_hash: string;
+      job_id: string;
+      kind: "complete";
+      outcome: Outcome;
+      revision: number;
+      sim_duration_ms: SafeInt;
+    }
+  | {
+      error_code: string;
+      job_id: string;
+      kind: "failed";
+      message: string;
+      revision: number;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PresentationEvent".
+ */
+export type PresentationEvent =
+  | {
+      entity_id: string;
+      from: Tile;
+      kind: "move";
+      to: Tile;
+    }
+  | {
+      attacker_id: string;
+      kind: "attack";
+      source_tile: Tile;
+      target_id: string;
+      target_tile: Tile;
+      visual_style: VisualStyle;
+    }
+  | {
+      kind: "impact";
+      target_tile: Tile;
+      visual_style: VisualStyle;
+    }
+  | {
+      entity_id: string;
+      kind: "destroyed";
+      tile: Tile;
+      visual_style: VisualStyle;
+    }
+  | {
+      kind: "survival";
+      transition: SurvivalTransition;
+    };
+
+export interface ContractCatalog {
+  client: ClientEnvelope;
+  golden: GoldenWorldFixture;
+  guide: GuideManifest;
+  score: RoundScore;
+  server: ServerEnvelope;
+  setup: Setup;
+  simulation: SimRequest;
+  worker: WorkerEnvelope;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ClientEnvelope".
+ */
+export interface ClientEnvelope {
+  message: ClientMessage;
+  schema_version: Version;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "CommitRequest".
+ */
+export interface CommitRequest {
+  draft: TurnDraft;
+  request_id: string;
+  slot_token: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TurnDraft".
+ */
+export interface TurnDraft {
+  based_on_revision: number;
+  commands: DraftCommand[];
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "DraftCommand".
+ */
+export interface DraftCommand {
+  command: Command;
+  future_orders: FutureOrderPolicy;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Tile".
+ */
+export interface Tile {
+  x: number;
+  y: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Rect".
+ */
+export interface Rect {
+  max: Tile;
+  min: Tile;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ControlGroupId".
+ */
+export interface ControlGroupId {
+  owner: number;
+  slot: GroupSlot;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "GoldenWorldFixture".
+ */
+export interface GoldenWorldFixture {
+  description: string;
+  expected: GoldenExpectation;
+  initial_hash: string;
+  name: string;
+  request: SimRequest;
+  schema_version: Version;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "GoldenExpectation".
+ */
+export interface GoldenExpectation {
+  command_outcomes: CommandOutcome[];
+  outcome: Outcome;
+  states: TickExpectation[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "CommandOutcome".
+ */
+export interface CommandOutcome {
+  applied_entities: string[];
+  command_id: string;
+  skipped: SkippedTarget[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SkippedTarget".
+ */
+export interface SkippedTarget {
+  entity_id?: string | null;
+  reason: SkipReason;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Outcome".
+ */
+export interface Outcome {
+  eliminated: number[];
+  kind: OutcomeKind;
+  last_progress_tick: number;
+  stop_reason: StopReason;
+  survival_transitions: SurvivalTransition[];
+  surviving_sides: SideId[];
+  survivors: number[];
+  terminal_state_tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SurvivalTransition".
+ */
+export interface SurvivalTransition {
+  player_id: number;
+  reasons: Reason[];
+  resolved_tick: number;
+  status: SurvivalStatus;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TickExpectation".
+ */
+export interface TickExpectation {
+  banks: ExpectedBank[];
+  entities: ExpectedEntity[];
+  groups: ControlGroupState[];
+  state_tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ExpectedBank".
+ */
+export interface ExpectedBank {
+  bank: number;
+  mined: number;
+  player_id: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ExpectedEntity".
+ */
+export interface ExpectedEntity {
+  action?: Order | null;
+  entity_id: string;
+  hp?: number | null;
+  paid_matter?: number | null;
+  present: boolean;
+  tile?: Tile | null;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ControlGroupState".
+ */
+export interface ControlGroupState {
+  id: ControlGroupId;
+  latest_order?: SavedOrder | null;
+  members: string[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SavedOrder".
+ */
+export interface SavedOrder {
+  order: Order;
+  source_command_id: string;
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SimRequest".
+ */
+export interface SimRequest {
+  checkpoint: WorldState;
+  config: MatchConfig;
+  content: Content;
+  end_tick_exclusive: number;
+  events: AcceptedTurn[];
+  fingerprint: Fingerprint;
+  job_id: string;
+  minimum_end_tick: number;
+  precedence: RoundPrecedence[];
+  revision: number;
+  schema_version: Version;
+  suppressions: Suppression[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorldState".
+ */
+export interface WorldState {
+  blueprints: Blueprint[];
+  control_groups: ControlGroupState[];
+  deterministic_identity_state: {
+    [k: string]: string;
+  };
+  entities: EntityState[];
+  inactivity_deadline: number;
+  last_progress_tick: number;
+  ore: number[];
+  players: PlayerState[];
+  rng_state: string;
+  schema_version: Version;
+  terrain: Terrain;
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Blueprint".
+ */
+export interface Blueprint {
+  id: string;
+  owner: number;
+  precedence: EventKey;
+  priority: Priority;
+  site_id?: string | null;
+  source_command_id: string;
+  tile: Tile;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "EventKey".
+ */
+export interface EventKey {
+  command_index: number;
+  player_rank: number;
+  round: number;
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "EntityState".
+ */
+export interface EntityState {
+  action: Order;
+  blueprint_id?: string | null;
+  hp: number;
+  id: string;
+  last_move_direction: Direction;
+  lifecycle: Lifecycle;
+  next_action_tick: number;
+  next_move_tick: number;
+  owner: number;
+  paid_matter: number;
+  priority: Priority;
+  production?: Production | null;
+  support_target?: string | null;
+  tile: Tile;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Production".
+ */
+export interface Production {
+  active_item?: ActiveItem | null;
+  loop_enabled: boolean;
+  occurrence_counters: {
+    [k: string]: number;
+  };
+  output_tile: Tile;
+  pending_items: QueueItem[];
+  spawn_group?: ControlGroupId | null;
+  stored_order: Order;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ActiveItem".
+ */
+export interface ActiveItem {
+  awaiting_output: boolean;
+  item_id: string;
+  occurrence: number;
+  paid_matter: number;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "QueueItem".
+ */
+export interface QueueItem {
+  item_id: string;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PlayerState".
+ */
+export interface PlayerState {
+  bank: number;
+  counters: SpendCounters;
+  currently_eliminated: boolean;
+  elimination_reasons: Reason[];
+  player_id: number;
+  status_since_tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SpendCounters".
+ */
+export interface SpendCounters {
+  damage_dealt: number;
+  destroyed_replacement_value: number;
+  lost_invested_matter: number;
+  mined: number;
+  structure_spend: number;
+  total_spend: number;
+  unit_spend: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Terrain".
+ */
+export interface Terrain {
+  cells: TerrainCell[];
+  height: number;
+  width: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MatchConfig".
+ */
+export interface MatchConfig {
+  checkpoint_interval: number;
+  control_limit: ControlLimit;
+  future_orders: FutureOrdersConfig;
+  map_size: number;
+  max_tick: number;
+  multiplayer: Multiplayer;
+  objective: Objective;
+  player_count: number;
+  replay_directory: string;
+  schema_version: Version;
+  seed: SafeInt;
+  simulation_threads: number;
+  snapshot_interval: number;
+  stall_ticks: number;
+  starting_matter: number;
+  symmetric: boolean;
+  ticks_per_second: number;
+  transport: Transport;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "FutureOrdersConfig".
+ */
+export interface FutureOrdersConfig {
+  window_ticks?: number | null;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TeamAssignment".
+ */
+export interface TeamAssignment {
+  player_id: number;
+  team_id: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ScoreboardRules".
+ */
+export interface ScoreboardRules {
+  draw_scoring: DrawScoring;
+  tie_policy: TiePolicy;
+  time_penalty: TimePenalty;
+  victory_rule: VictoryRule;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Content".
+ */
+export interface Content {
+  schema_version: Version;
+  starting_roster: string[];
+  types: TypeDefinition[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TypeDefinition".
+ */
+export interface TypeDefinition {
+  construction?: WorkRate | null;
+  counts_for_survival: boolean;
+  healing?: Healing | null;
+  key: string;
+  kind: TypeKind;
+  matter_cost: number;
+  max_hp: number;
+  mining?: WorkRate | null;
+  movement?: Movement | null;
+  production?: ProductionCapability | null;
+  provides_build_ability: boolean;
+  shape: Shape;
+  vision: number;
+  weapon?: Weapon | null;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorkRate".
+ */
+export interface WorkRate {
+  cooldown: number;
+  rate: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Healing".
+ */
+export interface Healing {
+  cooldown: number;
+  demand: number;
+  hp_per_matter: number;
+  range: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Movement".
+ */
+export interface Movement {
+  cooldown: number;
+  neighbors: Neighbors;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ProductionCapability".
+ */
+export interface ProductionCapability {
+  rate: number;
+  recipes: string[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Weapon".
+ */
+export interface Weapon {
+  cooldown: number;
+  damage: number;
+  indirect: boolean;
+  range: number;
+  visual_style: VisualStyle;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "AcceptedTurn".
+ */
+export interface AcceptedTurn {
+  commands: CommittedCommand[];
+  duration_ms: SafeInt;
+  player: number;
+  round: number;
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "CommittedCommand".
+ */
+export interface CommittedCommand {
+  command: Command;
+  future_orders: FutureOrderPolicy;
+  id: string;
+  suppressions: Suppression[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Suppression".
+ */
+export interface Suppression {
+  historical_command_id: string;
+  source_command_id: string;
+  target: SuppressionTarget;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Fingerprint".
+ */
+export interface Fingerprint {
+  config_hash: string;
+  content_hash: string;
+  schema_version: Version;
+  sim_build: string;
+  target: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "RoundPrecedence".
+ */
+export interface RoundPrecedence {
+  players: number[];
+  round: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "GuideManifest".
+ */
+export interface GuideManifest {
+  content_hash: string;
+  generated_files: {
+    [k: string]: string;
+  };
+  locale: string;
+  rules_build: string;
+  schema_version: Version;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "RoundScore".
+ */
+export interface RoundScore {
+  entries: ScoreEntry[];
+  match_winners: SideId[];
+  round: number;
+  victory_rule: VictoryRule;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ScoreEntry".
+ */
+export interface ScoreEntry {
+  adjusted_delta: number;
+  adjusted_total: number;
+  award_reason: AwardReason;
+  credited_players: number[];
+  raw_delta: number;
+  raw_total: number;
+  side_id: SideId;
+  surviving_members: number[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ServerEnvelope".
+ */
+export interface ServerEnvelope {
+  message: ServerMessage;
+  schema_version: Version;
+  server_instance_id: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "LobbyState".
+ */
+export interface LobbyState {
+  available_teams: AvailableTeam[];
+  can_start: boolean;
+  revision: number;
+  rule_summary: string;
+  slots: LobbySlot[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "AvailableTeam".
+ */
+export interface AvailableTeam {
+  capacity?: number | null;
+  label: string;
+  team_id: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "LobbySlot".
+ */
+export interface LobbySlot {
+  claimed: boolean;
+  connected: boolean;
+  profile?: PlayerProfile | null;
+  slot: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PlayerProfile".
+ */
+export interface PlayerProfile {
+  color: string;
+  player_id: number;
+  team_id?: string | null;
+  username: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PlayerTime".
+ */
+export interface PlayerTime {
+  player_id: number;
+  total_ms: SafeInt;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PlayerRatio".
+ */
+export interface PlayerRatio {
+  player_id: number;
+  ratio: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TimelineBucket".
+ */
+export interface TimelineBucket {
+  activity: Activity;
+  affected_entities: number;
+  from_tick: number;
+  player_id: number;
+  severity: number;
+  to_tick_exclusive: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "StatsSample".
+ */
+export interface StatsSample {
+  players: PlayerStats[];
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PlayerStats".
+ */
+export interface PlayerStats {
+  active_workers: number;
+  bank: number;
+  counters: SpendCounters;
+  entity_count: number;
+  living_army_value: number;
+  living_infrastructure_value: number;
+  player_id: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "PreviewInterval".
+ */
+export interface PreviewInterval {
+  after_tick: number;
+  through_tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "HistoryComponent".
+ */
+export interface HistoryComponent {
+  command: Command;
+  command_id: string;
+  suppressed_by: Suppression[];
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Setup".
+ */
+export interface Setup {
+  available_teams: AvailableTeam[];
+  default_port: number;
+  match_defaults: MatchConfig;
+  schema_version: Version;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorkerEnvelope".
+ */
+export interface WorkerEnvelope {
+  message: WorkerMessage;
+  schema_version: Version;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorldEvent".
+ */
+export interface WorldEvent {
+  event: PresentationEvent;
+  sequence: number;
+  tick: number;
+}

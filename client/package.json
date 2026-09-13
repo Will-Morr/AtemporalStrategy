@@ -1,0 +1,23 @@
+{
+  "name": "atemporal-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.23.2",
+    "npm": "10.9.8"
+  },
+  "scripts": {
+    "generate": "node ../scripts/generate.mjs",
+    "check": "tsc --noEmit",
+    "test": "node ../scripts/check-fixtures.mjs",
+    "build": "npm run generate && npm run check && node ../scripts/build-client.mjs",
+    "dev": "npm run build && node ../scripts/serve-client.mjs"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "esbuild": "0.25.10",
+    "json-schema-to-typescript": "15.0.4",
+    "typescript": "5.9.3"
+  }
+}

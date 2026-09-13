@@ -751,7 +751,8 @@ record!(ContractCatalog {
     simulation: SimRequest,
     setup: Setup,
     guide: GuideManifest,
-    score: RoundScore
+    score: RoundScore,
+    golden: GoldenWorldFixture
 });
 
 macro_rules! bounded_schema {
@@ -767,3 +768,20 @@ macro_rules! bounded_schema {
 bounded_schema!(Version, 1, 1);
 bounded_schema!(GroupSlot, 0, 9);
 bounded_schema!(SafeInt, 0, 9007199254740991_u64);
+
+record!(ExpectedEntity { entity_id: EntityId, present: bool, tile: Option<Tile>, hp: Option<f64>, paid_matter: Option<f64>, action: Option<Order> });
+record!(ExpectedBank {
+    player_id: PlayerId,
+    bank: f64,
+    mined: f64
+});
+record!(TickExpectation { state_tick: Tick, entities: Vec<ExpectedEntity>, banks: Vec<ExpectedBank>, groups: Vec<ControlGroupState> });
+record!(GoldenExpectation { outcome: Outcome, states: Vec<TickExpectation>, command_outcomes: Vec<CommandOutcome> });
+record!(GoldenWorldFixture {
+    schema_version: Version,
+    name: String,
+    description: String,
+    request: SimRequest,
+    initial_hash: String,
+    expected: GoldenExpectation
+});

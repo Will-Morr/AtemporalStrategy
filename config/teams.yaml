@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "match_defaults": {
+    "schema_version": 1,
+    "seed": 42,
+    "map_size": 48,
+    "player_count": 4,
+    "symmetric": true,
+    "multiplayer": {
+      "kind": "teams",
+      "assignments": [
+        {
+          "player_id": 0,
+          "team_id": "cyan"
+        },
+        {
+          "player_id": 1,
+          "team_id": "cyan"
+        },
+        {
+          "player_id": 2,
+          "team_id": "orange"
+        },
+        {
+          "player_id": 3,
+          "team_id": "orange"
+        }
+      ]
+    },
+    "objective": {
+      "kind": "scoreboard",
+      "rules": {
+        "victory_rule": {
+          "kind": "fixed_target",
+          "points": 5.0
+        },
+        "tie_policy": "continue_until_unique",
+        "draw_scoring": "none",
+        "time_penalty": "none"
+      }
+    },
+    "control_limit": "timestamp",
+    "future_orders": {
+      "window_ticks": 100
+    },
+    "max_tick": 100000,
+    "stall_ticks": 300,
+    "ticks_per_second": 10,
+    "starting_matter": 200.0,
+    "simulation_threads": 4,
+    "checkpoint_interval": 100,
+    "snapshot_interval": 5,
+    "transport": "authoritative",
+    "replay_directory": "replays"
+  },
+  "available_teams": [
+    {
+      "team_id": "cyan",
+      "label": "Cyan",
+      "capacity": 2
+    },
+    {
+      "team_id": "orange",
+      "label": "Orange",
+      "capacity": 2
+    }
+  ],
+  "default_port": 8080
+}

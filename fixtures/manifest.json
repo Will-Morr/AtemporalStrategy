@@ -1,0 +1,7 @@
+[
+  {"file":"fixtures/protocol/hello.json","type":"ClientEnvelope"},
+  {"file":"client/public/guide/manifest.json","type":"GuideManifest"},
+  {"file":"client/public/guide/content.json","type":"Content"},
+  {"file":"config/game.yaml","type":"Setup"},
+  {"file":"config/teams.yaml","type":"Setup"}
+]

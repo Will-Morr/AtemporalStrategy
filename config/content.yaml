@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "types": [
+    {
+      "key": "artillery",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 80.0,
+      "max_hp": 50.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": {
+        "neighbors": "four",
+        "cooldown": 6
+      },
+      "vision": 5.0,
+      "weapon": {
+        "damage": 35.0,
+        "range": 10.0,
+        "cooldown": 10,
+        "indirect": true,
+        "visual_style": "artillery"
+      },
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "constructor",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 40.0,
+      "max_hp": 80.0,
+      "counts_for_survival": false,
+      "provides_build_ability": true,
+      "movement": {
+        "neighbors": "eight",
+        "cooldown": 3
+      },
+      "vision": 5.0,
+      "weapon": null,
+      "mining": {
+        "rate": 1.0,
+        "cooldown": 1
+      },
+      "construction": {
+        "rate": 4.0,
+        "cooldown": 1
+      },
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "factory",
+      "kind": "structure",
+      "shape": "rectangle",
+      "matter_cost": 200.0,
+      "max_hp": 400.0,
+      "counts_for_survival": true,
+      "provides_build_ability": true,
+      "movement": null,
+      "vision": 5.0,
+      "weapon": null,
+      "mining": null,
+      "construction": null,
+      "production": {
+        "rate": 3.0,
+        "recipes": [
+          "artillery",
+          "constructor",
+          "grinder",
+          "grunt",
+          "miner",
+          "scout",
+          "tank"
+        ]
+      },
+      "healing": null
+    },
+    {
+      "key": "grinder",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 25.0,
+      "max_hp": 65.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": {
+        "neighbors": "eight",
+        "cooldown": 2
+      },
+      "vision": 5.0,
+      "weapon": {
+        "damage": 30.0,
+        "range": 1.4142135623730951,
+        "cooldown": 3,
+        "indirect": false,
+        "visual_style": "melee"
+      },
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "grunt",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 15.0,
+      "max_hp": 45.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": {
+        "neighbors": "eight",
+        "cooldown": 2
+      },
+      "vision": 5.0,
+      "weapon": {
+        "damage": 8.0,
+        "range": 3.0,
+        "cooldown": 3,
+        "indirect": false,
+        "visual_style": "direct"
+      },
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "miner",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 30.0,
+      "max_hp": 60.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": {
+        "neighbors": "four",
+        "cooldown": 3
+      },
+      "vision": 5.0,
+      "weapon": null,
+      "mining": {
+        "rate": 2.0,
+        "cooldown": 1
+      },
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "scout",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 20.0,
+      "max_hp": 35.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": {
+        "neighbors": "eight",
+        "cooldown": 1
+      },
+      "vision": 10.0,
+      "weapon": {
+        "damage": 3.0,
+        "range": 3.0,
+        "cooldown": 3,
+        "indirect": false,
+        "visual_style": "direct"
+      },
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "tank",
+      "kind": "unit",
+      "shape": "circle",
+      "matter_cost": 100.0,
+      "max_hp": 250.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": {
+        "neighbors": "four",
+        "cooldown": 4
+      },
+      "vision": 5.0,
+      "weapon": {
+        "damage": 25.0,
+        "range": 5.0,
+        "cooldown": 5,
+        "indirect": false,
+        "visual_style": "direct"
+      },
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "turret",
+      "kind": "structure",
+      "shape": "rectangle",
+      "matter_cost": 100.0,
+      "max_hp": 200.0,
+      "counts_for_survival": true,
+      "provides_build_ability": false,
+      "movement": null,
+      "vision": 8.0,
+      "weapon": {
+        "damage": 15.0,
+        "range": 7.0,
+        "cooldown": 4,
+        "indirect": false,
+        "visual_style": "direct"
+      },
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    },
+    {
+      "key": "wall",
+      "kind": "structure",
+      "shape": "rectangle",
+      "matter_cost": 10.0,
+      "max_hp": 150.0,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": null,
+      "vision": 0.0,
+      "weapon": null,
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null
+    }
+  ],
+  "starting_roster": [
+    "miner",
+    "constructor",
+    "turret"
+  ]
+}

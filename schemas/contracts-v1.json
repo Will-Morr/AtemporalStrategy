@@ -1,81 +1,47 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ContractCatalog",
-  "type": "object",
-  "properties": {
-    "client": {
-      "$ref": "#/$defs/ClientEnvelope"
-    },
-    "guide": {
-      "$ref": "#/$defs/GuideManifest"
-    },
-    "score": {
-      "$ref": "#/$defs/RoundScore"
-    },
-    "server": {
-      "$ref": "#/$defs/ServerEnvelope"
-    },
-    "setup": {
-      "$ref": "#/$defs/Setup"
-    },
-    "simulation": {
-      "$ref": "#/$defs/SimRequest"
-    },
-    "worker": {
-      "$ref": "#/$defs/WorkerEnvelope"
-    }
-  },
-  "additionalProperties": false,
-  "required": [
-    "client",
-    "server",
-    "worker",
-    "simulation",
-    "setup",
-    "guide",
-    "score"
-  ],
   "$defs": {
     "AcceptedTurn": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "commands": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/CommittedCommand"
-          }
+          },
+          "type": "array"
         },
         "duration_ms": {
           "$ref": "#/$defs/SafeInt"
         },
         "player": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "round": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player",
         "round",
         "tick",
         "commands",
         "duration_ms"
-      ]
+      ],
+      "type": "object"
     },
     "ActiveItem": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "awaiting_output": {
           "type": "boolean"
@@ -84,48 +50,49 @@
           "type": "string"
         },
         "occurrence": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "paid_matter": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "type_key": {
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "item_id",
         "occurrence",
         "type_key",
         "paid_matter",
         "awaiting_output"
-      ]
+      ],
+      "type": "object"
     },
     "Activity": {
-      "type": "string",
       "enum": [
         "combat",
         "construction",
         "mining",
         "movement",
         "idle"
-      ]
+      ],
+      "type": "string"
     },
     "AvailableTeam": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "capacity": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
-          ],
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
+          ]
         },
         "label": {
           "type": "string"
@@ -134,31 +101,31 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "team_id",
         "label"
-      ]
+      ],
+      "type": "object"
     },
     "AwardReason": {
-      "type": "string",
       "enum": [
         "survival",
         "draw",
         "none"
-      ]
+      ],
+      "type": "string"
     },
     "Blueprint": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "id": {
           "type": "string"
         },
         "owner": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "precedence": {
           "$ref": "#/$defs/EventKey"
@@ -182,7 +149,6 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "owner",
@@ -191,10 +157,11 @@
         "priority",
         "source_command_id",
         "precedence"
-      ]
+      ],
+      "type": "object"
     },
     "ClientEnvelope": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "message": {
           "$ref": "#/$defs/ClientMessage"
@@ -203,28 +170,29 @@
           "$ref": "#/$defs/Version"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "message"
-      ]
+      ],
+      "type": "object"
     },
     "ClientMessage": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "hello"
+              "const": "hello",
+              "type": "string"
             },
             "last_revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
               "type": [
                 "integer",
                 "null"
-              ],
-              "format": "uint32",
-              "minimum": 0
+              ]
             },
             "protocol_version": {
               "$ref": "#/$defs/Version"
@@ -236,27 +204,27 @@
               ]
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "protocol_version"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "color": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "claim_slot"
+              "const": "claim_slot",
+              "type": "string"
             },
             "slot": {
-              "type": "integer",
               "format": "uint8",
               "maximum": 255,
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             },
             "team_id": {
               "type": [
@@ -268,33 +236,33 @@
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "slot",
             "username",
             "color"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "release_slot"
+              "const": "release_slot",
+              "type": "string"
             },
             "slot_token": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "slot_token"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "color": {
               "type": [
@@ -303,8 +271,8 @@
               ]
             },
             "kind": {
-              "type": "string",
-              "const": "update_lobby_profile"
+              "const": "update_lobby_profile",
+              "type": "string"
             },
             "request_id": {
               "type": "string"
@@ -325,345 +293,364 @@
               ]
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "request_id",
             "slot_token"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "based_on_lobby_revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "kind": {
-              "type": "string",
-              "const": "start_match"
+              "const": "start_match",
+              "type": "string"
             },
             "slot_token": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "slot_token",
             "based_on_lobby_revision"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "planning_ready"
+              "const": "planning_ready",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "round": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "round",
             "revision"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "commit"
+              "const": "commit",
+              "type": "string"
             },
             "request": {
               "$ref": "#/$defs/CommitRequest"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "request"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "from_tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "kind": {
-              "type": "string",
-              "const": "get_snapshot_range"
+              "const": "get_snapshot_range",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "stride": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "to_tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "from_tick",
             "to_tick",
             "stride"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "get_exact_state"
+              "const": "get_exact_state",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "tick"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "bucket_width": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "from_tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "kind": {
-              "type": "string",
-              "const": "get_stats"
+              "const": "get_stats",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "to_tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "from_tick",
             "to_tick",
             "bucket_width"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "based_on_revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "draft_command": {
               "$ref": "#/$defs/DraftCommand"
             },
             "kind": {
-              "type": "string",
-              "const": "preview_future_orders"
+              "const": "preview_future_orders",
+              "type": "string"
             },
             "preceding_commands": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/DraftCommand"
-              }
+              },
+              "type": "array"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "based_on_revision",
             "tick",
             "draft_command",
             "preceding_commands"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entity_ids": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "get_entity_order_history"
+              "const": "get_entity_order_history",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "entity_ids"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "get_control_groups"
+              "const": "get_control_groups",
+              "type": "string"
             },
             "player": {
-              "type": "integer",
               "format": "uint8",
               "maximum": 255,
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "tick",
             "player"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "group": {
               "$ref": "#/$defs/ControlGroupId"
             },
             "kind": {
-              "type": "string",
-              "const": "get_group_order_history"
+              "const": "get_group_order_history",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "group"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "Command": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entities": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "assign_order"
+              "const": "assign_order",
+              "type": "string"
             },
             "order": {
               "$ref": "#/$defs/Order"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entities",
             "order"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "group": {
               "$ref": "#/$defs/ControlGroupId"
             },
             "kind": {
-              "type": "string",
-              "const": "assign_group_order"
+              "const": "assign_group_order",
+              "type": "string"
             },
             "order": {
               "$ref": "#/$defs/Order"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group",
             "order"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "edit": {
               "$ref": "#/$defs/MemberEdit"
@@ -672,25 +659,25 @@
               "$ref": "#/$defs/ControlGroupId"
             },
             "kind": {
-              "type": "string",
-              "const": "edit_group_members"
+              "const": "edit_group_members",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group",
             "edit"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "factories": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "group": {
               "anyOf": [
@@ -703,190 +690,190 @@
               ]
             },
             "kind": {
-              "type": "string",
-              "const": "bind_factory_group"
+              "const": "bind_factory_group",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "factories"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entities": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "set_priority"
+              "const": "set_priority",
+              "type": "string"
             },
             "priority": {
               "$ref": "#/$defs/Priority"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entities",
             "priority"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "place_blueprints"
+              "const": "place_blueprints",
+              "type": "string"
             },
             "priority": {
               "$ref": "#/$defs/Priority"
             },
             "tiles": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/Tile"
-              }
+              },
+              "type": "array"
             },
             "type_key": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "type_key",
             "tiles",
             "priority"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "blueprint_ids": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "cancel_blueprints"
+              "const": "cancel_blueprints",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "blueprint_ids"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "edit": {
               "$ref": "#/$defs/ProductionEdit"
             },
             "factories": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "edit_production"
+              "const": "edit_production",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "factories",
             "edit"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "enabled": {
               "type": "boolean"
             },
             "factories": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "set_queue_loop"
+              "const": "set_queue_loop",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "factories",
             "enabled"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "factories": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "set_stored_order"
+              "const": "set_stored_order",
+              "type": "string"
             },
             "order": {
               "$ref": "#/$defs/Order"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "factories",
             "order"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "CommandOutcome": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "applied_entities": {
-          "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "type": "array"
         },
         "command_id": {
           "type": "string"
         },
         "skipped": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/SkippedTarget"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "command_id",
         "applied_entities",
         "skipped"
-      ]
+      ],
+      "type": "object"
     },
     "CommitRequest": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "draft": {
           "$ref": "#/$defs/TurnDraft"
@@ -898,15 +885,15 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "request_id",
         "slot_token",
         "draft"
-      ]
+      ],
+      "type": "object"
     },
     "CommittedCommand": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "command": {
           "$ref": "#/$defs/Command"
@@ -918,67 +905,67 @@
           "type": "string"
         },
         "suppressions": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/Suppression"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "command",
         "future_orders",
         "suppressions"
-      ]
+      ],
+      "type": "object"
     },
     "Content": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "schema_version": {
           "$ref": "#/$defs/Version"
         },
         "starting_roster": {
-          "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "type": "array"
         },
         "types": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/TypeDefinition"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "types",
         "starting_roster"
-      ]
+      ],
+      "type": "object"
     },
     "ControlGroupId": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "owner": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "slot": {
           "$ref": "#/$defs/GroupSlot"
         }
       },
-      "additionalProperties": false,
       "required": [
         "owner",
         "slot"
-      ]
+      ],
+      "type": "object"
     },
     "ControlGroupState": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "id": {
           "$ref": "#/$defs/ControlGroupId"
@@ -994,27 +981,26 @@
           ]
         },
         "members": {
-          "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "members"
-      ]
+      ],
+      "type": "object"
     },
     "ControlLimit": {
-      "type": "string",
       "enum": [
         "timestamp",
         "single_order"
-      ]
+      ],
+      "type": "string"
     },
     "Direction": {
-      "type": "string",
       "enum": [
         "n",
         "ne",
@@ -1024,10 +1010,11 @@
         "sw",
         "w",
         "nw"
-      ]
+      ],
+      "type": "string"
     },
     "DraftCommand": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "command": {
           "$ref": "#/$defs/Command"
@@ -1036,21 +1023,21 @@
           "$ref": "#/$defs/FutureOrderPolicy"
         }
       },
-      "additionalProperties": false,
       "required": [
         "command",
         "future_orders"
-      ]
+      ],
+      "type": "object"
     },
     "DrawScoring": {
-      "type": "string",
       "enum": [
         "none",
         "all_players"
-      ]
+      ],
+      "type": "string"
     },
     "EntityState": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "action": {
           "$ref": "#/$defs/Order"
@@ -1062,8 +1049,8 @@
           ]
         },
         "hp": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "id": {
           "type": "string"
@@ -1075,24 +1062,26 @@
           "$ref": "#/$defs/Lifecycle"
         },
         "next_action_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "next_move_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "owner": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "paid_matter": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "priority": {
           "$ref": "#/$defs/Priority"
@@ -1120,7 +1109,6 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "owner",
@@ -1134,43 +1122,122 @@
         "priority",
         "next_action_tick",
         "next_move_tick"
-      ]
+      ],
+      "type": "object"
     },
     "EventKey": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "command_index": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "player_rank": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "round": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "tick",
         "round",
         "player_rank",
         "command_index"
-      ]
+      ],
+      "type": "object"
+    },
+    "ExpectedBank": {
+      "additionalProperties": false,
+      "properties": {
+        "bank": {
+          "format": "double",
+          "type": "number"
+        },
+        "mined": {
+          "format": "double",
+          "type": "number"
+        },
+        "player_id": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "player_id",
+        "bank",
+        "mined"
+      ],
+      "type": "object"
+    },
+    "ExpectedEntity": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Order"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "hp": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "paid_matter": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "tile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "entity_id",
+        "present"
+      ],
+      "type": "object"
     },
     "Fingerprint": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "config_hash": {
           "type": "string"
@@ -1188,53 +1255,112 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "sim_build",
         "target",
         "config_hash",
         "content_hash"
-      ]
+      ],
+      "type": "object"
     },
     "FutureOrderPolicy": {
-      "type": "string",
       "enum": [
         "keep",
         "drop_all",
         "drop_window"
-      ]
+      ],
+      "type": "string"
     },
     "FutureOrdersConfig": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "window_ticks": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
+          ]
         }
       },
-      "additionalProperties": false
+      "type": "object"
+    },
+    "GoldenExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "command_outcomes": {
+          "items": {
+            "$ref": "#/$defs/CommandOutcome"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "states": {
+          "items": {
+            "$ref": "#/$defs/TickExpectation"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "outcome",
+        "states",
+        "command_outcomes"
+      ],
+      "type": "object"
+    },
+    "GoldenWorldFixture": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "expected": {
+          "$ref": "#/$defs/GoldenExpectation"
+        },
+        "initial_hash": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "request": {
+          "$ref": "#/$defs/SimRequest"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "description",
+        "request",
+        "initial_hash",
+        "expected"
+      ],
+      "type": "object"
     },
     "GroupSlot": {
-      "type": "integer",
       "maximum": 9,
-      "minimum": 0
+      "minimum": 0,
+      "type": "integer"
     },
     "GuideManifest": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "content_hash": {
           "type": "string"
         },
         "generated_files": {
-          "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "type": "object"
         },
         "locale": {
           "type": "string"
@@ -1246,46 +1372,47 @@
           "$ref": "#/$defs/Version"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "content_hash",
         "rules_build",
         "locale",
         "generated_files"
-      ]
+      ],
+      "type": "object"
     },
     "Healing": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "cooldown": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "demand": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "hp_per_matter": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "range": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         }
       },
-      "additionalProperties": false,
       "required": [
         "range",
         "hp_per_matter",
         "demand",
         "cooldown"
-      ]
+      ],
+      "type": "object"
     },
     "HistoryComponent": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "command": {
           "$ref": "#/$defs/Command"
@@ -1294,34 +1421,35 @@
           "type": "string"
         },
         "suppressed_by": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/Suppression"
-          }
+          },
+          "type": "array"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "tick",
         "command_id",
         "command",
         "suppressed_by"
-      ]
+      ],
+      "type": "object"
     },
     "Lifecycle": {
-      "type": "string",
       "enum": [
         "site",
         "complete"
-      ]
+      ],
+      "type": "string"
     },
     "LobbySlot": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "claimed": {
           "type": "boolean"
@@ -1340,62 +1468,64 @@
           ]
         },
         "slot": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "slot",
         "claimed",
         "connected"
-      ]
+      ],
+      "type": "object"
     },
     "LobbyState": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "available_teams": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/AvailableTeam"
-          }
+          },
+          "type": "array"
         },
         "can_start": {
           "type": "boolean"
         },
         "revision": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "rule_summary": {
           "type": "string"
         },
         "slots": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/LobbySlot"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "revision",
         "slots",
         "available_teams",
         "can_start",
         "rule_summary"
-      ]
+      ],
+      "type": "object"
     },
     "MatchConfig": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "checkpoint_interval": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "control_limit": {
           "$ref": "#/$defs/ControlLimit"
@@ -1404,15 +1534,16 @@
           "$ref": "#/$defs/FutureOrdersConfig"
         },
         "map_size": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "max_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "multiplayer": {
           "$ref": "#/$defs/Multiplayer"
@@ -1421,10 +1552,10 @@
           "$ref": "#/$defs/Objective"
         },
         "player_count": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "replay_directory": {
           "type": "string"
@@ -1436,38 +1567,40 @@
           "$ref": "#/$defs/SafeInt"
         },
         "simulation_threads": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "snapshot_interval": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "stall_ticks": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "starting_matter": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "symmetric": {
           "type": "boolean"
         },
         "ticks_per_second": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "transport": {
           "$ref": "#/$defs/Transport"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "seed",
@@ -1487,310 +1620,314 @@
         "snapshot_interval",
         "transport",
         "replay_directory"
-      ]
+      ],
+      "type": "object"
     },
     "MemberEdit": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entities": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "replace"
+              "const": "replace",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entities"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entities": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "add"
+              "const": "add",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entities"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entities": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "remove"
+              "const": "remove",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entities"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "Movement": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "cooldown": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "neighbors": {
           "$ref": "#/$defs/Neighbors"
         }
       },
-      "additionalProperties": false,
       "required": [
         "neighbors",
         "cooldown"
-      ]
+      ],
+      "type": "object"
     },
     "Multiplayer": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "ffa"
+              "const": "ffa",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "assignments": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/TeamAssignment"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "teams"
+              "const": "teams",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "assignments"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "Neighbors": {
-      "type": "string",
       "enum": [
         "four",
         "eight"
-      ]
+      ],
+      "type": "string"
     },
     "Objective": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "timed"
+              "const": "timed",
+              "type": "string"
             },
             "lock_ticks_per_round": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "lock_ticks_per_round"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "scoreboard"
+              "const": "scoreboard",
+              "type": "string"
             },
             "rules": {
               "$ref": "#/$defs/ScoreboardRules"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "rules"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "Order": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "idle"
+              "const": "idle",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "destination": {
               "$ref": "#/$defs/Tile"
             },
             "kind": {
-              "type": "string",
-              "const": "attack_move"
+              "const": "attack_move",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "destination"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "support"
+              "const": "support",
+              "type": "string"
             },
             "target": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "target"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "area": {
               "$ref": "#/$defs/Rect"
             },
             "kind": {
-              "type": "string",
-              "const": "mine"
+              "const": "mine",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "area"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "area": {
               "$ref": "#/$defs/Rect"
             },
             "kind": {
-              "type": "string",
-              "const": "construct"
+              "const": "construct",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "area"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "Outcome": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "eliminated": {
-          "type": "array",
           "items": {
-            "type": "integer",
             "format": "uint8",
             "maximum": 255,
-            "minimum": 0
-          }
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
         },
         "kind": {
           "$ref": "#/$defs/OutcomeKind"
         },
         "last_progress_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "stop_reason": {
           "$ref": "#/$defs/StopReason"
         },
         "survival_transitions": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/SurvivalTransition"
-          }
+          },
+          "type": "array"
         },
         "surviving_sides": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/SideId"
-          }
+          },
+          "type": "array"
         },
         "survivors": {
-          "type": "array",
           "items": {
-            "type": "integer",
             "format": "uint8",
             "maximum": 255,
-            "minimum": 0
-          }
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
         },
         "terminal_state_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "kind",
         "stop_reason",
@@ -1800,36 +1937,37 @@
         "eliminated",
         "surviving_sides",
         "survival_transitions"
-      ]
+      ],
+      "type": "object"
     },
     "OutcomeKind": {
-      "type": "string",
       "enum": [
         "stalemate",
         "win",
         "draw"
-      ]
+      ],
+      "type": "string"
     },
     "Phase": {
-      "type": "string",
       "enum": [
         "lobby",
         "planning",
         "simulating",
         "finished"
-      ]
+      ],
+      "type": "string"
     },
     "PlayerProfile": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "color": {
           "type": "string"
         },
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "team_id": {
           "type": [
@@ -1841,39 +1979,39 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "username",
         "color"
-      ]
+      ],
+      "type": "object"
     },
     "PlayerRatio": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "ratio": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "ratio"
-      ]
+      ],
+      "type": "object"
     },
     "PlayerState": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "bank": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "counters": {
           "$ref": "#/$defs/SpendCounters"
@@ -1882,24 +2020,24 @@
           "type": "boolean"
         },
         "elimination_reasons": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/Reason"
-          }
+          },
+          "type": "array"
         },
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "status_since_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "bank",
@@ -1907,44 +2045,46 @@
         "currently_eliminated",
         "status_since_tick",
         "elimination_reasons"
-      ]
+      ],
+      "type": "object"
     },
     "PlayerStats": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "active_workers": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "bank": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "counters": {
           "$ref": "#/$defs/SpendCounters"
         },
         "entity_count": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "living_army_value": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "living_infrastructure_value": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "bank",
@@ -1953,31 +2093,32 @@
         "living_infrastructure_value",
         "entity_count",
         "active_workers"
-      ]
+      ],
+      "type": "object"
     },
     "PlayerTime": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "total_ms": {
           "$ref": "#/$defs/SafeInt"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "total_ms"
-      ]
+      ],
+      "type": "object"
     },
     "PresentationEvent": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entity_id": {
               "type": "string"
@@ -1986,30 +2127,30 @@
               "$ref": "#/$defs/Tile"
             },
             "kind": {
-              "type": "string",
-              "const": "move"
+              "const": "move",
+              "type": "string"
             },
             "to": {
               "$ref": "#/$defs/Tile"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entity_id",
             "from",
             "to"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "attacker_id": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "attack"
+              "const": "attack",
+              "type": "string"
             },
             "source_tile": {
               "$ref": "#/$defs/Tile"
@@ -2024,7 +2165,6 @@
               "$ref": "#/$defs/VisualStyle"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "attacker_id",
@@ -2032,14 +2172,15 @@
             "target_id",
             "target_tile",
             "visual_style"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "impact"
+              "const": "impact",
+              "type": "string"
             },
             "target_tile": {
               "$ref": "#/$defs/Tile"
@@ -2048,22 +2189,22 @@
               "$ref": "#/$defs/VisualStyle"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "target_tile",
             "visual_style"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entity_id": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "destroyed"
+              "const": "destroyed",
+              "type": "string"
             },
             "tile": {
               "$ref": "#/$defs/Tile"
@@ -2072,63 +2213,65 @@
               "$ref": "#/$defs/VisualStyle"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entity_id",
             "tile",
             "visual_style"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "survival"
+              "const": "survival",
+              "type": "string"
             },
             "transition": {
               "$ref": "#/$defs/SurvivalTransition"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "transition"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "PreviewInterval": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "after_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "through_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "after_tick",
         "through_tick"
-      ]
+      ],
+      "type": "object"
     },
     "Priority": {
-      "type": "string",
       "enum": [
         "high",
         "medium",
         "low"
-      ]
+      ],
+      "type": "string"
     },
     "Production": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "active_item": {
           "anyOf": [
@@ -2144,21 +2287,22 @@
           "type": "boolean"
         },
         "occurrence_counters": {
-          "type": "object",
           "additionalProperties": {
-            "type": "integer",
             "format": "uint32",
-            "minimum": 0
-          }
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "object"
         },
         "output_tile": {
           "$ref": "#/$defs/Tile"
         },
         "pending_items": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/QueueItem"
-          }
+          },
+          "type": "array"
         },
         "spawn_group": {
           "anyOf": [
@@ -2174,114 +2318,114 @@
           "$ref": "#/$defs/Order"
         }
       },
-      "additionalProperties": false,
       "required": [
         "pending_items",
         "loop_enabled",
         "stored_order",
         "output_tile",
         "occurrence_counters"
-      ]
+      ],
+      "type": "object"
     },
     "ProductionCapability": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "rate": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "recipes": {
-          "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "rate",
         "recipes"
-      ]
+      ],
+      "type": "object"
     },
     "ProductionEdit": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "items": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "append"
+              "const": "append",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "items"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "items": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "replace_pending"
+              "const": "replace_pending",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "items"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "item_ids": {
-              "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "remove_pending"
+              "const": "remove_pending",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "item_ids"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "cancel_active"
+              "const": "cancel_active",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "QueueItem": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "item_id": {
           "type": "string"
@@ -2290,21 +2434,21 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "item_id",
         "type_key"
-      ]
+      ],
+      "type": "object"
     },
     "Reason": {
-      "type": "string",
       "enum": [
         "no_active_building",
         "no_build_ability"
-      ]
+      ],
+      "type": "string"
     },
     "Rect": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "max": {
           "$ref": "#/$defs/Tile"
@@ -2313,75 +2457,77 @@
           "$ref": "#/$defs/Tile"
         }
       },
-      "additionalProperties": false,
       "required": [
         "min",
         "max"
-      ]
+      ],
+      "type": "object"
     },
     "RoundPrecedence": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "players": {
-          "type": "array",
           "items": {
-            "type": "integer",
             "format": "uint8",
             "maximum": 255,
-            "minimum": 0
-          }
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
         },
         "round": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "round",
         "players"
-      ]
+      ],
+      "type": "object"
     },
     "RoundScore": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "entries": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/ScoreEntry"
-          }
+          },
+          "type": "array"
         },
         "match_winners": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/SideId"
-          }
+          },
+          "type": "array"
         },
         "round": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "victory_rule": {
           "$ref": "#/$defs/VictoryRule"
         }
       },
-      "additionalProperties": false,
       "required": [
         "round",
         "entries",
         "victory_rule",
         "match_winners"
-      ]
+      ],
+      "type": "object"
     },
     "SafeInt": {
-      "type": "integer",
       "maximum": 9007199254740991,
-      "minimum": 0
+      "minimum": 0,
+      "type": "integer"
     },
     "SavedOrder": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "order": {
           "$ref": "#/$defs/Order"
@@ -2390,63 +2536,63 @@
           "type": "string"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "source_command_id",
         "tick",
         "order"
-      ]
+      ],
+      "type": "object"
     },
     "ScoreEntry": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "adjusted_delta": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "adjusted_total": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "award_reason": {
           "$ref": "#/$defs/AwardReason"
         },
         "credited_players": {
-          "type": "array",
           "items": {
-            "type": "integer",
             "format": "uint8",
             "maximum": 255,
-            "minimum": 0
-          }
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
         },
         "raw_delta": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "raw_total": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "side_id": {
           "$ref": "#/$defs/SideId"
         },
         "surviving_members": {
-          "type": "array",
           "items": {
-            "type": "integer",
             "format": "uint8",
             "maximum": 255,
-            "minimum": 0
-          }
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "side_id",
         "surviving_members",
@@ -2456,10 +2602,11 @@
         "adjusted_delta",
         "raw_total",
         "adjusted_total"
-      ]
+      ],
+      "type": "object"
     },
     "ScoreboardRules": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "draw_scoring": {
           "$ref": "#/$defs/DrawScoring"
@@ -2474,16 +2621,16 @@
           "$ref": "#/$defs/VictoryRule"
         }
       },
-      "additionalProperties": false,
       "required": [
         "victory_rule",
         "tie_policy",
         "draw_scoring",
         "time_penalty"
-      ]
+      ],
+      "type": "object"
     },
     "ServerEnvelope": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "message": {
           "$ref": "#/$defs/ServerMessage"
@@ -2495,17 +2642,17 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "server_instance_id",
         "message"
-      ]
+      ],
+      "type": "object"
     },
     "ServerMessage": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "config": {
               "$ref": "#/$defs/MatchConfig"
@@ -2517,8 +2664,8 @@
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "welcome"
+              "const": "welcome",
+              "type": "string"
             },
             "lobby": {
               "$ref": "#/$defs/LobbyState"
@@ -2530,7 +2677,6 @@
               "$ref": "#/$defs/Phase"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "match_id",
@@ -2539,58 +2685,59 @@
             "lobby",
             "fingerprint",
             "guide_url"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "slot_claimed"
+              "const": "slot_claimed",
+              "type": "string"
             },
             "private_token": {
               "type": "string"
             },
             "slot": {
-              "type": "integer",
               "format": "uint8",
               "maximum": 255,
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "slot",
             "private_token"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "lobby_updated"
+              "const": "lobby_updated",
+              "type": "string"
             },
             "lobby": {
               "$ref": "#/$defs/LobbyState"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "lobby"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "code": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "lobby_update_rejected"
+              "const": "lobby_update_rejected",
+              "type": "string"
             },
             "lobby": {
               "$ref": "#/$defs/LobbyState"
@@ -2602,59 +2749,62 @@
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "request_id",
             "code",
             "message",
             "lobby"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "available_through": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "committed_players": {
-              "type": "array",
               "items": {
-                "type": "integer",
                 "format": "uint8",
                 "maximum": 255,
-                "minimum": 0
-              }
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
             },
             "editable_from": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "kind": {
-              "type": "string",
-              "const": "planning_opened"
+              "const": "planning_opened",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "round": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "time_totals": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/PlayerTime"
-              }
+              },
+              "type": "array"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "round",
@@ -2663,40 +2813,42 @@
             "available_through",
             "committed_players",
             "time_totals"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "commit_accepted"
+              "const": "commit_accepted",
+              "type": "string"
             },
             "request_id": {
               "type": "string"
             },
             "round": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "request_id",
             "round"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "code": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "commit_rejected"
+              "const": "commit_rejected",
+              "type": "string"
             },
             "message": {
               "type": "string"
@@ -2705,59 +2857,63 @@
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "request_id",
             "code",
             "message"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "end_tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "kind": {
-              "type": "string",
-              "const": "simulation_progress"
+              "const": "simulation_progress",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "tick",
             "end_tick"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "revision_published"
+              "const": "revision_published",
+              "type": "string"
             },
             "outcome": {
               "$ref": "#/$defs/Outcome"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "score": {
               "anyOf": [
@@ -2773,25 +2929,24 @@
               "$ref": "#/$defs/SafeInt"
             },
             "time_ratios": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/PlayerRatio"
-              }
+              },
+              "type": "array"
             },
             "time_totals": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/PlayerTime"
-              }
+              },
+              "type": "array"
             },
             "timeline_index": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/TimelineBucket"
-              }
+              },
+              "type": "array"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
@@ -2800,133 +2955,139 @@
             "time_totals",
             "time_ratios",
             "sim_duration_ms"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "snapshot_range"
+              "const": "snapshot_range",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "samples": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/WorldState"
-              }
+              },
+              "type": "array"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "samples"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "exact_state"
+              "const": "exact_state",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "snapshot": {
               "$ref": "#/$defs/WorldState"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "tick",
             "snapshot"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "buckets": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/StatsSample"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "stats_range"
+              "const": "stats_range",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "buckets"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "final_outcome": {
               "$ref": "#/$defs/Outcome"
             },
             "kind": {
-              "type": "string",
-              "const": "match_finished"
+              "const": "match_finished",
+              "type": "string"
             },
             "match_winners": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/SideId"
-              }
+              },
+              "type": "array"
             },
             "reason": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "match_winners",
             "final_outcome",
             "reason"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "affected_components": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/Suppression"
-              }
+              },
+              "type": "array"
             },
             "counts_by_kind": {
-              "type": "object",
               "additionalProperties": {
-                "type": "integer",
                 "format": "uint32",
-                "minimum": 0
-              }
+                "maximum": 4294967295,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
             },
             "interval": {
               "anyOf": [
@@ -2939,83 +3100,87 @@
               ]
             },
             "kind": {
-              "type": "string",
-              "const": "future_orders_preview"
+              "const": "future_orders_preview",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "affected_components",
             "counts_by_kind"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "components": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/HistoryComponent"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "order_history"
+              "const": "order_history",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "components"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "groups": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/ControlGroupState"
-              }
+              },
+              "type": "array"
             },
             "kind": {
-              "type": "string",
-              "const": "control_groups"
+              "const": "control_groups",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "tick",
             "groups"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "config": {
               "$ref": "#/$defs/MatchConfig"
@@ -3030,23 +3195,22 @@
               "$ref": "#/$defs/WorldState"
             },
             "kind": {
-              "type": "string",
-              "const": "replay_bootstrap"
+              "const": "replay_bootstrap",
+              "type": "string"
             },
             "ledger": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/AcceptedTurn"
-              }
+              },
+              "type": "array"
             },
             "precedence": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/RoundPrecedence"
-              }
+              },
+              "type": "array"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "fingerprint",
@@ -3055,89 +3219,94 @@
             "initial_state",
             "ledger",
             "precedence"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "editable_from": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "kind": {
-              "type": "string",
-              "const": "round_inputs"
+              "const": "round_inputs",
+              "type": "string"
             },
             "precedence": {
               "$ref": "#/$defs/RoundPrecedence"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "turns": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/AcceptedTurn"
-              }
+              },
+              "type": "array"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "turns",
             "precedence",
             "editable_from"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "hash": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "reference_hash"
+              "const": "reference_hash",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "revision",
             "tick",
             "hash"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "Setup": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "available_teams": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/AvailableTeam"
-          }
+          },
+          "type": "array"
         },
         "default_port": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "match_defaults": {
           "$ref": "#/$defs/MatchConfig"
@@ -3146,64 +3315,64 @@
           "$ref": "#/$defs/Version"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "match_defaults",
         "available_teams",
         "default_port"
-      ]
+      ],
+      "type": "object"
     },
     "Shape": {
-      "type": "string",
       "enum": [
         "circle",
         "rectangle"
-      ]
+      ],
+      "type": "string"
     },
     "SideId": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "player"
+              "const": "player",
+              "type": "string"
             },
             "player_id": {
-              "type": "integer",
               "format": "uint8",
               "maximum": 255,
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "player_id"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "team"
+              "const": "team",
+              "type": "string"
             },
             "team_id": {
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "team_id"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "SimRequest": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "checkpoint": {
           "$ref": "#/$defs/WorldState"
@@ -3215,15 +3384,16 @@
           "$ref": "#/$defs/Content"
         },
         "end_tick_exclusive": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "events": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/AcceptedTurn"
-          }
+          },
+          "type": "array"
         },
         "fingerprint": {
           "$ref": "#/$defs/Fingerprint"
@@ -3232,32 +3402,33 @@
           "type": "string"
         },
         "minimum_end_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "precedence": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/RoundPrecedence"
-          }
+          },
+          "type": "array"
         },
         "revision": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "schema_version": {
           "$ref": "#/$defs/Version"
         },
         "suppressions": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/Suppression"
-          }
+          },
+          "type": "array"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "job_id",
@@ -3271,10 +3442,10 @@
         "suppressions",
         "end_tick_exclusive",
         "minimum_end_tick"
-      ]
+      ],
+      "type": "object"
     },
     "SkipReason": {
-      "type": "string",
       "enum": [
         "absent",
         "dead",
@@ -3282,10 +3453,11 @@
         "incompatible",
         "blocked",
         "missing_support_target"
-      ]
+      ],
+      "type": "string"
     },
     "SkippedTarget": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "entity_id": {
           "type": [
@@ -3297,44 +3469,43 @@
           "$ref": "#/$defs/SkipReason"
         }
       },
-      "additionalProperties": false,
       "required": [
         "reason"
-      ]
+      ],
+      "type": "object"
     },
     "SpendCounters": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "damage_dealt": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "destroyed_replacement_value": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "lost_invested_matter": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "mined": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "structure_spend": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "total_spend": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "unit_spend": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         }
       },
-      "additionalProperties": false,
       "required": [
         "mined",
         "total_spend",
@@ -3343,38 +3514,40 @@
         "lost_invested_matter",
         "destroyed_replacement_value",
         "damage_dealt"
-      ]
+      ],
+      "type": "object"
     },
     "StatsSample": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "players": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/PlayerStats"
-          }
+          },
+          "type": "array"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "tick",
         "players"
-      ]
+      ],
+      "type": "object"
     },
     "StopReason": {
-      "type": "string",
       "enum": [
         "inactivity",
         "absolute_horizon"
-      ]
+      ],
+      "type": "string"
     },
     "Suppression": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "historical_command_id": {
           "type": "string"
@@ -3386,214 +3559,253 @@
           "$ref": "#/$defs/SuppressionTarget"
         }
       },
-      "additionalProperties": false,
       "required": [
         "source_command_id",
         "historical_command_id",
         "target"
-      ]
+      ],
+      "type": "object"
     },
     "SuppressionTarget": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "entity_id": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "entity_component"
+              "const": "entity_component",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "entity_id"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "group": {
               "$ref": "#/$defs/ControlGroupId"
             },
             "kind": {
-              "type": "string",
-              "const": "entire_group_order"
+              "const": "entire_group_order",
+              "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "SurvivalStatus": {
-      "type": "string",
       "enum": [
         "alive",
         "eliminated"
-      ]
+      ],
+      "type": "string"
     },
     "SurvivalTransition": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "reasons": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/Reason"
-          }
+          },
+          "type": "array"
         },
         "resolved_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "status": {
           "$ref": "#/$defs/SurvivalStatus"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "resolved_tick",
         "status",
         "reasons"
-      ]
+      ],
+      "type": "object"
     },
     "TeamAssignment": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "team_id": {
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "player_id",
         "team_id"
-      ]
+      ],
+      "type": "object"
     },
     "Terrain": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "cells": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/TerrainCell"
-          }
+          },
+          "type": "array"
         },
         "height": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "width": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "width",
         "height",
         "cells"
-      ]
+      ],
+      "type": "object"
     },
     "TerrainCell": {
-      "type": "string",
       "enum": [
         "floor",
         "wall"
-      ]
+      ],
+      "type": "string"
+    },
+    "TickExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "banks": {
+          "items": {
+            "$ref": "#/$defs/ExpectedBank"
+          },
+          "type": "array"
+        },
+        "entities": {
+          "items": {
+            "$ref": "#/$defs/ExpectedEntity"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/ControlGroupState"
+          },
+          "type": "array"
+        },
+        "state_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "state_tick",
+        "entities",
+        "banks",
+        "groups"
+      ],
+      "type": "object"
     },
     "TiePolicy": {
-      "type": "string",
       "enum": [
         "continue_until_unique",
         "shared_victory"
-      ]
+      ],
+      "type": "string"
     },
     "Tile": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "x": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "y": {
-          "type": "integer",
           "format": "uint16",
           "maximum": 65535,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "x",
         "y"
-      ]
+      ],
+      "type": "object"
     },
     "TimePenalty": {
-      "type": "string",
       "enum": [
         "none",
         "fastest_opponent_ratio"
-      ]
+      ],
+      "type": "string"
     },
     "TimelineBucket": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "activity": {
           "$ref": "#/$defs/Activity"
         },
         "affected_entities": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "from_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "player_id": {
-          "type": "integer",
           "format": "uint8",
           "maximum": 255,
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         },
         "severity": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "to_tick_exclusive": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "from_tick",
         "to_tick_exclusive",
@@ -3601,44 +3813,47 @@
         "activity",
         "affected_entities",
         "severity"
-      ]
+      ],
+      "type": "object"
     },
     "Transport": {
-      "type": "string",
       "enum": [
         "authoritative",
         "inputs_only"
-      ]
+      ],
+      "type": "string"
     },
     "TurnDraft": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "based_on_revision": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "commands": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/DraftCommand"
-          }
+          },
+          "type": "array"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "based_on_revision",
         "tick",
         "commands"
-      ]
+      ],
+      "type": "object"
     },
     "TypeDefinition": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "construction": {
           "anyOf": [
@@ -3670,12 +3885,12 @@
           "$ref": "#/$defs/TypeKind"
         },
         "matter_cost": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "max_hp": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "mining": {
           "anyOf": [
@@ -3714,8 +3929,8 @@
           "$ref": "#/$defs/Shape"
         },
         "vision": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "weapon": {
           "anyOf": [
@@ -3728,7 +3943,6 @@
           ]
         }
       },
-      "additionalProperties": false,
       "required": [
         "key",
         "kind",
@@ -3738,121 +3952,124 @@
         "counts_for_survival",
         "provides_build_ability",
         "vision"
-      ]
+      ],
+      "type": "object"
     },
     "TypeKind": {
-      "type": "string",
       "enum": [
         "unit",
         "structure"
-      ]
+      ],
+      "type": "string"
     },
     "Version": {
-      "type": "integer",
       "maximum": 1,
-      "minimum": 1
+      "minimum": 1,
+      "type": "integer"
     },
     "VictoryRule": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "fixed_target"
+              "const": "fixed_target",
+              "type": "string"
             },
             "points": {
-              "type": "number",
-              "format": "double"
+              "format": "double",
+              "type": "number"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "points"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "kind": {
-              "type": "string",
-              "const": "lead"
+              "const": "lead",
+              "type": "string"
             },
             "margin": {
-              "type": "number",
-              "format": "double"
+              "format": "double",
+              "type": "number"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "margin"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "VisualStyle": {
-      "type": "string",
       "enum": [
         "direct",
         "artillery",
         "melee"
-      ]
+      ],
+      "type": "string"
     },
     "Weapon": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "cooldown": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "damage": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "indirect": {
           "type": "boolean"
         },
         "range": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         },
         "visual_style": {
           "$ref": "#/$defs/VisualStyle"
         }
       },
-      "additionalProperties": false,
       "required": [
         "range",
         "damage",
         "cooldown",
         "indirect",
         "visual_style"
-      ]
+      ],
+      "type": "object"
     },
     "WorkRate": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "cooldown": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "rate": {
-          "type": "number",
-          "format": "double"
+          "format": "double",
+          "type": "number"
         }
       },
-      "additionalProperties": false,
       "required": [
         "rate",
         "cooldown"
-      ]
+      ],
+      "type": "object"
     },
     "WorkerEnvelope": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "message": {
           "$ref": "#/$defs/WorkerMessage"
@@ -3861,90 +4078,93 @@
           "$ref": "#/$defs/Version"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "message"
-      ]
+      ],
+      "type": "object"
     },
     "WorkerMessage": {
       "oneOf": [
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "end_tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "job_id": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "progress"
+              "const": "progress",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "tick": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "job_id",
             "revision",
             "tick",
             "end_tick"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "checkpoints": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/WorldState"
-              }
+              },
+              "type": "array"
             },
             "events": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/WorldEvent"
-              }
+              },
+              "type": "array"
             },
             "job_id": {
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "batch"
+              "const": "batch",
+              "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "snapshots": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/WorldState"
-              }
+              },
+              "type": "array"
             },
             "stats": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/StatsSample"
-              }
+              },
+              "type": "array"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "job_id",
@@ -3953,16 +4173,17 @@
             "checkpoints",
             "stats",
             "events"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "command_outcomes": {
-              "type": "array",
               "items": {
                 "$ref": "#/$defs/CommandOutcome"
-              }
+              },
+              "type": "array"
             },
             "final_hash": {
               "type": "string"
@@ -3971,22 +4192,22 @@
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "complete"
+              "const": "complete",
+              "type": "string"
             },
             "outcome": {
               "$ref": "#/$defs/Outcome"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             },
             "sim_duration_ms": {
               "$ref": "#/$defs/SafeInt"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "job_id",
@@ -3995,10 +4216,11 @@
             "final_hash",
             "sim_duration_ms",
             "command_outcomes"
-          ]
+          ],
+          "type": "object"
         },
         {
-          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "error_code": {
               "type": "string"
@@ -4007,102 +4229,107 @@
               "type": "string"
             },
             "kind": {
-              "type": "string",
-              "const": "failed"
+              "const": "failed",
+              "type": "string"
             },
             "message": {
               "type": "string"
             },
             "revision": {
-              "type": "integer",
               "format": "uint32",
-              "minimum": 0
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "job_id",
             "revision",
             "error_code",
             "message"
-          ]
+          ],
+          "type": "object"
         }
       ]
     },
     "WorldEvent": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "event": {
           "$ref": "#/$defs/PresentationEvent"
         },
         "sequence": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "tick",
         "sequence",
         "event"
-      ]
+      ],
+      "type": "object"
     },
     "WorldState": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "blueprints": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/Blueprint"
-          }
+          },
+          "type": "array"
         },
         "control_groups": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/ControlGroupState"
-          }
+          },
+          "type": "array"
         },
         "deterministic_identity_state": {
-          "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "type": "object"
         },
         "entities": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/EntityState"
-          }
+          },
+          "type": "array"
         },
         "inactivity_deadline": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "last_progress_tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         },
         "ore": {
-          "type": "array",
           "items": {
-            "type": "number",
-            "format": "double"
-          }
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
         },
         "players": {
-          "type": "array",
           "items": {
             "$ref": "#/$defs/PlayerState"
-          }
+          },
+          "type": "array"
         },
         "rng_state": {
           "type": "string"
@@ -4114,12 +4341,12 @@
           "$ref": "#/$defs/Terrain"
         },
         "tick": {
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "schema_version",
         "tick",
@@ -4133,7 +4360,48 @@
         "control_groups",
         "deterministic_identity_state",
         "rng_state"
-      ]
+      ],
+      "type": "object"
     }
-  }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "client": {
+      "$ref": "#/$defs/ClientEnvelope"
+    },
+    "golden": {
+      "$ref": "#/$defs/GoldenWorldFixture"
+    },
+    "guide": {
+      "$ref": "#/$defs/GuideManifest"
+    },
+    "score": {
+      "$ref": "#/$defs/RoundScore"
+    },
+    "server": {
+      "$ref": "#/$defs/ServerEnvelope"
+    },
+    "setup": {
+      "$ref": "#/$defs/Setup"
+    },
+    "simulation": {
+      "$ref": "#/$defs/SimRequest"
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerEnvelope"
+    }
+  },
+  "required": [
+    "client",
+    "server",
+    "worker",
+    "simulation",
+    "setup",
+    "guide",
+    "score",
+    "golden"
+  ],
+  "title": "ContractCatalog",
+  "type": "object"
 }
