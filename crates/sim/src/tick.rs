@@ -249,8 +249,20 @@ impl Sim {
                 }
                 Order::Mine { .. } | Order::Construct { .. } => {}
             }
-            if matches!(e.action, Order::AttackMove { .. }) && def.movement.is_some() {
-                // Prior-snapshot attackers reveal a threat even when they outrange vision.
+            if candidate.is_none() && zone > 0.0 {
+                let retained = e
+                    .engaged_target
+                    .as_ref()
+                    .and_then(|id| self.find(id))
+                    .filter(|j| self.target_valid(i, *j, zone, direct));
+                candidate = retained.or_else(|| self.nearest_hostile(i, zone, direct));
+            }
+            if candidate.is_none()
+                && matches!(e.action, Order::AttackMove { .. })
+                && def.movement.is_some()
+            {
+                // With no visible target, prior-snapshot attackers reveal a threat beyond vision.
+                // Do not abandon an available target to chase a farther attacker.
                 let threat_range = self
                     .content
                     .types
@@ -260,14 +272,6 @@ impl Sim {
                 candidate = self
                     .nearest_hostile_matching(i, threat_range, direct, true)
                     .or(candidate);
-            }
-            if candidate.is_none() && zone > 0.0 {
-                let retained = e
-                    .engaged_target
-                    .as_ref()
-                    .and_then(|id| self.find(id))
-                    .filter(|j| self.target_valid(i, *j, zone, direct));
-                candidate = retained.or_else(|| self.nearest_hostile(i, zone, direct));
             }
             if let Some(j) = candidate {
                 engaged = Some(self.state.entities[j].id.clone());

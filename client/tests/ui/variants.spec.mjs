@@ -95,7 +95,8 @@ for(const timed of [false,true])test(`recovery: 2v2 ${timed?'timed':'scoreboard'
   if(timed){expect(await a.evaluate(()=>window.atemporal.experience.rounds.get(1)?.timed?.timed_lost_players??[])).not.toContain(0);await seek(a,500);await expect(a.locator('#commit')).toBeEnabled();}
   await seek(a,loss.resolved_tick+1);await expect(a.locator('#outcome-banner')).toHaveAttribute('data-outcome','loss');await review.capture('temporarily-eliminated-player',a);
   await seek(spectator,loss.resolved_tick);await review.capture('turret-destruction-combat',spectator);
-  const recoveryTick=timed?500:200;
+  // Schedule recovery after the observed loss; terrain changes affect attack arrival.
+  const recoveryTick=timed?500:loss.resolved_tick+20;
   await seek(a,recoveryTick);
   const c=await a.evaluate(()=>{const e=window.atemporal.entities().find(e=>e.owner===0&&e.type_key==='constructor');return{x:e.x,y:e.y};}),rescue={x:8,y:5};
   await tile(a,c);await a.keyboard.press('b');await a.keyboard.press('1');await tile(a,rescue);await tile(a,c);await a.keyboard.press('c');await area(a,rescue);

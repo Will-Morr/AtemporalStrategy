@@ -1315,3 +1315,19 @@ fn constructor_yields_paid_factory_output_without_losing_its_order() {
     );
     assert_checkpoint_equivalence(&w, &run);
 }
+
+#[test]
+fn attack_move_keeps_visible_target_when_a_distant_turret_fires() {
+    let mut w = World::new(&OPEN);
+    let grunt = w.spawn_with(0, "grunt", 1, 1, attack_move(1, 1));
+    let worker = w.spawn(1, "constructor", 4, 1);
+    let turret = w.spawn(1, "turret", 7, 1);
+    let run = w.run();
+    assert!(!run.attacks(&turret).is_empty());
+    assert_eq!(
+        entity(&w.at(3), &grunt).engaged_target.as_ref(),
+        Some(&worker)
+    );
+    assert!(!run.attacks(&grunt).is_empty());
+    assert_checkpoint_equivalence(&w, &run);
+}
