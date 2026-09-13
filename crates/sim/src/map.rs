@@ -8,8 +8,8 @@ use crate::*;
 use std::collections::VecDeque;
 
 /// Share of lattice cells that hold a room, and of redundant lattice edges kept as loops.
-const ROOM_PERCENT: u64 = 70;
-const LOOP_PERCENT: u64 = 35;
+const ROOM_PERCENT: u64 = 90;
+const LOOP_PERCENT: u64 = 45;
 /// Radius of the round open clearing around each start anchor.
 const START_CLEARING: i32 = 7;
 /// Chebyshev radius within which each start is guaranteed a first ore cluster.
@@ -245,7 +245,7 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
                 rooms.push(None);
                 continue;
             }
-            let jitter = (pitch * 0.25) as u64 * 2 + 1;
+            let jitter = (pitch * 0.15) as u64 * 2 + 1;
             let x = (f64::from(cx) * pitch + pitch / 2.0) as i32 + (next(2) % jitter) as i32
                 - (jitter / 2) as i32;
             let y = (f64::from(cy) * pitch + pitch / 2.0) as i32 + (next(3) % jitter) as i32
@@ -255,8 +255,8 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
     }
     for room in &rooms {
         let Some((x0, y0)) = *room else { continue };
-        let rx = pitch * (0.26 + 0.16 * (next(4) % 100) as f64 / 100.0);
-        let ry = pitch * (0.26 + 0.16 * (next(5) % 100) as f64 / 100.0);
+        let rx = pitch * (0.28 + 0.14 * (next(4) % 100) as f64 / 100.0);
+        let ry = pitch * (0.28 + 0.14 * (next(5) % 100) as f64 / 100.0);
         let blob = next(6);
         let r = rx.max(ry).ceil() as i32 + 1;
         for dy in -r..=r {
