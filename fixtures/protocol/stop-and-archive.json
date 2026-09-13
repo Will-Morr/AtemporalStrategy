@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "message": {
+    "kind": "stop_and_archive",
+    "request_id": "stop-1",
+    "based_on_revision": 2,
+    "slot_token": "fixture-private-token"
+  }
+}

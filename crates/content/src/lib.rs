@@ -203,6 +203,12 @@ fn escape(text: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
 }
+fn readable_range(value: f64) -> String {
+    if (value * 1000.0).round() / 1000.0 == value {
+        return value.to_string();
+    }
+    format!("≈{value:.3}")
+}
 fn work(rate: &Option<WorkRate>) -> String {
     rate.as_ref().map_or_else(
         || "—".into(),
@@ -230,7 +236,7 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
                 format!(
                     "{} damage / {} range / {} ticks; {}",
                     w.damage,
-                    w.range,
+                    readable_range(w.range),
                     w.cooldown,
                     if w.indirect { "indirect" } else { "direct" }
                 )
@@ -274,14 +280,14 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
         r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal Strategy — How to play</title>
 <style>body{{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}}a{{color:#79d7ff}}.table-scroll{{overflow:auto}}table{{border-collapse:collapse;font-size:.85rem}}th,td{{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}}th{{background:#333}}code{{overflow-wrap:anywhere}}</style></head>
-<body><a href="/">Back to lobby</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities.</p>
+<body><a href="/">Back to lobby</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
 <div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Survival flags</th></tr></thead><tbody>{rows}</tbody></table></div>
 <footer><p>Content: <code>{hash}</code></p></footer></body></html>
 "#
     ))
 }
 fn rules_build(prose: &str) -> String {
-    sha256(format!("atemporal-guide-renderer-v1\n{prose}").as_bytes())
+    sha256(format!("atemporal-guide-renderer-v2\n{prose}").as_bytes())
 }
 fn artifacts(content: &Content, prose: &str) -> Result<(GuideManifest, BTreeMap<String, Vec<u8>>)> {
     let content = normalize_content(content.clone())?;

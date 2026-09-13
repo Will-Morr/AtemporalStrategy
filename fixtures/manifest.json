@@ -32,6 +32,14 @@
     "type": "ClientEnvelope"
   },
   {
+    "file": "fixtures/protocol/local-draft-ref.json",
+    "type": "ClientEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/match-archived.json",
+    "type": "ServerEnvelope"
+  },
+  {
     "file": "fixtures/protocol/planning-opened.json",
     "type": "ServerEnvelope"
   },
@@ -40,11 +48,23 @@
     "type": "ServerEnvelope"
   },
   {
+    "file": "fixtures/protocol/stop-and-archive.json",
+    "type": "ClientEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/timed-revision.json",
+    "type": "ServerEnvelope"
+  },
+  {
     "file": "fixtures/protocol/welcome.json",
     "type": "ServerEnvelope"
   },
   {
     "file": "fixtures/protocol/worker-complete.json",
+    "type": "WorkerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/worker-displacement.json",
     "type": "WorkerEnvelope"
   },
   {

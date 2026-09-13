@@ -468,9 +468,15 @@
               "y": 2
             },
             "occurrence_counters": {},
-            "spawn_group": null
+            "spawn_group": null,
+            "output_direction": "e"
           },
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
@@ -502,7 +508,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3",
@@ -524,7 +535,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc",
@@ -546,7 +562,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
@@ -568,7 +589,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236",
@@ -590,7 +616,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         }
       ],
       "blueprints": [
@@ -610,7 +641,8 @@
             "player_rank": 0,
             "command_index": 0
           },
-          "site_id": "entity:0d77e10fffc8d6479ededb0d9f03d9b6665c716db6ed7b8ae74a6f1e46821f19"
+          "site_id": "entity:0d77e10fffc8d6479ededb0d9f03d9b6665c716db6ed7b8ae74a6f1e46821f19",
+          "output_direction": "e"
         }
       ],
       "control_groups": [
@@ -794,7 +826,7 @@
     "end_tick_exclusive": 12,
     "minimum_end_tick": 0
   },
-  "initial_hash": "62742cd7388ef25453f2b1ba5169752fecfe5d554ec9b033331cfa16ecb1889d",
+  "initial_hash": "d27e0c2b9bbb43777278cacbf44f0ddb8806ae40d2a67454c9bf206df17dee56",
   "expected": {
     "final_hash": null,
     "outcome": {

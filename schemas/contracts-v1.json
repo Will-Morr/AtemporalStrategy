@@ -82,6 +82,59 @@
       ],
       "type": "string"
     },
+    "ArchiveReason": {
+      "enum": [
+        "manual_stop",
+        "history_exhausted"
+      ],
+      "type": "string"
+    },
+    "ArchiveRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/ArchiveReason"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/ArchiveStatus"
+        },
+        "stopped_at_unix_ms": {
+          "$ref": "#/$defs/SafeInt"
+        }
+      },
+      "required": [
+        "request_id",
+        "revision",
+        "status",
+        "reason",
+        "stopped_at_unix_ms"
+      ],
+      "type": "object"
+    },
+    "ArchiveStatus": {
+      "enum": [
+        "unfinished"
+      ],
+      "type": "string"
+    },
     "AvailableTeam": {
       "additionalProperties": false,
       "properties": {
@@ -121,6 +174,16 @@
         "id": {
           "type": "string"
         },
+        "output_direction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CardinalDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "owner": {
           "format": "uint8",
           "maximum": 255,
@@ -159,6 +222,15 @@
         "precedence"
       ],
       "type": "object"
+    },
+    "CardinalDirection": {
+      "enum": [
+        "n",
+        "e",
+        "s",
+        "w"
+      ],
+      "type": "string"
     },
     "ClientEnvelope": {
       "additionalProperties": false,
@@ -480,38 +552,52 @@
         {
           "additionalProperties": false,
           "properties": {
+            "command_index": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "draft": {
+              "$ref": "#/$defs/TurnDraft"
+            },
+            "kind": {
+              "const": "preview_future_orders",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "draft",
+            "command_index"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "based_on_revision": {
               "format": "uint32",
               "maximum": 4294967295,
               "minimum": 0,
               "type": "integer"
             },
-            "draft_command": {
-              "$ref": "#/$defs/DraftCommand"
-            },
             "kind": {
-              "const": "preview_future_orders",
+              "const": "stop_and_archive",
               "type": "string"
             },
-            "preceding_commands": {
-              "items": {
-                "$ref": "#/$defs/DraftCommand"
-              },
-              "type": "array"
+            "request_id": {
+              "type": "string"
             },
-            "tick": {
-              "format": "uint32",
-              "maximum": 4294967295,
-              "minimum": 0,
-              "type": "integer"
+            "slot_token": {
+              "type": "string"
             }
           },
           "required": [
             "kind",
+            "request_id",
             "based_on_revision",
-            "tick",
-            "draft_command",
-            "preceding_commands"
+            "slot_token"
           ],
           "type": "object"
         },
@@ -731,6 +817,268 @@
               "const": "place_blueprints",
               "type": "string"
             },
+            "output_directions": {
+              "items": {
+                "$ref": "#/$defs/CardinalDirection"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority"
+            },
+            "tiles": {
+              "items": {
+                "$ref": "#/$defs/Tile"
+              },
+              "type": "array"
+            },
+            "type_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "type_key",
+            "tiles",
+            "priority"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "blueprint_ids": {
+              "items": {
+                "$ref": "#/$defs/DraftItemRef"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "cancel_blueprints",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "blueprint_ids"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "edit": {
+              "$ref": "#/$defs/ProductionEdit"
+            },
+            "factories": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "edit_production",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "factories",
+            "edit"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "factories": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "set_queue_loop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "factories",
+            "enabled"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "factories": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "set_stored_order",
+              "type": "string"
+            },
+            "order": {
+              "$ref": "#/$defs/Order"
+            }
+          },
+          "required": [
+            "kind",
+            "factories",
+            "order"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Command2": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "entities": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "assign_order",
+              "type": "string"
+            },
+            "order": {
+              "$ref": "#/$defs/Order"
+            }
+          },
+          "required": [
+            "kind",
+            "entities",
+            "order"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            "kind": {
+              "const": "assign_group_order",
+              "type": "string"
+            },
+            "order": {
+              "$ref": "#/$defs/Order"
+            }
+          },
+          "required": [
+            "kind",
+            "group",
+            "order"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "edit": {
+              "$ref": "#/$defs/MemberEdit"
+            },
+            "group": {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            "kind": {
+              "const": "edit_group_members",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "group",
+            "edit"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "factories": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ControlGroupId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "const": "bind_factory_group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "factories"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "entities": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "set_priority",
+              "type": "string"
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority"
+            }
+          },
+          "required": [
+            "kind",
+            "entities",
+            "priority"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "place_blueprints",
+              "type": "string"
+            },
+            "output_directions": {
+              "items": {
+                "$ref": "#/$defs/CardinalDirection"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "priority": {
               "$ref": "#/$defs/Priority"
             },
@@ -776,7 +1124,7 @@
           "additionalProperties": false,
           "properties": {
             "edit": {
-              "$ref": "#/$defs/ProductionEdit"
+              "$ref": "#/$defs/ProductionEdit2"
             },
             "factories": {
               "items": {
@@ -896,7 +1244,7 @@
       "additionalProperties": false,
       "properties": {
         "command": {
-          "$ref": "#/$defs/Command"
+          "$ref": "#/$defs/Command2"
         },
         "future_orders": {
           "$ref": "#/$defs/FutureOrderPolicy"
@@ -1021,13 +1369,62 @@
         },
         "future_orders": {
           "$ref": "#/$defs/FutureOrderPolicy"
+        },
+        "local_id": {
+          "type": "string"
         }
       },
       "required": [
+        "local_id",
         "command",
         "future_orders"
       ],
       "type": "object"
+    },
+    "DraftItemRef": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "persistent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "item_index": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "draft",
+              "type": "string"
+            },
+            "local_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "local_id",
+            "item_index"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "DrawScoring": {
       "enum": [
@@ -1042,11 +1439,42 @@
         "action": {
           "$ref": "#/$defs/Order"
         },
+        "blocked_step": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "blueprint_id": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "born_at_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "engaged_target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failed_move_attempts": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
         },
         "hp": {
           "format": "double",
@@ -1096,6 +1524,16 @@
             }
           ]
         },
+        "resolved_destination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "support_target": {
           "type": [
             "string",
@@ -1121,7 +1559,8 @@
         "action",
         "priority",
         "next_action_tick",
-        "next_move_tick"
+        "next_move_tick",
+        "failed_move_attempts"
       ],
       "type": "object"
     },
@@ -1421,7 +1860,7 @@
       "additionalProperties": false,
       "properties": {
         "command": {
-          "$ref": "#/$defs/Command"
+          "$ref": "#/$defs/Command2"
         },
         "command_id": {
           "type": "string"
@@ -1959,7 +2398,8 @@
         "lobby",
         "planning",
         "simulating",
-        "finished"
+        "finished",
+        "archived"
       ],
       "type": "string"
     },
@@ -2123,6 +2563,47 @@
     },
     "PresentationEvent": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "blocker_from": {
+              "$ref": "#/$defs/Tile"
+            },
+            "blocker_id": {
+              "type": "string"
+            },
+            "blocker_to": {
+              "$ref": "#/$defs/Tile"
+            },
+            "involuntary_entity_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "displacement",
+              "type": "string"
+            },
+            "mover_from": {
+              "$ref": "#/$defs/Tile"
+            },
+            "mover_id": {
+              "type": "string"
+            },
+            "mover_to": {
+              "$ref": "#/$defs/Tile"
+            }
+          },
+          "required": [
+            "kind",
+            "mover_id",
+            "blocker_id",
+            "mover_from",
+            "mover_to",
+            "blocker_from",
+            "blocker_to",
+            "involuntary_entity_id"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {
@@ -2301,6 +2782,9 @@
           },
           "type": "object"
         },
+        "output_direction": {
+          "$ref": "#/$defs/CardinalDirection"
+        },
         "output_tile": {
           "$ref": "#/$defs/Tile"
         },
@@ -2329,7 +2813,8 @@
         "loop_enabled",
         "stored_order",
         "output_tile",
-        "occurrence_counters"
+        "occurrence_counters",
+        "output_direction"
       ],
       "type": "object"
     },
@@ -2354,6 +2839,83 @@
       "type": "object"
     },
     "ProductionEdit": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "append",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "items"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "replace_pending",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "items"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "item_ids": {
+              "items": {
+                "$ref": "#/$defs/DraftItemRef"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "remove_pending",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "item_ids"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "cancel_active",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProductionEdit2": {
       "oneOf": [
         {
           "additionalProperties": false,
@@ -2660,6 +3222,23 @@
         {
           "additionalProperties": false,
           "properties": {
+            "archive": {
+              "$ref": "#/$defs/ArchiveRecord"
+            },
+            "kind": {
+              "const": "match_archived",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "archive"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "config": {
               "$ref": "#/$defs/MatchConfig"
             },
@@ -2681,6 +3260,16 @@
             },
             "phase": {
               "$ref": "#/$defs/Phase"
+            },
+            "timed": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TimedAdjudication"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -2945,6 +3534,16 @@
                 "$ref": "#/$defs/PlayerTime"
               },
               "type": "array"
+            },
+            "timed": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TimedAdjudication"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "timeline_index": {
               "items": {
@@ -3774,6 +4373,57 @@
       "enum": [
         "none",
         "fastest_opponent_ratio"
+      ],
+      "type": "string"
+    },
+    "TimedAdjudication": {
+      "additionalProperties": false,
+      "properties": {
+        "boundary": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "eligible_sides": {
+          "items": {
+            "$ref": "#/$defs/SideId"
+          },
+          "type": "array"
+        },
+        "match_winners": {
+          "items": {
+            "$ref": "#/$defs/SideId"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/TimedStatus"
+        },
+        "timed_lost_players": {
+          "items": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "boundary",
+        "timed_lost_players",
+        "eligible_sides",
+        "match_winners",
+        "status"
+      ],
+      "type": "object"
+    },
+    "TimedStatus": {
+      "enum": [
+        "planning",
+        "finished",
+        "history_exhausted"
       ],
       "type": "string"
     },

@@ -1,7 +1,9 @@
 //! Version 1 interchange types. Simulation policy lives outside these records.
+pub mod draft;
 pub mod golden;
 pub mod identity;
 pub mod scoring;
+pub mod timed;
 mod types;
 pub use types::*;
 pub const SCHEMA_VERSION: u32 = 1;

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "server_instance_id": "fixture-instance",
+  "message": {
+    "kind": "match_archived",
+    "archive": {
+      "request_id": "stop-1",
+      "revision": 2,
+      "status": "unfinished",
+      "reason": "manual_stop",
+      "actor": 0,
+      "stopped_at_unix_ms": 1789257600000
+    }
+  }
+}

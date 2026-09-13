@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "message": {
+    "kind": "commit",
+    "request": {
+      "request_id": "local-ref-request",
+      "slot_token": "fixture-private-token",
+      "draft": {
+        "based_on_revision": 1,
+        "tick": 20,
+        "commands": [
+          {
+            "local_id": "place",
+            "future_orders": "keep",
+            "command": {
+              "kind": "place_blueprints",
+              "type_key": "factory",
+              "tiles": [
+                {
+                  "x": 2,
+                  "y": 2
+                }
+              ],
+              "priority": "high",
+              "output_directions": [
+                "e"
+              ]
+            }
+          },
+          {
+            "local_id": "cancel",
+            "future_orders": "keep",
+            "command": {
+              "kind": "cancel_blueprints",
+              "blueprint_ids": [
+                {
+                  "kind": "draft",
+                  "local_id": "place",
+                  "item_index": 0
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

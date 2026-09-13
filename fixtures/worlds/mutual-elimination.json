@@ -461,7 +461,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3",
@@ -483,7 +488,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc",
@@ -499,17 +509,18 @@
           "lifecycle": "complete",
           "blueprint_id": null,
           "action": {
-            "kind": "attack_move",
-            "destination": {
-              "x": 4,
-              "y": 3
-            }
+            "kind": "idle"
           },
           "priority": "medium",
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
@@ -531,7 +542,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236",
@@ -553,7 +569,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:ce95d8c988db5e06e057be3e83399e7b62bec662509b7c38d779b255e08ad29a",
@@ -569,17 +590,18 @@
           "lifecycle": "complete",
           "blueprint_id": null,
           "action": {
-            "kind": "attack_move",
-            "destination": {
-              "x": 3,
-              "y": 3
-            }
+            "kind": "idle"
           },
           "priority": "medium",
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         }
       ],
       "blueprints": [],
@@ -762,7 +784,7 @@
     "end_tick_exclusive": 12,
     "minimum_end_tick": 0
   },
-  "initial_hash": "5f6f264317b87fba09aebc9836eb603e1f91e79b8f96a95e527543a35701ad87",
+  "initial_hash": "97cc2303b7f73af9086b798652d9df869e4e13b1dfc6688e9ffb6f61cc1250da",
   "expected": {
     "final_hash": null,
     "outcome": {

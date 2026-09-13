@@ -267,15 +267,15 @@ pub enum MemberEdit {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ProductionEdit {
+pub enum ProductionEdit<Reference = String> {
     Append { items: Vec<TypeKey> },
     ReplacePending { items: Vec<TypeKey> },
-    RemovePending { item_ids: Vec<QueueItemId> },
+    RemovePending { item_ids: Vec<Reference> },
     CancelActive {},
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Command {
+pub enum Command<Reference = String> {
     AssignOrder {
         entities: Vec<EntityId>,
         order: Order,
@@ -300,13 +300,14 @@ pub enum Command {
         type_key: TypeKey,
         tiles: Vec<Tile>,
         priority: Priority,
+        output_directions: Option<Vec<CardinalDirection>>,
     },
     CancelBlueprints {
-        blueprint_ids: Vec<BlueprintId>,
+        blueprint_ids: Vec<Reference>,
     },
     EditProduction {
         factories: Vec<EntityId>,
-        edit: ProductionEdit,
+        edit: ProductionEdit<Reference>,
     },
     SetQueueLoop {
         factories: Vec<EntityId>,
@@ -318,7 +319,8 @@ pub enum Command {
     },
 }
 record!(DraftCommand {
-    command: Command,
+    local_id: String,
+    command: Command<DraftItemRef>,
     future_orders: FutureOrderPolicy
 });
 record!(TurnDraft { based_on_revision: Revision, tick: Tick, commands: Vec<DraftCommand> });
@@ -379,12 +381,13 @@ record!(ActiveItem {
     awaiting_output: bool
 });
 record!(Production { pending_items: Vec<QueueItem>, active_item: Option<ActiveItem>, loop_enabled: bool, stored_order: Order,
-    output_tile: Tile, occurrence_counters: BTreeMap<QueueItemId, u32>, spawn_group: Option<ControlGroupId> });
+    output_tile: Tile, occurrence_counters: BTreeMap<QueueItemId, u32>, spawn_group: Option<ControlGroupId>, output_direction: CardinalDirection });
 record!(EntityState { id: EntityId, owner: PlayerId, type_key: TypeKey, tile: Tile, last_move_direction: Direction,
     hp: f64, paid_matter: f64, lifecycle: Lifecycle, blueprint_id: Option<BlueprintId>, action: Order, priority: Priority,
-    next_action_tick: Tick, next_move_tick: Tick, production: Option<Production>, support_target: Option<EntityId> });
+    next_action_tick: Tick, next_move_tick: Tick, production: Option<Production>, support_target: Option<EntityId>,
+    engaged_target: Option<EntityId>, resolved_destination: Option<Tile>, failed_move_attempts: u8, blocked_step: Option<Tile>, born_at_tick: Option<Tick> });
 record!(Blueprint { id: BlueprintId, owner: PlayerId, type_key: TypeKey, tile: Tile, priority: Priority,
-    source_command_id: CommandId, precedence: EventKey, site_id: Option<EntityId> });
+    source_command_id: CommandId, precedence: EventKey, site_id: Option<EntityId>, output_direction: Option<CardinalDirection> });
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EventKey {
@@ -472,6 +475,15 @@ record!(TimelineBucket {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PresentationEvent {
+    Displacement {
+        mover_id: EntityId,
+        blocker_id: EntityId,
+        mover_from: Tile,
+        mover_to: Tile,
+        blocker_from: Tile,
+        blocker_to: Tile,
+        involuntary_entity_id: EntityId,
+    },
     Move {
         entity_id: EntityId,
         from: Tile,
@@ -541,7 +553,8 @@ choices!(Phase {
     Lobby,
     Planning,
     Simulating,
-    Finished
+    Finished,
+    Archived
 });
 record!(GuideManifest { schema_version: Version, content_hash: String, rules_build: String, locale: String,
     generated_files: BTreeMap<String, String> });
@@ -602,10 +615,13 @@ pub enum ClientMessage {
         bucket_width: Tick,
     },
     PreviewFutureOrders {
+        draft: TurnDraft,
+        command_index: u32,
+    },
+    StopAndArchive {
+        request_id: String,
         based_on_revision: Revision,
-        tick: Tick,
-        draft_command: DraftCommand,
-        preceding_commands: Vec<DraftCommand>,
+        slot_token: String,
     },
     GetEntityOrderHistory {
         revision: Revision,
@@ -624,6 +640,9 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ServerMessage {
+    MatchArchived {
+        archive: ArchiveRecord,
+    },
     Welcome {
         match_id: String,
         config: MatchConfig,
@@ -631,6 +650,7 @@ pub enum ServerMessage {
         lobby: LobbyState,
         fingerprint: Fingerprint,
         guide_url: String,
+        timed: Option<TimedAdjudication>,
     },
     SlotClaimed {
         slot: PlayerId,
@@ -672,6 +692,7 @@ pub enum ServerMessage {
         outcome: Outcome,
         timeline_index: Vec<TimelineBucket>,
         score: Option<RoundScore>,
+        timed: Option<TimedAdjudication>,
         time_totals: Vec<PlayerTime>,
         time_ratios: Vec<PlayerRatio>,
         sim_duration_ms: SafeInt,
@@ -785,3 +806,23 @@ record!(GoldenWorldFixture {
     initial_hash: String,
     expected: GoldenExpectation
 });
+
+choices!(CardinalDirection { N, E, S, W });
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DraftItemRef {
+    Persistent { id: String },
+    Draft { local_id: String, item_index: u32 },
+}
+choices!(TimedStatus {
+    Planning,
+    Finished,
+    HistoryExhausted
+});
+record!(TimedAdjudication { boundary: Tick, timed_lost_players: Vec<PlayerId>, eligible_sides: Vec<SideId>, match_winners: Vec<SideId>, status: TimedStatus });
+choices!(ArchiveReason {
+    ManualStop,
+    HistoryExhausted
+});
+choices!(ArchiveStatus { Unfinished });
+record!(ArchiveRecord { request_id: String, revision: Revision, status: ArchiveStatus, reason: ArchiveReason, actor: Option<PlayerId>, stopped_at_unix_ms: SafeInt });

@@ -455,7 +455,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3",
@@ -477,7 +482,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc",
@@ -499,7 +509,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
@@ -521,7 +536,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236",
@@ -543,7 +563,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:ce95d8c988db5e06e057be3e83399e7b62bec662509b7c38d779b255e08ad29a",
@@ -565,7 +590,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         }
       ],
       "blueprints": [],
@@ -748,9 +778,9 @@
     "end_tick_exclusive": 12,
     "minimum_end_tick": 0
   },
-  "initial_hash": "f7e04c2177c757c75b8a5043b71b2c73b780e54b5be42aa21d34bd2605bcea9b",
+  "initial_hash": "a1d2f7cf048f1586aa0f4ede34155fc9048ab3dc7153fd0d03502fc3c8272ae3",
   "expected": {
-    "final_hash": "a54fa2626ffb67402c4e7ce6237b464ad5b61b73437367587351b7f609135cb7",
+    "final_hash": "7da0b5547be4c741bb78d3f2d6d3263ff0d5a9398d373c63ecb739c4e2396708",
     "outcome": {
       "kind": "stalemate",
       "stop_reason": "inactivity",

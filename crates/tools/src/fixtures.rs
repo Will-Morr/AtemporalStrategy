@@ -36,6 +36,11 @@ fn entity(
         next_move_tick: 0,
         production: None,
         support_target: None,
+        engaged_target: None,
+        resolved_destination: None,
+        failed_move_attempts: 0,
+        blocked_step: None,
+        born_at_tick: None,
     }
 }
 fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
@@ -394,9 +399,7 @@ pub fn generate() -> Result<()> {
         let e = get(&mut draw, id);
         e.hp = 1.;
         e.tile = position;
-        e.action = Order::AttackMove {
-            destination: position,
-        };
+        e.action = Order::Idle {};
     }
     draw.expected.outcome = result(4, 0, &[], StopReason::Inactivity);
     draw.expected.outcome.survival_transitions = (0..2)
@@ -480,6 +483,7 @@ pub fn generate() -> Result<()> {
         output_tile: tile(3, 2),
         occurrence_counters: Default::default(),
         spawn_group: None,
+        output_direction: CardinalDirection::E,
     });
     recovery.request.checkpoint.entities.push(factory);
     recovery.request.checkpoint.blueprints.push(Blueprint {
@@ -496,6 +500,7 @@ pub fn generate() -> Result<()> {
             command_index: 0,
         },
         site_id: Some(factory_id.clone()),
+        output_direction: Some(CardinalDirection::E),
     });
     let constructor = id(&recovery, 0, "constructor");
     get(&mut recovery, &constructor).action = Order::Construct {
@@ -633,6 +638,7 @@ pub fn generate() -> Result<()> {
         output_tile: tile(3, 4),
         occurrence_counters: std::collections::BTreeMap::from([(item, 0)]),
         spawn_group: Some(group.clone()),
+        output_direction: CardinalDirection::E,
     });
     inheritance.request.checkpoint.players[0]
         .counters

@@ -27,46 +27,7 @@
       "survival_transitions": []
     },
     "timeline_index": [],
-    "score": {
-      "round": 1,
-      "entries": [
-        {
-          "side_id": {
-            "kind": "player",
-            "player_id": 0
-          },
-          "surviving_members": [
-            0
-          ],
-          "credited_players": [],
-          "award_reason": "none",
-          "raw_delta": 0.0,
-          "adjusted_delta": 0.0,
-          "raw_total": 0.0,
-          "adjusted_total": 0.0
-        },
-        {
-          "side_id": {
-            "kind": "player",
-            "player_id": 1
-          },
-          "surviving_members": [
-            1
-          ],
-          "credited_players": [],
-          "award_reason": "none",
-          "raw_delta": 0.0,
-          "adjusted_delta": 0.0,
-          "raw_total": 0.0,
-          "adjusted_total": 0.0
-        }
-      ],
-      "victory_rule": {
-        "kind": "fixed_target",
-        "points": 5.0
-      },
-      "match_winners": []
-    },
+    "score": null,
     "time_totals": [
       {
         "player_id": 0,
@@ -88,6 +49,21 @@
       }
     ],
     "sim_duration_ms": 1,
-    "timed": null
+    "timed": {
+      "boundary": 2,
+      "timed_lost_players": [],
+      "eligible_sides": [
+        {
+          "kind": "player",
+          "player_id": 0
+        },
+        {
+          "kind": "player",
+          "player_id": 1
+        }
+      ],
+      "match_winners": [],
+      "status": "planning"
+    }
   }
 }

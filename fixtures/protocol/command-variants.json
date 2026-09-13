@@ -29,7 +29,8 @@
                 }
               }
             },
-            "future_orders": "drop_window"
+            "future_orders": "drop_window",
+            "local_id": "command-0"
           },
           {
             "command": {
@@ -46,7 +47,8 @@
                 }
               }
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-1"
           },
           {
             "command": {
@@ -63,7 +65,8 @@
                 ]
               }
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-2"
           },
           {
             "command": {
@@ -76,7 +79,8 @@
                 "slot": 0
               }
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-3"
           },
           {
             "command": {
@@ -86,7 +90,8 @@
               ],
               "priority": "high"
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-4"
           },
           {
             "command": {
@@ -98,18 +103,26 @@
                   "y": 2
                 }
               ],
-              "priority": "high"
+              "priority": "high",
+              "output_directions": [
+                "e"
+              ]
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-5"
           },
           {
             "command": {
               "kind": "cancel_blueprints",
               "blueprint_ids": [
-                "blueprint:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                {
+                  "kind": "persistent",
+                  "id": "blueprint:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
               ]
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-6"
           },
           {
             "command": {
@@ -125,7 +138,8 @@
                 ]
               }
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-7"
           },
           {
             "command": {
@@ -135,7 +149,8 @@
               ],
               "enabled": true
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-8"
           },
           {
             "command": {
@@ -148,7 +163,8 @@
                 "target": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57"
               }
             },
-            "future_orders": "keep"
+            "future_orders": "keep",
+            "local_id": "command-9"
           }
         ]
       }

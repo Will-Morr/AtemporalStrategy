@@ -455,7 +455,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3",
@@ -477,7 +482,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc",
@@ -499,7 +509,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
@@ -521,7 +536,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236",
@@ -543,7 +563,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         },
         {
           "id": "entity:ce95d8c988db5e06e057be3e83399e7b62bec662509b7c38d779b255e08ad29a",
@@ -565,7 +590,12 @@
           "next_action_tick": 0,
           "next_move_tick": 0,
           "production": null,
-          "support_target": null
+          "support_target": null,
+          "engaged_target": null,
+          "resolved_destination": null,
+          "failed_move_attempts": 0,
+          "blocked_step": null,
+          "born_at_tick": null
         }
       ],
       "blueprints": [],
@@ -848,7 +878,7 @@
     "end_tick_exclusive": 6,
     "minimum_end_tick": 0
   },
-  "initial_hash": "645b92456cc40f22191a1b770c6bce70426c5e2eca4ceab46dea4fa7aedf747a",
+  "initial_hash": "c5735ffed905b4739854bbdfe1bfdd970b0805971dc5296dcc307643a58bdd94",
   "expected": {
     "final_hash": null,
     "outcome": {
