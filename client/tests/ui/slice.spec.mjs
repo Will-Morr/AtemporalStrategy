@@ -101,6 +101,8 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('Shift+h'); await a.keyboard.press('3');
   await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.at(-1).command.edit.kind)).toBe('add');
   await a.keyboard.press('Control+z');
+  await a.keyboard.press('p');await a.keyboard.press('1');
+  await expect(a.locator('#draft-list')).toContainText('priority high');await a.keyboard.press('Control+z');
   await a.keyboard.press('3');
   await expect(a.locator('#recipient')).toContainText('Group 3');
   await a.keyboard.press('f'); await clickTile(a, originalMiner);
@@ -127,6 +129,10 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.locator('#draft-list li').last().click(); await a.keyboard.press('Delete');
   expect((await state(a)).draft).toBe(0);
   await a.keyboard.press('Escape');
+  const diagonal = await a.evaluate(() => { const g=window.atemporal;for(let y=3;y<g.terrain.height-3;y++)for(let x=3;x<g.terrain.width-3;x++){const a={x,y},b={x:x+2,y:y+2};if(g.placementTiles(a,b).every(t=>g.validPlacement(t,false)))return [a,b];} });
+  await a.keyboard.press('b');await a.keyboard.press('3');await dragTiles(a,diagonal[0],diagonal[1]);
+  expect(await a.evaluate(() => window.atemporal.draft.commands.at(-1).command.tiles.length)).toBe(5);
+  await review.capture('diagonal-connected-wall',a);await a.keyboard.press('Control+z');
 
   // Player A: mine with the miner, place a factory, construct it. Player B passes.
   const miner = await findEntity(a, 0, 'miner');
@@ -172,6 +178,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   // Timeline zoom around the cursor, ruler drag, keyboard pan and speed presets.
   const timeline = await a.locator('#timeline').boundingBox();
   await a.mouse.move(timeline.x+timeline.width*.6,timeline.y+20);
+  await expect(a.locator('#timeline')).toHaveAttribute('title',/Tick.*Drag bottom ruler/);
   await a.mouse.wheel(0,-500);
   const zoomed = await a.evaluate(() => ({...window.atemporal.view}));
   expect(zoomed.t1-zoomed.t0).toBeLessThan(rev1.terminal);
@@ -182,6 +189,9 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('Shift+]'); await a.keyboard.press('Shift+[');
   await a.selectOption('#speed','8'); expect(await a.evaluate(() => window.atemporal.rate)).toBe(8);
   await a.selectOption('#speed','1');
+  const mini = await a.locator('#minimap').boundingBox();
+  await a.mouse.move(mini.x+mini.width*.3,mini.y+mini.height*.3);await a.mouse.down();
+  await a.mouse.move(mini.x+mini.width*.7,mini.y+mini.height*.7,{steps:5});await a.mouse.up();
   await a.locator('#tick-input').focus(); await a.keyboard.press('v');
   await expect(a.locator('#statistics')).not.toHaveClass(/active/);
   await a.keyboard.press('Escape');
@@ -281,12 +291,18 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await pending.click(); await a.keyboard.press('ArrowDown'); await pending.focus(); await a.keyboard.press('Delete');
   await expect(a.locator('#draft-list')).toContainText('remove_pending'); await a.keyboard.press('Control+z');
   await a.keyboard.press('Escape');
-  // A same-instance reconnect keeps revision, playhead and the claimed identity.
+  // A same-instance reconnect also preserves historical inspection and a live draft.
+  await clickTile(a,await findEntity(a,0,'constructor'));await a.keyboard.press('x');
+  await a.locator('#replay summary').click();await a.selectOption('#round-picker','1');
+  await expect.poll(async () => (await state(a)).current).toBe(1);
   await contexts['player-a'].setOffline(true);
   await expect(a.locator('#connection')).toContainText('Disconnected');
   await contexts['player-a'].setOffline(false);
   await expect(a.locator('#connection')).toBeHidden({timeout:15000});
-  expect((await state(a)).current).toBe(2);
+  expect((await state(a)).current).toBe(1);expect((await state(a)).draft).toBe(1);
+  await a.getByRole('button',{name:'Return to live'}).click();
+  await expect.poll(async () => (await state(a)).current).toBe(2);
+  await a.keyboard.press('Control+z');await a.locator('#replay summary').click();
 
   // Round 3 rewrites an earlier tick: the constructor idles at tick 40 with drop-all, so the
   // factory is never completed and the later round-2 commands become no-ops.
@@ -320,6 +336,17 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect(a.locator('#accepted-inputs')).toContainText('locked_by_later_round');
   await a.keyboard.press('?');
   await review.capture('hotkey-help', a);
+  await a.keyboard.press('Escape');
+  await s.locator('#groups summary').click();
+  await s.getByLabel('Inspect player groups').selectOption('1');
+  await expect(s.locator('#group-list button')).toHaveCount(10);
+  const scoreBeforeArchive = await a.locator('#top-score').textContent();
+  await a.getByRole('button',{name:'Stop and archive unfinished',exact:true}).click();
+  await expect(a.locator('#result')).toContainText('unfinished');
+  await expect(a.locator('#commit')).toBeDisabled();
+  await expect(a.locator('#top-sim')).not.toContainText('live planning');
+  expect(await a.locator('#top-score').textContent()).toBe(scoreBeforeArchive);
+  await review.capture('unfinished-archive',a);
 });
 
 // Isolated real server: timed boundaries and changed server-instance IDs cannot be tested by

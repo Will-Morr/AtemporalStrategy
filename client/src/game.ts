@@ -134,7 +134,6 @@ export class Game {
       this.availableThrough = m.available_through;
       this.committed = m.committed_players;
       this.progress = null;
-      if (this.draft.tick !== null && this.current !== m.revision) this.clearDraft();
       this.updatePanels();
       if (this.player !== null && this.exact) this.net.send({ kind: 'planning_ready', round: m.round, revision: m.revision });
     });
@@ -165,7 +164,7 @@ export class Game {
   // ---- revisions and data ------------------------------------------------------------------
 
   async onPublished(m: ServerMessage & { kind: 'revision_published' }): Promise<void> {
-    if (this.revisions.has(m.revision) && this.current === m.revision && this.terrain) return;
+    if (this.revisions.has(m.revision) && this.terrain) { this.latest = Math.max(this.latest,m.revision); return; }
     const view: RevisionView = {
       revision: m.revision,
       outcome: m.outcome,
@@ -517,7 +516,7 @@ export class Game {
       this.drag = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY };
     });
     window.addEventListener('mousemove', e => {
-      this.hover = this.renderer.tileAt(e.clientX, e.clientY);
+      if (e.target === map) this.hover = this.renderer.tileAt(e.clientX, e.clientY);
       if (this.drag) {
         this.drag.x1 = e.clientX;
         this.drag.y1 = e.clientY;
@@ -646,11 +645,13 @@ export class Game {
   placementTiles(a: Tile, b: Tile): Tile[] {
     const tiles: Tile[] = [{ ...a }];
     let { x, y } = a;
-    // Axis steps ensure a connected wall, then canonical coordinate order.
-    while (x !== b.x || y !== b.y) {
-      if (x !== b.x) x += Math.sign(b.x - x);
-      else y += Math.sign(b.y - y);
-      tiles.push({ x, y });
+    // Follow the dragged line with axis-connected steps (no diagonal holes).
+    const nx = Math.abs(b.x-a.x), ny = Math.abs(b.y-a.y);
+    let ix = 0, iy = 0;
+    while (ix < nx || iy < ny) {
+      if (ix < nx && (iy === ny || (1+2*ix)*ny <= (1+2*iy)*nx)) { x += Math.sign(b.x-a.x); ix++; }
+      else { y += Math.sign(b.y-a.y); iy++; }
+      tiles.push({x,y});
     }
     return tiles.sort((a, b) => a.y - b.y || a.x - b.x);
   }
@@ -865,7 +866,7 @@ export class Game {
     if (round) {
       const fastest = Math.max(1000,Math.min(...round.time_totals.map(t=>t.total_ms)));
       const penalty = this.config.objective.kind === 'scoreboard' ? this.config.objective.rules.time_penalty : 'none';
-      $('top-sim').textContent = `Sim ${round.sim_duration_ms}ms · committed time ratio ${round.time_totals.map(t=>`${this.name(t.player_id)} ${(Math.max(1000,t.total_ms)/fastest).toFixed(2)}×`).join(' / ')} · penalty ${penalty}${this.current === this.latest && this.phase && !this.committed.includes(this.player ?? -1) && !this.spectator ? ` · live planning ${((performance.now()-this.planningSince)/1000).toFixed(0)}s` : ''}`;
+      $('top-sim').textContent = `Sim ${round.sim_duration_ms}ms · committed time ratio ${round.time_totals.map(t=>`${this.name(t.player_id)} ${(Math.max(1000,t.total_ms)/fastest).toFixed(2)}×`).join(' / ')} · penalty ${penalty}${!this.finished && this.current === this.latest && this.phase && !this.committed.includes(this.player ?? -1) && !this.spectator ? ` · live planning ${((performance.now()-this.planningSince)/1000).toFixed(0)}s` : ''}`;
     }
   }
 

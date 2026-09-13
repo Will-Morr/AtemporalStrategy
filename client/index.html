@@ -50,6 +50,8 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 @media(max-width:800px){#panels{grid-template-columns:1fr 1fr}#panels>div{height:12rem}#timeline-wrap{grid-column:1 / -1;grid-row:1}#panels{gap:3px;padding:3px}#selection{min-width:0}#result{display:none}#top{font-size:10px}#replay{top:4rem;max-width:65vw}#mode{max-width:90%;font-size:11px}#help{width:90vw}#stop-archive{bottom:25rem}#toast{bottom:25rem}.overlay{left:2%;width:96%;top:5%}}
 #connection{position:fixed;z-index:20;top:0;left:0;right:0;padding:12px;background:#503518;color:#fff}#connection button{margin-left:10px}
 #result{max-height:4.5rem;overflow:auto;pointer-events:auto}#replay{top:7.5rem}
+#minimap{position:absolute;right:.5rem;bottom:18rem;float:none;width:7.5rem;height:7.5rem;margin:0;border:1px solid var(--edge)}#stop-archive{bottom:26rem}#draft-title{max-height:3rem;overflow:auto}#draft-list{max-height:6rem;overflow:auto}#lock-preview{max-height:3.5rem;overflow:auto}
+@media(max-width:800px){#minimap{bottom:25rem;width:5rem;height:5rem}#stop-archive{bottom:30.5rem}#draft-list{max-height:3rem}#lock-preview{max-height:2rem}}
 </style></head><body>
 <section id="lobby">
   <h1>Atemporal Strategy</h1>
