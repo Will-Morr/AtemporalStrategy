@@ -4,6 +4,15 @@ use crate::*;
 use std::collections::{BTreeMap, VecDeque};
 
 pub const UNREACHABLE: u16 = u16::MAX;
+
+/// Ordered preference for a destination cell.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub(crate) enum Occupancy {
+    Free,
+    Yielding,
+    Settled,
+    Hard,
+}
 const CAPACITY: usize = 256;
 
 #[derive(Default)]
@@ -74,28 +83,57 @@ impl Sim {
         dist
     }
 
-    /// Next legal step strictly descending the field, using fixed neighbor order for ties.
+    /// Next legal step strictly descending the field. Equal distances prefer a free cell, then a
+    /// displaceable ally, then fixed neighbor order; occupants stay soft obstacles for the pass.
     pub(crate) fn descend(
         &self,
         field: &[u16],
         from: Tile,
+        mover: usize,
         neighbors: Neighbors,
-    ) -> Option<(Tile, Direction)> {
+    ) -> Option<(Tile, Direction, Occupancy)> {
         let here = field[self.idx(from)];
         if here == 0 || here == UNREACHABLE {
             return None;
         }
         let count = if neighbors == Neighbors::Eight { 8 } else { 4 };
-        let mut best: Option<(u16, Tile, Direction)> = None;
+        let mut best: Option<(u16, Occupancy, Tile, Direction)> = None;
         for (dx, dy, dir) in &DIRS[..count] {
             if let Some(n) = self.step_legal(from, *dx, *dy, neighbors) {
                 let d = field[self.idx(n)];
-                if d < here && best.is_none_or(|b| d < b.0) {
-                    best = Some((d, n, *dir));
+                let occupancy = self.occupancy(n, mover);
+                if d < here && best.is_none_or(|b| (d, occupancy) < (b.0, b.1)) {
+                    best = Some((d, occupancy, n, *dir));
                 }
             }
         }
-        best.map(|b| (b.1, b.2))
+        best.map(|b| (b.2, b.3, b.1))
+    }
+
+    /// How `to` blocks `mover` this tick: free, an ally that may yield, or a hard occupant.
+    pub(crate) fn occupancy(&self, to: Tile, mover: usize) -> Occupancy {
+        let o = self.occ[self.idx(to)];
+        if o == world::NONE {
+            return Occupancy::Free;
+        }
+        if o == world::RESERVED {
+            return Occupancy::Hard;
+        }
+        let (b, m) = (
+            &self.state.entities[o as usize],
+            &self.state.entities[mover],
+        );
+        let mobile = b.lifecycle == Lifecycle::Complete
+            && self.def(o as usize).movement.is_some()
+            && !self.hostile(b.owner, m.owner)
+            && b.born_at_tick.is_none_or(|t| t < self.state.tick);
+        if !mobile {
+            Occupancy::Hard
+        } else if b.goal_settled {
+            Occupancy::Settled
+        } else {
+            Occupancy::Yielding
+        }
     }
 
     /// Bounded radius-6 BFS treating current occupants as hard obstacles; returns a path to a

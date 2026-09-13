@@ -1,6 +1,6 @@
 //! One tick: commands → action intents → economy → damage/deaths/completions → motion → births →
 //! survival/inactivity. Every loop runs in sorted entity-ID order or an explicit deterministic rank.
-use crate::fields::UNREACHABLE;
+use crate::fields::{Occupancy, UNREACHABLE};
 use crate::output::Output;
 use crate::world::{DIRS, NONE, RESERVED, Sim, cardinal_offset, direction_of};
 use crate::*;
@@ -667,7 +667,6 @@ impl Sim {
             if e.lifecycle != Lifecycle::Complete
                 || self.acted[i]
                 || intent.hold
-                || e.next_move_tick > t
                 || e.born_at_tick.is_some_and(|b| b >= t)
             {
                 continue;
@@ -676,6 +675,7 @@ impl Sim {
                 continue;
             };
             let from = e.tile;
+            let ready = e.next_move_tick <= t;
             self.state.entities[i].resolved_destination = Some(goal);
             if let Some(next) = self.state.entities[i].local_detour.first().copied() {
                 let (dx, dy) = (
@@ -686,7 +686,9 @@ impl Sim {
                     && dy.abs() <= 1
                     && self.step_legal(from, dx, dy, m.neighbors).is_some()
                 {
-                    moves.push((self.entity_rank(i), i, next, direction_of(dx, dy)));
+                    if ready {
+                        moves.push((self.entity_rank(i), i, next, direction_of(dx, dy)));
+                    }
                     continue;
                 }
                 self.state.entities[i].local_detour.clear();
@@ -697,8 +699,35 @@ impl Sim {
                 self.state.entities[i].goal_settled = true;
                 continue;
             }
-            match self.descend(&field, from, m.neighbors) {
-                Some((to, dir)) => moves.push((self.entity_rank(i), i, to, dir)),
+            match self.descend(&field, from, i, m.neighbors) {
+                Some((to, _, Occupancy::Settled)) if self.settled_same_goal(to, i) => {
+                    // Every lower exit holds a settled same-goal ally: try one bounded local
+                    // detour around the cluster, otherwise settle behind it. Settlement is
+                    // evaluated even on cooldown so arrivals are never churned by displacement.
+                    // Settled units re-check on a fixed rotation so cells freed later fill in.
+                    if self.state.entities[i].goal_settled && !(t + i as u32).is_multiple_of(8) {
+                        continue;
+                    }
+                    let detour = self.local_detour(&field, from, m.neighbors);
+                    if detour.is_empty() {
+                        self.state.entities[i].goal_settled = true;
+                        continue;
+                    }
+                    if ready {
+                        let (dx, dy) = (
+                            i32::from(detour[0].x) - i32::from(from.x),
+                            i32::from(detour[0].y) - i32::from(from.y),
+                        );
+                        moves.push((self.entity_rank(i), i, detour[0], direction_of(dx, dy)));
+                    }
+                    self.state.entities[i].local_detour = detour;
+                }
+                Some((to, dir, _)) => {
+                    self.state.entities[i].goal_settled = false;
+                    if ready {
+                        moves.push((self.entity_rank(i), i, to, dir));
+                    }
+                }
                 None => {
                     self.state.entities[i].goal_settled = false;
                 }
@@ -756,9 +785,16 @@ impl Sim {
                 self.fail_move(i, to);
                 continue;
             }
-            if blocker.goal_settled && blocker.resolved_destination == mover.resolved_destination {
+            if self.settled_same_goal(to, i) {
                 // Settled same-goal ally: wait behind it instead of perpetual displacement.
                 self.state.entities[i].goal_settled = true;
+                self.state.entities[i].local_detour.clear();
+                continue;
+            }
+            if blocker.goal_settled && !self.transits(i, to) {
+                // A settled ally yields only to traffic passing through, never to a mover that
+                // would rest on its cell; otherwise two goals contend for one cell forever.
+                self.fail_move(i, to);
                 continue;
             }
             let b_neighbors = self.def(o).movement.as_ref().unwrap().neighbors;
@@ -848,6 +884,35 @@ impl Sim {
         Ok(())
     }
 
+    /// After stepping onto `to`, the mover could keep descending into a free or yielding cell.
+    fn transits(&mut self, mover: usize, to: Tile) -> bool {
+        let Some(goal) = self.state.entities[mover].resolved_destination else {
+            return false;
+        };
+        let neighbors = self.def(mover).movement.as_ref().unwrap().neighbors;
+        let field = self.field(goal, neighbors);
+        matches!(
+            self.descend(&field, to, mover, neighbors),
+            Some((_, _, Occupancy::Free | Occupancy::Yielding))
+        )
+    }
+
+    /// `to` holds an allied mobile entity settled at the mover's own destination.
+    fn settled_same_goal(&self, to: Tile, mover: usize) -> bool {
+        let o = self.occ[self.idx(to)];
+        if o == NONE || o == RESERVED {
+            return false;
+        }
+        let (blocker, m) = (
+            &self.state.entities[o as usize],
+            &self.state.entities[mover],
+        );
+        blocker.goal_settled
+            && self.def(o as usize).movement.is_some()
+            && !self.hostile(blocker.owner, m.owner)
+            && blocker.resolved_destination == m.resolved_destination
+    }
+
     fn commit_move(&mut self, i: usize, from: Tile, to: Tile, dir: Direction, cooldown: Tick) {
         let t = self.state.tick;
         self.set_occ(from, NONE);
@@ -876,7 +941,6 @@ impl Sim {
             e.next_move_tick = t + 1;
         }
         if self.state.entities[i].failed_move_attempts >= 3
-            && self.state.entities[i].local_detour.is_empty()
             && let Some(goal) = goal
         {
             let neighbors = self.def(i).movement.as_ref().unwrap().neighbors;

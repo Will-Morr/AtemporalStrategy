@@ -397,3 +397,64 @@ pub fn assert_checkpoint_equivalence(world: &World, full: &Run) {
         );
     }
 }
+
+/// Every pre-tick state from the checkpoint to the stop tick, driving the engine directly.
+pub fn trace(world: &World) -> Vec<WorldState> {
+    let request = world.request();
+    let mut sim = Sim::new(&request).unwrap();
+    let mut states = vec![sim.state.clone()];
+    let mut sink = |_: Output| {};
+    while sim.state.tick < request.end_tick_exclusive {
+        sim.step(&mut sink).unwrap();
+        states.push(sim.state.clone());
+        if sim.inactive() {
+            break;
+        }
+    }
+    states
+}
+
+/// No overlap, at most one step per entity per tick, and never a diagonal step for four-neighbor
+/// types, including forced displacement.
+pub fn assert_motion_invariants(world: &World, states: &[WorldState]) {
+    for pair in states.windows(2) {
+        let (before, after) = (&pair[0], &pair[1]);
+        let mut tiles: Vec<Tile> = after.entities.iter().map(|e| e.tile).collect();
+        tiles.sort();
+        tiles.dedup();
+        assert_eq!(
+            tiles.len(),
+            after.entities.len(),
+            "overlap at S[{}]",
+            after.tick
+        );
+        for e in &after.entities {
+            let Some(prev) = before.entities.iter().find(|p| p.id == e.id) else {
+                continue;
+            };
+            let (dx, dy) = (
+                (i32::from(e.tile.x) - i32::from(prev.tile.x)).abs(),
+                (i32::from(e.tile.y) - i32::from(prev.tile.y)).abs(),
+            );
+            assert!(
+                dx <= 1 && dy <= 1,
+                "{:?} moved twice during tick {}",
+                e.id,
+                before.tick
+            );
+            let four = world
+                .def(&e.type_key)
+                .movement
+                .as_ref()
+                .is_some_and(|m| m.neighbors == Neighbors::Four);
+            if four {
+                assert!(
+                    dx + dy <= 1,
+                    "vehicle {:?} moved diagonally during tick {}",
+                    e.id,
+                    before.tick
+                );
+            }
+        }
+    }
+}
