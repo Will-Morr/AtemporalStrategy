@@ -61,3 +61,12 @@ Useful tools: `cargo run -p atemporal-tools -- schema | guide | normalize | fixt
 Run `node scripts/integration-performance.mjs` after the release/browser build for the export-enabled dense cave workload, cold seeks, repeated tick-zero rewrites, memory measurements and an actual rendered browser frame. It writes `target/integration-performance/summary.json`, a screenshot and trace. Two queues request 1,000 units each; blocked output can limit the realized population. `cargo bench -p atemporal-sim` separately measures authored 100/500/2,000-entity march/battle worlds and a 20,000-tick production run. See [integration verification](integration-verification.md) for measured results and machine details.
 
 Large result caches stream to disk rather than building a second complete serialized revision in memory. Browser replay requests only rendered effects through optional `get_events.effects_only`; ordinary event queries retain full movement diagnostics. Retention budgets exclude the currently published revision, so dense current revisions can exceed the configured budget. The stress measurement reports this explicitly. Fog controls battlefield presentation and selection; replay data and statistics remain inspectable, so it is not a server-side secrecy boundary.
+
+To review the playtest controls through a real inputs-only controller and local runner, build the runner and enable the peripheral browser scenarios:
+
+```sh
+cargo build --release -p atemporal-runner
+ATEMPORAL_UI_PERIPHERAL=1 npm run ui:review --prefix client -- --grep 'playtest fixes|peripheral mismatch'
+```
+
+These scenarios run in desktop and narrow Chromium. The mismatch case deliberately corrupts the local reference hash and asserts a visible persistent error plus disabled commits; healthy play verifies ghost settings and immediate newborn orders against the locally reproduced state. The full normal browser suite continues to cover controller-hosted multiplayer and recovery.

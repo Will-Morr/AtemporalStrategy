@@ -44,3 +44,7 @@ The user requested the complete browser checklist on `agent/client` in `../atemp
 The final UI request uses a new branch/worktree, resolves the consolidated playtest requirements, and then completes any remaining “Complete browser experience” items and the “Full integration and handoff” checklist. Commit the playtest-fix batch before the remaining multiplayer, single-order and recovery browser work.
 
 The final UI handoff must include manual review of full rendered game frames. Continue independently through fixes, browser scenarios and integration until the game is player-ready; the separately assigned native peripheral does not block UI work. Rebase the UI branch onto current main to include simulation fixes before final verification.
+
+## Final UI and peripheral integration
+
+The user requested resolving the playtest UI notes, completing the browser and integration checklists in a new worktree/branch, and manually inspecting full rendered game frames before handoff. The separately implemented input-only peripheral was non-blocking for UI work. The latest instruction is to rebase the UI implementation onto `agent/peripheral`, resolve conflicts, run tests, update the TODO list with actual remaining work, and push the integrated result to `main` when ready.

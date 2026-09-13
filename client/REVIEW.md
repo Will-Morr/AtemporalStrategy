@@ -78,3 +78,10 @@ This record covers the playtest-fix batch; multiplayer variants, recovery and co
 The final browser handoff is recorded in [integration verification](../docs/integration-verification.md), including all commands, artifact roots, manually inspected full game frames, dense-workload measurements and remaining platform/performance limits. The 12-scenario desktop run and four-scenario narrow run passed; finished-match polish was rechecked in both viewports. Repository checks, seven durability scenarios, match variants, deterministic replay equivalence, cap benchmarks, the intentional-failure harness and real-server MCP smoke passed.
 
 The work fixes the full playtest list and adds multiplayer/single-order/recovery coverage. Stress review additionally fixed large export buffering, unused movement-event downloads, eager ancestor replay loading, repeated vision work, off-screen drawing and the spectator's large-map overview. Native peripheral implementation remains separately assigned and non-blocking for this UI handoff.
+
+
+## Inputs-only peripheral review
+
+`cargo build --release -p atemporal-runner` followed by `ATEMPORAL_UI_PERIPHERAL=1 npm run ui:review --prefix client` enables the real-runner playtest and mismatch cases. The helper starts an isolated `--inputs-only` controller and runner for each case; browser tabs connect to the runner. Healthy ghost queues/priorities/start orders are checked against locally reproduced tick 153. Corrupted-hash coverage verifies the persistent failure banner and disabled commit without page errors. Full desktop and narrow frames were inspected. The opening walkthrough also owns its server per project and fits area drags between floating panels, preventing one viewport from inheriting the other viewport's already-played match.
+
+See [integration verification](../docs/integration-verification.md) for results and [remaining review coverage](../docs/implementation.md#remaining-review-coverage) for the outstanding scale measurement.

@@ -1,6 +1,6 @@
 # Browser integration verification — 2026-09-13
 
-Implementation: `agent/ui-final`, rebased onto main's `6f35ebd` simulation fixes. This record covers the browser game and shared controller/archive integration. The native input-only peripheral is assigned separately and is non-blocking for UI work.
+Implementation: `agent/ui-final`, rebased onto `agent/peripheral` (`2f125b4`) while retaining main's simulation fixes. This record covers the browser, controller/archive and native inputs-only peripheral integration.
 
 ## Reproducible checks
 
@@ -52,3 +52,14 @@ Raw measurements and rendered evidence are in `target/integration-performance/su
 ## Verification limits
 
 Chromium is the verified browser. Firefox/WebKit, touchscreen-only play and WAN behavior were not tested. Narrow layouts support keyboard/mouse input with scrolling command panels; the primary play surface is desktop. Fog limits battlefield rendering and selection, while replay/statistical data remain inspectable. Local draft lock estimates are deliberately non-authoritative; published command outcomes are the source of truth. Heavy current revisions can exceed configured retention budgets as measured above.
+
+
+## Peripheral integration verification
+
+The UI branch was rebased onto `agent/peripheral` (`2f125b4`). Conflict resolution retains the core simulation fixes, ghost settings and worker recovery while moving optional effects-only event filtering into the shared `RevisionData` queries used by both controller and runner. The updated protocol scenario compares the filtered stream with the rendered subset of the full event stream (54 effects in revision 2).
+
+The assembled runtime passes `scripts/check.sh`, `scripts/peripheral-check.mjs`, `scripts/match-check.mjs`, all seven `scripts/gate5-check.mjs` scenarios, and release `atemporal-sim --test equivalence`. Peripheral revisions 0–3 match the controller archive; checkpoint replay, a tick-40 rewrite, exact tick 153, runner restart, controller resume, deliberately corrupted hash rejection, and a 1 MiB cache budget with regeneration all pass. These ordinary-sized rounds do not replace the outstanding 2,000-live-entity end-to-end scale measurement.
+
+A real rendered mismatch check exposed an unhandled initial replay-query rejection. The browser now retains a visible red mismatch banner, disables orders and stops repeatedly requesting the failed revision. Desktop and narrow scenarios verify this with the real corrupted-hash runner, alongside the healthy configurable-ghost scenario. The failure evidence remains in `artifacts/ui/2026-09-13T15-15-24.476Z-625518`; later passing evidence uses the corrected runtime. Manual full-frame inspection covered the healthy ghost/production states and both mismatch viewports; the mismatch trace contains the actual claim/start/assert/capture sequence with no browser errors.
+
+Local logs: `/tmp/peripheral-integration-check-final.log`, `/tmp/peripheral-integration-protocol.log`, `/tmp/peripheral-integration-match.log`, `/tmp/peripheral-integration-gate5.log`, `/tmp/peripheral-integration-equivalence.log`. Protocol summaries are under `target/`. The review checklist records the remaining scale-specific coverage rather than presenting the 1,264-live-unit browser workload as a 2,000-unit result.

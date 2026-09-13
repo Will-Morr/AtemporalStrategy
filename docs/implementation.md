@@ -8,7 +8,7 @@ The vertical slice is implemented and Gate 2 is met: the real engine, a server r
 
 Complete the entire planned feature set—including roster, maps, game variants, groups, guide, graphs, replay and peripheral—before asking the user to play. Intermediate automated scenarios and agent-run browser checks are engineering verification, not a user playtest.
 
-Shared contracts/content and integration remain coordinated across isolated worktrees. Merge handoffs sequentially and reconcile generated contracts together. The native input-only peripheral is assigned separately; the user explicitly made it non-blocking for UI implementation and verification.
+Shared contracts/content and integration remain coordinated across isolated worktrees. Merge handoffs sequentially and reconcile generated contracts together. The native input-only peripheral is integrated with the browser and shared controller.
 
 ## Nested implementation checklist
 
@@ -64,13 +64,13 @@ Shared contracts/content and integration remain coordinated across isolated work
   - [x] `runner` native peripheral, shared sim adapter/library, controller bootstrap/fingerprint validation.
   - [x] Local browser/guide serving on configurable port and commit relay to the controller.
   - [x] Derive locks/IDs/groups from inputs; compare revision hashes without world-state streaming.
-  - [x] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay (`scripts/peripheral-check.mjs`; the mismatch diagnostic reaches the browser through withheld planning and failed queries, not a dedicated panel).
+  - [x] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay (`scripts/peripheral-check.mjs`; rendered mismatch tests verify a persistent error banner and disabled orders).
 - [x] Full integration and handoff — coordinator
   - [x] Real two-player tabs plus spectator cover opening, production, combat, rewriting and replay.
   - [x] Exercise both objectives/control limits, 3-player FFA, 4-player FFA and 2v2 teams.
   - [x] Verify behavioral, durability and performance checks; fix blockers and record measured limits.
   - [x] Document launch/setup/content/guide/archive usage, constraints and measured benchmark machine/results in [integration verification](integration-verification.md).
-  - [x] Complete browser integration without an intermediate human-playtest gate; the separately assigned native peripheral retains its own handoff.
+  - [x] Complete browser/peripheral integration without an intermediate human-playtest gate.
 
 ## Agent assignments and acceptance contracts
 
@@ -114,7 +114,7 @@ Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick p
 
 ## Subsystem handoff status
 
-The integrated engine supports bounded parallel intents, 2–4-player maps, allied traffic and checkpoint-safe detours. The browser includes group editing, graphs, per-round replay and before/after comparison. The server supports resume/verification, retention budgets and regeneration. Final verification exercises these together; the separately assigned native peripheral has independent ownership.
+The integrated engine supports bounded parallel intents, 2–4-player maps, allied traffic and checkpoint-safe detours. The browser includes group editing, graphs, per-round replay and before/after comparison. The server supports resume/verification, retention budgets and regeneration. Final verification exercises these together, including the native inputs-only peripheral.
 
 | Timing | Bounded assignment | Ownership and handoff |
 | --- | --- | --- |
@@ -122,6 +122,12 @@ The integrated engine supports bounded parallel intents, 2–4-player maps, alli
 | Complete | Controller/archive breadth | `crates/server`: teams/capacity in the lobby, bounded byte-accounted channels, retention/eviction with regeneration, archive resume/replay CLI, stats bucketing, failure injection. |
 | Complete | Browser breadth | `client`: group-edit/binding chords, graphs, per-round replay viewer, before/after summaries, lock-effect previews, reconnect polish and multi-player rendered review. |
 | Complete | Local browser harness | Extend `client/tests/ui/slice.spec.mjs` rather than the scaffold test; keep screenshots as review evidence. |
-| Done | Native peripheral | `crates/runner` over the server library's sim adapter and revision store; `--inputs-only` controller route; see [development](development.md). |
+| Complete | Native peripheral | `crates/runner` over the server library's sim adapter and revision store; `--inputs-only` controller route; see [development](development.md). |
 
 The coordinator retains shared content/contracts and merges changes sequentially. Compact transport, exact-state reconstruction and real lock application should be settled in the slice before separate owners depend on them. These assignments do not authorize an early user playtest.
+
+## Remaining review coverage
+
+- [ ] Measure an actual 2,000-live-entity controller/browser workload at non-sample ticks, including peripheral replication, cold seeks and peak memory. The authored simulation benchmark reaches 2,000; the current end-to-end congestion scenario reaches 1,264, so it does not close this scale-specific review item.
+
+The browser feature, multiplayer/single-order/recovery, and peripheral implementation checklists are complete. Gate 3 evidence combines the release engine one/four-thread and cold/warm/evicted-flow-cache test with real peripheral checkpoint replay, restart and revision-body eviction/regeneration. A full high-population peripheral matrix is part of the scale check above. Firefox/WebKit, touchscreen-only input and WAN conditions remain optional coverage extensions, not verified capabilities. See [integration verification](integration-verification.md) for actual checks and limits.
