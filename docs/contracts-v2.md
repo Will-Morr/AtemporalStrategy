@@ -32,7 +32,7 @@ A peripheral connects to `/ws/peripheral` and sends `hello` without a slot token
 
 ## Content, guide and configuration
 
-Content loading/normalization is shared; the sim reads capability data only. The server generates the guide once at startup with `write_guide` from the effective content and serves it at `/guide/`; `/guide/content.json` is the client's type table. `config/game.yaml` pins seed, map, players, objective, control limit, future-order window, horizon/stall, the decided stop, snapshot/checkpoint intervals, starting matter and ore per start; the map generator currently supports two players on a 180°-symmetric fixture map.
+Content loading/normalization is shared; the sim reads capability data only. The server generates the guide once at startup with `write_guide` from the effective content and serves it at `/guide/`; `/guide/content.json` is the client's type table. `config/game.yaml` pins seed, map, players, objective, control limit, future-order window, horizon/stall, the decided stop, snapshot/checkpoint intervals, starting matter and ore per start; the map generator supports connected two-to-four-player cave maps, with symmetric two/four-player layouts and asymmetric three-player layouts.
 
 ## Still provisional
 
