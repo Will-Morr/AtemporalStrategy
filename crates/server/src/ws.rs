@@ -573,8 +573,18 @@ pub fn drive_job(app: App, mut rx: mpsc::Receiver<WorkerMessage>) {
                     }
                 }
                 WorkerMessage::Failed {
-                    job_id, message, ..
+                    job_id,
+                    message,
+                    error_code,
+                    ..
                 } => {
+                    if error_code == "worker_panic" {
+                        let retry = app.controller.lock().unwrap().retry_worker_panic(&job_id);
+                        if let Ok(Some(next)) = retry {
+                            rx = next;
+                            continue;
+                        }
+                    }
                     app.controller.lock().unwrap().on_failed(&job_id, &message);
                 }
                 other => {

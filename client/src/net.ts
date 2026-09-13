@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, ServerEnvelope } from './contracts.generated';
+import type { ClientMessage, ServerMessage, ServerEnvelope, LobbyState } from './contracts.generated';
 
 type Kind = ServerMessage['kind'];
 type Of<K extends Kind> = Extract<ServerMessage, { kind: K }>;
@@ -11,6 +11,8 @@ export class Net {
   private waiters: Waiter[] = [];
   private ranges = new Map<Kind, Promise<unknown>>();
   instance: string | null = null;
+  lobby: LobbyState | null = null;
+  published = false;
   bytes = 0;
   connected = false;
   onInstanceChange: () => void = () => {};
@@ -34,6 +36,10 @@ export class Net {
       }
       this.instance = envelope.server_instance_id;
       const message = envelope.message;
+      if (message.kind === 'welcome' || message.kind === 'lobby_updated' || message.kind === 'lobby_update_rejected') {
+        if (!this.lobby || message.lobby.revision >= this.lobby.revision) this.lobby = message.lobby;
+      }
+      if (message.kind === 'revision_published') this.published = true;
       const waiter = this.waiters.find(w => w.test(message));
       if (waiter) {
         this.waiters.splice(this.waiters.indexOf(waiter), 1);

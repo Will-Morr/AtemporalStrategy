@@ -42,7 +42,6 @@ pub struct Sim {
     pub(crate) progress: bool,
     pub(crate) bucket_acc: Vec<[u32; 5]>,
     pub(crate) bucket_from: Tick,
-    pub(crate) checkpoint_tick: Tick,
     pub(crate) team_of: Vec<u8>,
     /// Derived per-team 2D prefix counts of hostile occupants, rebuilt before the action phase
     /// so target scans can skip boxes that hold no enemy at all.
@@ -103,7 +102,6 @@ impl Sim {
             progress: false,
             bucket_acc: vec![[0; 5]; players],
             bucket_from: request.checkpoint.tick,
-            checkpoint_tick: request.checkpoint.tick,
             team_of,
             hostile_prefix: vec![],
             sim_start: std::time::Instant::now(),

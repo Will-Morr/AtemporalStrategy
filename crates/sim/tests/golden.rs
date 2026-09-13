@@ -70,8 +70,8 @@ fn checkpoint_replay_matches_full_replay() {
                 fixture.name, request.checkpoint.tick
             );
             assert_eq!(
-                partial.outcome.terminal_state_tick,
-                full.outcome.terminal_state_tick
+                partial.outcome, full.outcome,
+                "checkpoint replay must retain full survival history"
             );
         }
     }

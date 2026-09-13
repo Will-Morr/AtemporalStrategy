@@ -4,17 +4,18 @@ import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
-export async function isolatedServer(testInfo, edit = () => {}) {
+export async function isolatedServer(testInfo, edit = () => {}, editContent = () => {}, serverArgs = []) {
   const root = new URL('../../../', import.meta.url).pathname;
   const config = JSON.parse(await readFile(`${root}config/game.yaml`, 'utf8'));
   edit(config);
   const dir = testInfo.outputPath('server'); await mkdir(dir, { recursive:true });
+  const content=JSON.parse(await readFile(`${root}config/content.yaml`,'utf8'));editContent(content);const contentPath=`${dir}/content.json`;await writeFile(contentPath,JSON.stringify(content));
   const configPath = `${dir}/game.json`; await writeFile(configPath,JSON.stringify(config));
   const probe = createServer(); await new Promise(r=>probe.listen(0,'127.0.0.1',r));
   const port = probe.address().port; await new Promise(r=>probe.close(r));
   let child;
   const start = async (extra=[]) => {
-    child=spawn(`${root}target/release/atemporal-server`,['--port',String(port),'--config',configPath,'--replays',`${dir}/replays`,...extra],{cwd:root,stdio:['ignore','pipe','pipe']});
+    child=spawn(`${root}target/release/atemporal-server`,['--port',String(port),'--config',configPath,'--content',contentPath,'--replays',`${dir}/replays`,...serverArgs,...extra],{cwd:root,stdio:['ignore','pipe','pipe']});
     await new Promise((resolve,reject)=>{
       const timeout=setTimeout(()=>reject(new Error('Server startup timeout')),15000);
       child.stdout.on('data',d=>{void appendFile(`${dir}/server.log`,d);if(String(d).includes('listening on')){clearTimeout(timeout);resolve();}});
@@ -25,11 +26,12 @@ export async function isolatedServer(testInfo, edit = () => {}) {
   const stop=async()=>{if(child.exitCode!==null)return;const exited=once(child,'exit');child.kill('SIGTERM');await exited;};
   await start();return {url:`http://127.0.0.1:${port}/`,dir,start,stop};
 }
-export async function players(review,url,count=2) {
+export async function players(review,url,count=2,teams=false) {
   const pages=[];
   for(let slot=0;slot<count;slot++){
     const p=await(await review.newContext(`player-${slot}`)).newPage();await p.goto(url);
-    await expect(p.locator('#status')).toContainText('Claim a slot');await p.fill('#username',`Player ${slot}`);
+    await expect(p.locator('#status')).toContainText('Claim a slot');await p.fill('#username',`Player ${slot}`);await p.fill('#color',['#4fc3f7','#aed581','#ff8a65','#ce93d8'][slot]);
+    if(teams)await p.selectOption('#team',slot<2?'cyan':'orange');
     await p.locator('#roster li',{hasText:`Slot ${slot}`}).getByRole('button',{name:'Claim',exact:true}).click();
     await expect(p.locator('#status')).toContainText(`You hold slot ${slot}`);pages.push(p);
   }return pages;
