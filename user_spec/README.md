@@ -21,3 +21,9 @@ The user's latest storage instruction supersedes the earlier request for a new f
 ## Planning handoff
 
 The user requested committing and pushing all planning documents when ready, and identifying any large remaining questions for them to answer. They reconfirmed committing and pushing once the player-guide, lobby-profile, and CLI-port planning update is settled. Remaining questions and recommendations belong in the architecture decision register until answered.
+
+## Implementation and playtest expectations
+
+The user requested review of the adversarial agent's findings and explicitly rejected its early-human-playtest recommendation: they only want to try playing once the game is ready according to the full current plan. Automated scenarios, agent-run browser checks and performance measurements can run during implementation. Do not introduce a reduced-scope human-playtest gate or require the user to play an unfinished slice.
+
+Keep the main planning documents focused on the current plan, without references to review findings, reviewer identifiers or response history. Preserve any review record separately. Commit and push the completed planning updates.

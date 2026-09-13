@@ -30,6 +30,8 @@ All players plan against the same published timeline. Reveal their orders and re
 
 Advance the immutable history boundary by a fixed, configurable number of ticks per completed planning round.
 
+Timed adjudication considers only the constructor/factory end state: the game is decided when locked history shows a player with no constructors or factories. Loss of all active buildings while a constructor still exists is not sufficient for timed finalization. Exact multiplayer team aggregation remains an explicit implementation interpretation.
+
 ## Dynamic simulation horizon
 
 Use a configurable inactivity duration to stop dynamically based on lack of order progress or unit destruction, with an ambitious absolute tick limit as a backup.
@@ -52,8 +54,14 @@ Multiplayer supports **FFA or team play**. Add an optional dynamic score-to-win 
 
 Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-5 rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
 
+There is no scoreboard round limit. Players can stop and archive manually; repeated stalemates or tied scores do not cause an automatic administrative result.
+
 The original request's optional time-based score penalty remains in scope. Team application of lead-N, exact penalty formulas, and other unconfirmed details remain proposals in the architecture documents.
 
 ## Server launch and restart
 
 The game process must accept a command-line port argument. Restarting it on the same port should let all players return by refreshing their existing browser tab. Startup/restore behavior should preserve that stable address; specific CLI naming and default port remain implementation choices.
+
+## Allied traffic and deadlocks
+
+The user expects a very simple mechanism to resolve unit deadlocks, such as allowing a unit to enter a teammate bot's occupied tile and moving the displaced bot by swapping positions or pseudorandomly placing it on an adjacent tile. Prefer such lightweight mechanics over a complex crowd/pathfinding system. Exact displacement precedence, legal moves and deterministic arbitration remain implementation proposals.

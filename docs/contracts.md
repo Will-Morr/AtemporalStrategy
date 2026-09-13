@@ -73,7 +73,7 @@ Command = AssignOrder{ entities: EntityId[], order: Order }
             | Remove{entities: EntityId[]} }
         | BindFactoryGroup{ factories: EntityId[], group: ControlGroupId | null }
         | SetPriority{ entities: EntityId[], priority }
-        | PlaceBlueprints{ type_key, tiles: Tile[], priority }
+        | PlaceBlueprints{ type_key, tiles: Tile[], priority, output_directions?: Direction[] }
         | CancelBlueprints{ blueprint_ids: BlueprintId[] }
         | EditProduction{ factories: EntityId[], edit:
             Append{items: TypeKey[]} | ReplacePending{items: TypeKey[]}
@@ -81,9 +81,9 @@ Command = AssignOrder{ entities: EntityId[], order: Order }
         | SetQueueLoop{ factories: EntityId[], enabled: bool }
         | SetStoredOrder{ factories: EntityId[], order: StoredOrder }
 
-DraftCommand = { command: Command, future_orders: FutureOrderPolicy }
-// Non-Keep is permitted for entity-directed orders/settings and AssignGroupOrder;
-// membership/binding/general edits currently require Keep.
+DraftCommand = { local_id: string, command: Command, future_orders: FutureOrderPolicy }
+// Non-Keep is permitted only for AssignOrder and AssignGroupOrder.
+// Every setting/membership/binding/general command requires Keep.
 TurnDraft = { based_on_revision, tick, commands: DraftCommand[] }
 Suppression = { source_command_id, historical_command_id,
   target: EntityComponent{entity_id} | EntireGroupOrder{group: ControlGroupId} }
@@ -104,11 +104,11 @@ No player may stage commands for different ticks within one turn. Changing the d
 
 For a draft at t, the controller resolves DropAll against effective historical entity-directed commands with tick > t; DropWindow restricts this to `t < tick <= min(t + W, max_tick - 1)` using checked arithmetic. W comes from pinned setup. Reject DropWindow when disabled. Inspect only commands visible in `based_on_revision`; newly committed commands in the same simultaneous round are never suppression targets. Match owned entity IDs individually, not whole group envelopes. Canonicalize and persist the exact `(historical_command_id, suppression_target)` set with the source command; clients cannot provide unchecked deletions. Repeated suppressions are idempotent.
 
-Proposed removal scope includes AssignOrder, AssignGroupOrder, SetPriority, EditProduction, SetQueueLoop and SetStoredOrder. PlaceBlueprints, CancelBlueprints, EditGroupMembers and BindFactoryGroup carry Keep only and are not implicitly suppressed. Suppressions are not recursively deleted when their source's in-world command component is later suppressed: they represent already accepted revision edits. Original command/queue-item IDs are never renumbered. Replacement plus suppression counts as one command for control limits.
+Proposed removal scope includes AssignOrder, AssignGroupOrder, SetPriority, EditProduction, SetQueueLoop and SetStoredOrder. Only AssignOrder and AssignGroupOrder may initiate removal. All settings/general/membership/binding edits carry Keep, so a priority change cannot erase future movement. PlaceBlueprints, CancelBlueprints, EditGroupMembers and BindFactoryGroup are not implicitly suppressed. Suppressions are not recursively deleted when their source's in-world command component is later suppressed: they represent already accepted revision edits. Original command/queue-item IDs are never renumbered. Replacement plus suppression counts as one command for control limits.
 
 Build the effective event stream by applying all suppression records through the selected revision before simulation, worker inactivity lookahead or checkpoint suffix replay. Preserve group members that were not suppressed. Persisted suppression is independent of later execution-time target validity. Add `suppressed_by` references to historical command inspection, distinct from execution no-op reasons. A historical round's replay includes only suppressions accepted through that round. Future-order policy and resolved suppressions are included in archive/inputs-only payloads and revision identity.
 
-Proposed protocol additions: `PreviewFutureOrders{based_on_revision, tick, draft_command}` → `{revision, affected_components, counts_by_kind, interval}` for review, and `GetEntityOrderHistory{revision, entity_ids}` → scheduled command components including suppression status. Server recomputes/validates the suppression set on commit. Local previews may use fetched history; they are not authoritative.
+Proposed protocol additions: `PreviewFutureOrders{draft: TurnDraft, command_index}` → `{revision, affected_components, counts_by_kind, interval}` for inspection, and `GetEntityOrderHistory{revision, entity_ids}` → scheduled command components including suppression status. Server recomputes/validates the suppression set on commit. Local previews may use fetched history; they are not authoritative.
 
 ### Persistent control groups
 
@@ -139,7 +139,8 @@ SimRequest = {
 WorldState = {
   tick, last_progress_tick, inactivity_deadline, terrain, ore, players: [{bank, spend counters, currently_eliminated, status_since_tick, elimination_reasons: Reason[]}],
   entities: [{id, owner, type_key, tile, last_move_direction, hp, paid_matter,
-    lifecycle: site | complete, blueprint_id?, action, priority,
+    lifecycle: site | complete, blueprint_id?, action, priority, engaged_target?,
+    resolved_destination?, failed_move_attempts, blocked_step?,
     next_action_tick, next_move_tick, production?, support_target?}],
   blueprints, control_groups: ControlGroupState[], deterministic_identity_state
 }
@@ -208,7 +209,7 @@ Only lobby participants claim slots. First occupied slot may start once all conf
 
 Client discards responses for stale revisions. `request_id` provides idempotency: a retry returns the original commit response. Simultaneous mode hides committed command payloads until the round closes while sharing readiness. Commit is final for that round; undo is available in the draft only. A late reconnect receives the current revision, metadata and its own accepted-commit state.
 
-Define `available_through` as the inclusive latest command tick: `min(terminal_state_tick, max_tick-1)`, allowing new orders to resume from a quiet endpoint. Always require `editable_from <= tick <= available_through` and `tick < max_tick`. Timed workers use `minimum_end_tick = min(max_tick, previous_editable_from + lock_ticks_per_round)` so quiet history can still advance. Do not close a match merely because a past elimination tick becomes immutable. Proposed timed closure requires the completed inactive win/draw endpoint to become immutable, or reaching the absolute horizon; preserve any recovery before that endpoint. Otherwise open the next planning round.
+Define `available_through` as the inclusive latest command tick: `min(terminal_state_tick, max_tick-1)`, allowing new orders to resume from a quiet endpoint. Always require `editable_from <= tick <= available_through` and `tick < max_tick`. Timed workers use `minimum_end_tick = min(max_tick, previous_editable_from + lock_ticks_per_round)` so quiet history can still advance. Do not close a match merely because a past elimination tick becomes immutable. Timed closure checks constructor/factory absence in S[new_L], as specified below. Distinguish `simulation_end_tick` from `editable_from`; a run reaching max_tick does not itself finalize the match. A transient active-building loss alone never finalizes timed defeat.
 
 Each connected client/peripheral sends `PlanningReady{round, revision}` when its required initial state is available. Its thinking timer starts at that acknowledgement; ordinary clients do not wait for all timeline chunks. No anti-cheating system is required. Disconnected players' timers begin when the controller opens planning; reconnect does not erase accrued time. In peripheral mode, initial local simulation catch-up before readiness is excluded and displayed as loading. A connected client withholding readiness can stall the prototype just as withholding a commit can; show readiness explicitly.
 
@@ -239,7 +240,7 @@ Each accepted player turn is atomically written and flushed before acknowledgeme
 
 Persist thinking time periodically in a separate atomic planning record, with the interval documented. Record resume events and any operator action. Provide CLI replay verification/resume and browser replay loading as read-only spectator mode. Results are inspectable by round, not only the final rewritten timeline.
 
-User-confirmed scoreboard cadence is once per resolved round, including passes and unchanged winning timelines. Default victory rule is `FixedTarget{points: 5}`, configurable; multiplayer may instead use the previously requested `Lead{margin: N}`.
+User-confirmed scoreboard cadence is once per resolved round, including passes and unchanged winning timelines. Default victory rule is `FixedTarget{points: 5}`, configurable; multiplayer may instead use `Lead{margin: N}`.
 
 Proposed score reduction: construct the complete vector of player/team deltas, persist it once per round, then evaluate the configured threshold. In lead mode compare the selected total of each side with the maximum of all rivals; require a positive margin. For example, totals `[8, 8, 3]` have no leader by 2, while `[10, 8, 3]` do. FFA win deltas are proposed as one per survivor; team deltas equal survivor count. Per user confirmation, survival points require at least one eliminated player: team raw delta is final surviving-member count on `win` and always zero on `stalemate`. On `draw`, use configured `draw_scoring`: `none` gives zero, `all_players` credits every original player (proposed one raw point each, summed by team). Score reduction belongs in the controller, not combat AI or client calculations.
 
@@ -253,7 +254,7 @@ Proposed presentation events are `Move{tick, entity_id, from, to}`, `Attack{tick
 
 `currently_eliminated` is derived from current completed entities each tick, and affects outcome accounting rather than whether surviving entities execute orders. A player failing survival at tick 20 and completing a factory at tick 40 has elimination and recovery transitions but belongs to final survivors if still alive at the endpoint. If everyone recovers, classify stalemate and award zero survival points. Retain status transitions in replay/timeline data and checkpoint the current status; do not treat a past transition as irreversible even in timed mode.
 
-User-confirmed tie default is continued play until one qualifying team leads. Proposed wire policy `continue_until_unique` requires a unique maximum score meeting FixedTarget; `shared_victory` instead returns all tied maximum qualifying sides in `match_winners`. With target 5, `[5,5]` continues by default and `[6,5]` ends; `[5,4]` meets the earlier first-to-5 rule. In shared mode `[5,5]` returns both. Lead-N still requires a unique side at least N ahead of every rival. Apply all same-round deltas before this check. `match_winners` is empty while the match continues; multiple match winners do not change the separate simulation stalemate/win/draw taxonomy.
+User-confirmed tie default is continued play until one qualifying team leads. Proposed wire policy `continue_until_unique` requires a unique maximum score meeting FixedTarget; `shared_victory` instead returns all tied maximum qualifying sides in `match_winners`. With target 5, `[5,5]` continues by default and `[6,5]` ends; `[5,4]` meets the first-to-5 rule. In shared mode `[5,5]` returns both. Lead-N still requires a unique side at least N ahead of every rival. Apply all same-round deltas before this check. `match_winners` is empty while the match continues; multiple match winners do not change the separate simulation stalemate/win/draw taxonomy.
 
 ### Draw score reduction
 
@@ -278,3 +279,21 @@ Profile updates are allowed before match start, validated by slot ownership, and
 Guide generation consumes normalized TypeDefinition records through the same loader used by the game. A matching manifest is required before publishing its guide URL. Runtime content/resumed archives differing from the bundled build trigger the proposed shared static-generation fallback. Intrinsic stats use ticks; any generated time conversions also key the artifact by effective tick rate. Future changes to unit content invalidate/rebuild the tables automatically. Unit descriptions reference capability data; exact mechanics prose is versioned alongside the sim code and reviewed at release.
 
 Proposed server CLI contract: `--port <1..65535>` selects the single listener used by assets, HTTP and WebSocket, overrides a config default, and never falls back silently. Print the chosen address and resume/new-match mode at launch. Reconnecting to an old server instance requires a fresh bootstrap; revision numbers alone cannot distinguish two process runs. Keep tokens private in individual SlotClaimed messages; public lobby snapshots expose only profile/readiness data.
+
+### Placement, draft projection, and content ownership
+
+Factory output selection: proposed cardinal directions N/E/S/W, explicitly selectable during placement. If omitted, choose the first in that order whose output neighbor is in bounds, walkable for the producible roster, and not occupied by a static structure/site in the projected draft state. Reject a factory blueprint with no structurally legal output; moving allied occupants do not invalidate placement and can cause ordinary temporary blocking later. Persist the chosen direction on the blueprint/site/factory rather than reselecting it during replay. Validate against actual state when the historical blueprint executes; report a no-op if an earlier rewrite makes it invalid. Preview renders the factory and its output tile. No implicit output teleporting or newborn displacement.
+
+Preview/commit projection: `PreviewFutureOrders` carries the complete ordered TurnDraft and command_index. Server validates earlier metadata edits in order against exact S[t] (group membership, queue/priority/template edits and blueprints), then computes that entry's removal preview. Do not execute economic/combat ticks during draft projection. Source validation and commit use the same reducer. Add `DraftRef{local_id, item_index}` for references to earlier draft-created blueprints/queue items, alongside existing persistent ID references. Reject forward/cyclic/unknown references. After final ordered command IDs are assigned, resolve local references deterministically into causal IDs; retain existing entities' IDs unchanged. A canceled draft placement can be folded out with dependent edits before submission. The accepted event stream has no unresolved local references. Newly produced units do not exist merely because a production queue was drafted and cannot be selected before actual birth.
+
+Motion fields: `failed_move_attempts`, `blocked_step` and `resolved_destination` are future-affecting state, so serialize/hash them. Displacement events identify mover and blocker, both old/new positions and which move was involuntary. Guard against moving either participant twice in a tick. Legal movement is capability-based for each participant; do not diagonally swap a vehicle merely because the other unit is a walker. Tests compare threads/checkpoints under randomized intent scheduling.
+
+Content ownership: coordinator owns `crates/content` (normalized types, validation, serialization, fingerprint and stat export), `crates/contracts`, build wiring and the small static guide generator. Simulation depends on content, not on guide generation; the guide generator depends on content, not on server/sim startup. Client owns authored guide/layout and consumes generated tables. Server owns runtime guide selection/fallback invocation. Full packaged builds generate docs; headless sim tests can compile without HTML generation or browser tooling. No duplicated content loader in the simulation crate.
+
+### Controller adjudication
+
+Timed mode: compute `new_L = min(old_L + lock_ticks_per_round, max_tick)` after a resolved round and preserve S[new_L]. Inspect completed living constructor/factory capabilities in that locked state, not the future sim outcome and not all-active-buildings absence. Persist `timed_lost_players` in controller metadata, separately from sim `currently_eliminated`. Proposed multiplayer reducer: a side remains eligible if any of its players is not timed-lost; finish with the sole eligible side or no winner if all are lost. Evaluate the entire locked-state vector before declaring a winner, so simultaneous final losses have no order bias. If several opposing sides remain eligible, open the next planning round. At boundary=max_tick with no constructor-based decision, proposed `history_exhausted` archives/halts as unfinished without a manufactured game win/draw or score delta. This last edge behavior and team reducer are disclosed interpretations.
+
+A temporarily building-less player with a constructor at the boundary is not timed-lost. A constructor/factory absence only in the mutable suffix is not final. Under the current ownership rules there is no ability to create a new constructor/factory after both sources are absent in locked history; if future mechanics permit allied construction/rescue or resurrection, revisit this finalization premise explicitly.
+
+Scoreboard has no maximum-round configuration, per user decision. Add proposed `StopAndArchive{request_id, based_on_revision}` as a controller operation available through a visible lobby/match control (first occupied slot/operator under the current host-role proposal). Preserve every accepted turn, including partial-round commits, and the last complete published result; optionally allow resume under existing archive semantics. Record `unfinished` and the stopping actor/time, never a fabricated sim Outcome, winner, or extra score delta. Repeated tie/stalemate/pass sequences otherwise continue. Manual-stop permission details remain revisable; no automatic round cap is introduced.

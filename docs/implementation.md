@@ -6,6 +6,8 @@
 
 This pass produces specifications only. The decision register records user requirements, including constructor mining, expanded elimination, three outcomes, team play and lead-based scoring. Remaining scoring interpretations stay revisable. Work can proceed using clearly labeled, revisable defaults where needed. The first milestone is one authoritative end-to-end browser game; the second adds peripheral replication and polish. Every subsystem agent owns a long-lived worktree and should finish a cohesive subsystem, with integration fixtures rather than a pile of disconnected scaffolding.
 
+Build and verify the entire planned feature set—including variants, guide, graphs, replay and peripheral—before asking the user to play. Intermediate automated and agent-run scenarios provide engineering verification. Timed mode uses locked constructor/factory absence; scoreboard has no round limit and supports manual archive.
+
 One coordinating agent owns shared contracts and integration. After contracts freeze, create branches/worktrees such as `agent/sim` at `../atemporal-sim`, `agent/server` at `../atemporal-server`, and `agent/client` at `../atemporal-client`. Agents commit to their own branches and report commit IDs. Coordinator merges one handoff at a time, resolves shared contract changes first, then runs integration checks. Do not have multiple agents edit the same contract/config fixture. At most three subsystem agents run alongside the coordinator; assign peripheral work after the sim agent finishes.
 
 ## Nested implementation checklist
@@ -26,8 +28,8 @@ One coordinating agent owns shared contracts and integration. After contracts fr
   - [ ] Blueprint selection, production queues/loops/templates and blocked output.
   - [ ] Persistent groups 0–9, timed membership/binding edits, saved group orders and one-time member delivery.
   - [ ] Factory spawn membership/inheritance, individual overrides, checkpointed group state and suppression interaction.
-  - [ ] Direct/indirect combat, vision/LOS, support and capability-gated healing.
-  - [ ] Four/eight-neighbor pathfinding, cooldowns, deterministic collision/swaps.
+  - [ ] Combat-table idle/turret/attack-move/support behavior, snapshot target state, direct/indirect fire and healing.
+  - [ ] Four/eight-neighbor pathfinding, cooldowns, deterministic allied sidestep/swaps and stuck fallback.
   - [ ] Ordered parallel intent collection and identical serial fallback.
   - [ ] Completed-only active-building OR no-build-ability checks with recovery, persisting orders, three outcome kinds, inactivity cutoff/future-event guards, backup horizon, state/events/statistics export.
   - [ ] Team hostility/support/swaps with individual survival and ownership.
@@ -55,7 +57,7 @@ One coordinating agent owns shared contracts and integration. After contracts fr
   - [ ] Revision-aware exact-state fetching and progress/reconnect handling.
   - [ ] Score/timing/spend panels, team/survivor outcomes, lead margin display, graph overlay and round replay viewer.
   - [ ] Keyboard-only action workflow with mouse used for map selection.
-- [ ] End-to-end first playtest — coordinator
+- [ ] End-to-end automated integration — coordinator
   - [ ] Run two player tabs plus spectator, complete an opening factory/army fight.
   - [ ] Rewrite before production and verify outcomes, IDs, overlays and undo.
   - [ ] Exercise timed/scoreboard, both control limits, asymmetric 3-player FFA, symmetric 4-player FFA and 2v2 team setup.
@@ -66,16 +68,16 @@ One coordinating agent owns shared contracts and integration. After contracts fr
   - [ ] Hash verification, mismatch UI, reconnect/replay and cache rebuild.
   - [ ] Compare controller/peripheral hashes across retroactive multi-round fixture.
 - [ ] Final hardening and handoff — coordinator
-  - [ ] Adversarial scenarios below pass with recorded results.
+  - [ ] Behavior, recovery and performance scenarios below pass with recorded results.
   - [ ] Document setup YAML, content tuning, replay/resume, constraints and benchmark machine.
-  - [ ] Run one human playtest; record findings without expanding mechanics prematurely.
+  - [ ] Offer the user a playtest only after all planned features and required automated checks are complete; record feedback then.
 
 ## Agent assignments and acceptance contracts
 
 | Agent | Exclusive ownership | Inputs | Required handoff |
 | --- | --- | --- | --- |
-| Coordinator | `crates/contracts`, root build files, shared fixtures/config, documentation | Settled decisions | Versioned schemas, compilable skeleton, integration harness, final assembled game |
-| Simulation | `crates/sim`, content validation implementation, sim benches | Contracts and content fixtures | Library implementing `SimRequest` to deterministic batches/result, replay tests, measured release performance |
+| Coordinator | `crates/contracts`, `crates/content`, guide generator, root build files, shared fixtures/config, documentation | Settled decisions | Versioned schemas, compilable skeleton, integration harness, final assembled game |
+| Simulation | `crates/sim`, sim benches (uses coordinator-owned content loader) | Contracts and content fixtures | Library implementing `SimRequest` to deterministic batches/result, replay tests, measured release performance |
 | Server | `crates/server`, worker-mode shell in `crates/runner`, archive code | Contracts; fake sim adapter until sim lands | Playable transport/lobby/commit flow, durable revisions, failure/recovery tests, launch command |
 | Client | `client/` | Protocol fixtures and a local mocked transport | Full interaction flow and guide prose/layout against fixtures and then server, build output and manual keyboard checklist |
 | Peripheral (later) | Peripheral module in `crates/runner` | Integrated server/sim and frozen native fingerprint | Local endpoint, input relay, verification/reconnect demonstration |
@@ -113,3 +115,15 @@ Latest survival/scoring acceptance: an unfinished factory does not prevent elimi
 Guide/lobby handoff: coordinator owns shared loader/exporter and build wiring; client agent owns player-facing prose/layout; server agent owns guide selection, live roster persistence/broadcast and CLI port. Do not independently maintain a second stat schema or move fixed team selection back into YAML-only assignments.
 
 Acceptance: changing a unit stat rebuilds both sim content and guide table; runtime overrides and resumed archived stats serve a matching guide rather than bundled stale numbers. Validate guide links, readable roster tables and walkthrough against a real opening turn. In two player tabs plus spectator, username/color/team edits appear everywhere; a late join gets the complete roster and a stale Start is refreshed. Start freezes the visible accepted roster. Launch on a nondefault port, restart/resume on that port, and refresh existing tabs to recover identities/phase; reject an occupied port without changing URLs. Guide and WebSocket work at the same chosen origin. Profiles and documentation must not alter simulation hashes.
+
+Behavior and performance acceptance fixtures (before the completed game is handed to the user):
+
+- Movement: idle allied blocker with free sidestep; legal swap without reciprocal intent; packed corridor and opposing allied traffic; no vehicle diagonal displacement; no entity moved twice; no available legal displacement; many-unit destination spreading; occupied output feeding a crowd. Serial/parallel/checkpoint hashes must agree. Failures are fixed before balancing, not deferred until user playtesting.
+- Combat: automatic idle turret fire, mobile idle defense, reached AttackMove goal, acquisition outside range, hold on cooldown, loss of target and mutual Support reading previous snapshot without recursion.
+- Inactivity: unreachable retry and unfunded factory actually stop; long otherwise-legal cooldown defers stopping; a necessary detour counts as progress; forced displacement alone does not; normal/fast-forward/checkpoint stop ticks agree.
+- Performance: typical full round plus cap-length cyclic run, dense chokepoint and repeated tick-zero rewrites with export/disk enabled. Record commit-to-playable latency and exact-state seeks, peaks and bytes per revision. Slow-disk/backpressure and disk-full fixtures preserve authoritative inputs/results; cache eviction still permits every archived round to be reconstructed.
+- Interfaces: a factory cannot be placed with all output directions against rock; same-draft group edits affect removal preview; temporary blueprint IDs resolve identically at commit; changing priority preserves future attack orders; browser-safe keys do not navigate tabs/history; sim tests do not require a guide build.
+
+Implementation has not begun; all verification remains outstanding. Keep match adjudication isolated in controller reducers: test constructor-based locked defeat independently of full battlefield status, and manual archive independently of scoring.
+
+Match-adjudication acceptance: absence of active buildings with a living constructor in S[new_L] does not finalize timed loss; absence of both constructors/factories does. A future-only absence beyond the boundary remains editable. Evaluate simultaneous locked losses together. Repeat tied wins/stalemates/draws without an automatic round cap, then manually stop/archive and verify no extra points and no fabricated battlefield draw. Persist partial-round inputs and the last published result on manual archive.

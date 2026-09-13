@@ -24,8 +24,8 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | Left click / drag | Select entity / box select |
 | Shift + select | Add to selection; Shift-click selected entity toggles it |
 | `0`–`9` | Select the corresponding control group |
-| `Ctrl+0`–`Ctrl+9` | Stage replacement of group membership with current selection |
-| `Ctrl+Shift+0`–`Ctrl+Shift+9` | Stage adding current selection to a group |
+| `H`, then `0`–`9` | Stage replacement of group membership with current selection |
+| `Shift+H`, then `0`–`9` | Stage adding current selection to a group |
 | `J`, then `0`–`9` | Stage output-group binding for selected factories |
 | `J`, then `Backspace` | Stage clearing selected factories’ output-group binding |
 | WASD | Pan camera |
@@ -51,12 +51,12 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | `Home` / `End` | Jump editable boundary / available end |
 | `[` / `]` | Decrease/increase playback speed |
 | `-` / `=` | Zoom timeline around cursor tick |
-| `Alt+Left` / `Alt+Right` | Pan timeline |
+| `Shift+[` / `Shift+]` | Pan timeline |
 | `T` | Return to draft timestamp |
 | `V` | Statistics overlay |
 | `?` | Hotkey/help overlay |
 
-Queue panel supports arrow-key navigation, Delete removal, and explicit Cancel active / Replace pending controls with keyboard shortcuts displayed in context. Number keys recall groups in the default map mode; explicit building, recipe, priority and factory-binding prompts temporarily consume digits and display the pending choice. Escape returns to default group recall. Ctrl+digit stages persistent membership changes as shown above; plain group recall never consumes a turn. Minimap click selects camera center and drag pans. Area/line previews show valid and blocked tiles before finalizing. Placement enumerates tiles in deterministic coordinate order; no diagonal wall gaps unless explicitly selected.
+Queue panel supports arrow-key navigation, Delete removal, and explicit Cancel active / Replace pending controls with keyboard shortcuts displayed in context. Number keys recall groups in the default map mode; explicit building, recipe, priority and factory-binding prompts temporarily consume digits and display the pending choice. Escape returns to default group recall. H then digit (Shift+H to add) stages persistent membership changes as shown above; plain group recall never consumes a turn. Minimap click selects camera center and drag pans. Area/line previews show valid and blocked tiles before finalizing. Placement enumerates tiles in deterministic coordinate order; no diagonal wall gaps unless explicitly selected.
 
 Timeline supports click-to-seek, wheel zoom, drag-to-pan on a dedicated ruler or middle button, playback speed presets 0.25×/0.5×/1×/2×/4×/8× and direct tick entry. Use a separate playhead and draft marker; hatch immutable history. Event colors also have labels/tooltips. Timeline navigation does not consume a turn. Exact-state loading at an unsampled tick shows a brief indicator and disables dependent command staging until complete.
 
@@ -76,7 +76,7 @@ Lobby rule text states that scoreboard mode awards each resolved round, includin
 
 Team result text explains that survival points are awarded only if at least one player was eliminated. Stalemates always show zero score deltas. Draws show the configured no-score/all-players-score policy and actual credited players, independently of the empty survivor list.
 
-When drafting entity orders, expose Keep future orders / Drop all future orders / Drop next W ticks. Hide or disable the window choice with an explanation when YAML has no window configured. The policy applies to the next staged command and is visibly stored on each draft entry; changing it for an existing entry updates that entry explicitly. `O` cycles the available choices without using another turn. Highlight affected future command components on the timeline, show the exact interval and count, and distinguish suppressed history from active orders. For group orders show only the selected members being removed. Undo/redo restores both replacement and suppression preview; changing the draft tick or rebasing recalculates the affected set. Commit sends the policy for authoritative resolution; stale-preview responses are discarded. A historical-round replay shows only removals made by that round.
+When drafting action assignments (direct or group), expose Keep future orders / Drop all future orders / Drop next W ticks. Hide or disable the window choice with an explanation when YAML has no window configured. The policy applies to the next staged command and is visibly stored on each draft entry; changing it for an existing entry updates that entry explicitly. `O` cycles the available choices without using another turn. Highlight affected future command components on the timeline, show the exact interval and count, and distinguish suppressed history from active orders. For group orders show only the selected members being removed. Undo/redo restores both replacement and suppression preview; changing the draft tick or rebasing recalculates the affected set. Commit sends the policy for authoritative resolution; stale-preview responses are discarded. A historical-round replay shows only removals made by that round.
 
 Control-group panel shows ten slots 0–9, living member count, bound factory count, and saved order with source tick. An empty group can still receive an order for future spawns. Recalling a group selects its living members at the viewed tick and marks the order recipient as “Group N”; manually editing the selection switches the recipient to explicit units so individual overrides remain easy. Show the distinction beside the staged command: “Group N: current members + future spawns” versus “Selected units only.” The saved order is not continuously enforced: individually overridden members retain their actions until another group order arrives.
 
@@ -103,3 +103,11 @@ The landing page displays a prominent **How to play / Unit reference** link besi
 Guide is concise static HTML with a short opening walkthrough followed by anchored mechanics and readable roster tables. Proposed outline: join and choose a team; inspect timeline → select tick → stage/undo → commit; matter and priority; mining/construction/factory queues; combat/movement/support; groups and spawn inheritance; future-order replacement; inactivity, reversible elimination and result types; timed/scoreboard modes with draw/tie rules; hotkeys; unit/building reference. Link current lobby rule values separately from general explanations so a configured variant is not mistaken for the default. Avoid architecture/process jargon in player copy.
 
 Unit tables show readable costs, health, damage/range/vision, tick cooldowns and economic rates generated from real content. Show walker/vehicle and survival/build capabilities plainly, and the constructor's half-rate mining. Responsive layout and a compact contents list suffice; no elaborate documentation framework is required. Guide works without a player slot, opens without losing lobby edits, and remains available from in-game help. On disconnect show a reconnect/reload state; refreshing the same URL after a server restart obtains fresh bootstrap and current guide/roster rather than cached state from the old process.
+
+Non-action settings always preserve future orders; the future-removal selector is attached only to AssignOrder/AssignGroupOrder. Their explicit all/window preview still lists action and setting removals separately. Show that later replacing a committed replacement does not undo its archived deletions; only draft undo reverses an uncommitted operation.
+
+Factory placement shows a cardinal output arrow and tile, with `Z` cycling valid output directions in placement mode. Missing structural output space makes placement invalid before commit. The guide uses the browser-safe group-edit and timeline-pan chords above; test actual browser navigation and text-input focus rather than depending on Ctrl+digit/Alt+arrow interception.
+
+After each rewrite, show a compact comparison with the previous published result: final outcome/survivors, births/destructions/spend changes, and skipped or removed commands with links to their ticks. These summaries use the published results and require no speculative draft simulation.
+
+Timed UI distinguishes current battlefield elimination/recovery from finalized constructor/factory loss at the immutable boundary. A building-less constructor is still eligible for timed recovery. Scoreboard has no round limit; provide a visible stop-and-archive operation with an unfinished label, preserving scores and results without calling it a battlefield draw.
