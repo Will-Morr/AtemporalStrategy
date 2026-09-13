@@ -10,6 +10,8 @@ The thematic documents consolidate later user input and supersede conflicting pa
 
 ## Specification maintenance and authority
 
+The repository's top-level README should be a human-readable introduction and usage guide.
+
 Only decisions actually made by the user are locked. Do not turn assistant defaults, data contracts, scope limits, or architecture choices into self-imposed requirements.
 
 Keep future input in this folder by updating the appropriate thematic document. Prefer a few readable documents over one numbered file per interaction; introduce another document only for a substantial new topic. Preserve requirements and their intent, and distinguish unresolved interpretations from user decisions. Update affected architecture links and proposals as needed.
