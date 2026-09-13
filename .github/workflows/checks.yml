@@ -1,0 +1,74 @@
+name: Checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    name: Workspace and generated contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Check workspace and generated drift
+        shell: bash
+        run: |
+          mkdir -p artifacts/checks
+          set -o pipefail
+          scripts/check.sh 2>&1 | tee artifacts/checks/workspace.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workspace-${{ github.run_attempt }}
+          path: artifacts/checks/
+          retention-days: 14
+          if-no-files-found: warn
+  browser:
+    name: Chromium review and MCP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ATEMPORAL_UI_ARTIFACTS: ${{ github.workspace }}/artifacts/ui/ci
+      ATEMPORAL_MCP_ARTIFACTS: ${{ github.workspace }}/artifacts/browser-mcp/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - run: npm ci --prefix client --ignore-scripts
+      - name: Install Chromium and OS dependencies
+        working-directory: client
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Review scaffold in desktop and narrow Chromium
+        id: review
+        run: npm run ui:review --prefix client
+      - name: Verify standard MCP transport
+        if: ${{ !cancelled() && steps.review.outcome != 'skipped' }}
+        run: npm run browser:check --prefix client
+      - name: Verify failure detection and evidence
+        if: ${{ !cancelled() && steps.review.outcome != 'skipped' }}
+        run: node scripts/check-ui-harness.mjs
+      - name: Upload browser evidence even on failure
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence-${{ github.run_attempt }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn

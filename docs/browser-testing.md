@@ -35,11 +35,12 @@ A headed run requires a display. Headless Chromium renders the actual page, exec
 
 ## Review artifacts and iteration
 
-The command prints an `artifacts/ui/<run-id>/` path. Override it with `ATEMPORAL_UI_ARTIFACTS` if your agent runner needs a known output location. Each run contains:
+The command prints an `artifacts/ui/<run-id>/` path. Override it with `ATEMPORAL_UI_ARTIFACTS` if your agent runner needs a known output location. Use a new or empty override directory; existing evidence is never overwritten. Each run contains:
 
-- `run.json`: run ID, server URL and arguments.
-- `results.json` and `report/index.html`: machine-readable and human-readable results.
-- `results/<test>/`: named PNG screenshots, accessibility snapshots, browser console/network errors, and `trace.zip`. Videos are retained on failure.
+- `run.json`: run ID, server URL, arguments, timestamps, server command, exit status and startup errors.
+- `runner.log`: combined runner/build/server output, including failures before tests start.
+- `results.json`, `junit.xml` and `report/index.html`: machine-readable and human-readable results (available once Playwright starts).
+- `results/<test>/`: named PNG screenshots, accessibility snapshots, browser console/network errors, and `trace.zip`. Videos are retained on failure, including fixture-owned player/spectator contexts. Accessibility snapshots and diagnostics are attached to the HTML report. Failure captures cover every open observed page before owned contexts close.
 
 Open reports and traces locally:
 
@@ -49,11 +50,41 @@ npx playwright show-report ../artifacts/ui/<run-id>/report
 npx playwright show-trace ../artifacts/ui/<run-id>/results/<test>/trace.zip
 ```
 
-An agent should run a relevant scenario, **inspect the resulting PNGs**, diagnose visual/interaction problems, edit the UI, and repeat the same scenario. A passing selector assertion is not a visual review. Preserve failure evidence; tests do not retry automatically. The harness captures all reviewed contexts' errors and fails on page errors, failed requests, or console errors. Screenshot names describe the actual inspected state.
+An agent should run a relevant scenario, **inspect the resulting PNGs**, diagnose visual/interaction problems, edit the UI, and repeat the same scenario. A passing selector assertion is not a visual review. Preserve failure evidence; tests do not retry automatically. The automatic review fixture captures observed contexts' errors even when a test does not explicitly request `review`, and fails on page errors, failed requests, HTTP responses with status 400 or higher, or console errors. Screenshot names describe the actual inspected state.
 
-The current multi-context test verifies independent player-A/player-B/spectator storage and page loads. It does not claim slots, commits, or combat are implemented. New gameplay tests should use actual user inputs and server setup with a deterministic seed. Capture a known paused timeline tick before comparing images; never let changing simulation/playback time stand in for a visual regression. Prefer role/text locators for UI controls and coordinate input plus screenshots for canvas. `review.capture(name, page)` supports both. Pixel baselines can use Playwright's `toHaveScreenshot` once a meaningful scene exists; inspect baseline changes rather than blindly refreshing them.
+The current multi-context test verifies independent player-A/player-B/spectator storage and page loads. It does not claim slots, commits, or combat are implemented. New gameplay tests should use actual user inputs and server setup with a deterministic seed. Capture a known paused timeline tick before comparing images; never let changing simulation/playback time stand in for a visual regression. Prefer role/text locators for UI controls and coordinate input plus screenshots for canvas. `review.capture(name, page)` supports both. Use `await review.newContext("player-a")` for each additional identity; the fixture observes new pages/popups, saves failure evidence and closes these contexts. Do not close them early. Playwright includes these contexts in the test’s `trace.zip`; do not manually start/stop their tracing. External contexts must be explicitly observed and remain the caller’s cleanup responsibility. Pixel baselines can use Playwright's `toHaveScreenshot` once a meaningful scene exists; inspect baseline changes rather than blindly refreshing them.
 
-Artifacts are git-ignored and retained per run for inspection. Long-running CI should upload relevant artifacts and apply its own retention policy. They are not game archives.
+Artifacts are git-ignored and retained per run for inspection. They are not game archives. Do not run concurrent build-backed reviews in the same worktree: their ports/profiles differ, but the build writes the same `client/dist` and generated contracts. Use separate worktrees or build once and target an external server.
+
+## CI and harness verification
+
+`.github/workflows/checks.yml` runs on pushes, pull requests and manual dispatch. The workspace job runs `scripts/check.sh` for formatting, Rust tests, strict Clippy, browser build, shared fixtures and generated-file drift. The browser job installs the lockfile dependencies and Chromium with OS libraries, runs both scaffold viewports, exercises the standard MCP transport, and verifies deliberate failures. It rejects focused tests in CI and has no automatic retries. The MCP and harness checks still run after a scenario failure when setup reached the review step.
+
+Both jobs upload evidence even on failure, with 14-day retention. Download `browser-evidence-<attempt>` from the Actions run, then open `ui/ci/report/index.html` with `playwright show-report`, or inspect its traces with `playwright show-trace`. `browser-mcp/ci` includes session output, protocol transcript, browser console/network logs and run/error metadata. Workspace output is in `workspace-<attempt>/workspace.log`. Setup failures before a command starts may have only the Actions log; startup failures cannot produce a screenshot of a page that never loaded.
+
+Run the failure-path check independently:
+
+```sh
+node scripts/check-ui-harness.mjs
+```
+
+Its four intentionally failing cases are excluded from normal review. The outer command succeeds only when assertions, HTTP errors, page-script errors and failed requests produce failures with diagnostic/report/trace/screenshot evidence, including all three identity videos. These injected errors validate automation plumbing; they do not validate gameplay or application error recovery.
+
+## Gameplay scenario activation
+
+Add real scenarios to `client/tests/ui/*.spec.mjs` as their controls land; normal review and CI discover them without a package change. Configure `ATEMPORAL_UI_SERVER_COMMAND` to launch the implemented game server with deterministic setup and the supplied `PORT`, or use `ATEMPORAL_UI_BASE_URL` for an existing instance. Each independently running match needs isolated server state; mark a shared-match suite serial or give it its own server. An absent required control should fail an enabled scenario, rather than silently skip it or fall back to fixture JSON.
+
+| Scenario | Evidence required before claiming coverage | Current state |
+| --- | --- | --- |
+| Landing and guide | Keyboard link activation, generated stats, narrow layout, screenshot inspection | Enabled against scaffold |
+| Independent browser identities | Separate storage across reloads and context evidence | Enabled; does not claim real slots |
+| Lobby and spectator | Claim actual slots, update username/color/team and observe all clients; spectator restrictions | Pending real controls/server |
+| Timeline and drafts | Pause at exact tick, enter actual orders, undo/replace future orders, capture selection and timeline | Pending real controls/server |
+| Simultaneous commit | First commit waits, final commit publishes the same revision to both players and spectator | Pending real controls/server |
+| Groups and production | Keyboard groups, factory output membership and inherited order visible in replay | Pending real controls/server |
+| Restore | Restart real server at same port, refresh clients and compare persisted revision/orders | Pending real server/archive path |
+
+For each activation, document the seed/config, viewport, revision and paused tick, inputs exercised, assertions and inspected screenshots. Verify authoritative behavior as well as visible output. The rendered guide describes planned mechanics; its text alone is not evidence those mechanics work. No human playtest is required for unfinished slices.
 
 ## Interactive browser tools through MCP
 
@@ -83,6 +114,6 @@ Validate the actual project MCP configuration independently of any agent product
 npm run browser:check --prefix client
 ```
 
-The smoke client speaks JSON-RPC directly: initializes MCP, discovers browser and coordinate tools, navigates the actual page, clicks the guide link, reads its snapshot and saves a screenshot. It closes its browser and preview server afterward. A new/reloaded agent session may be necessary for its client to discover newly configured tools; adding a server does not retrofit this chat's advertised tool list.
+The smoke client speaks JSON-RPC directly: initializes MCP, discovers browser and coordinate tools, navigates the actual page, clicks the guide link, reads its snapshot and saves a screenshot. It closes its browser and preview server afterward. The smoke check waits for its own preview process to announce readiness, preserves protocol requests/responses and stderr on failure, and attempts a failure screenshot before cleanup. The explicit artifact override must be empty. For an already-built external server, use `ATEMPORAL_UI_BASE_URL=... node scripts/check-browser-mcp.mjs` to avoid the npm script’s build step. Environment variables explicitly set by the caller take precedence over `.mcp.json` defaults. A new/reloaded agent session may be necessary for its client to discover newly configured tools; adding a server does not retrofit this chat's advertised tool list.
 
 The desktop app's built-in `@Browser` remains an optional separate connection. Neither layer depends on it. See [Playwright web-server setup](https://playwright.dev/docs/test-webserver), [traces](https://playwright.dev/docs/trace-viewer-intro), [visual comparisons](https://playwright.dev/docs/test-snapshots), and [Playwright MCP](https://github.com/microsoft/playwright-mcp) for upstream behavior.

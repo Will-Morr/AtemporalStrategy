@@ -31,3 +31,8 @@ Keep the main planning documents focused on the current plan, without references
 The user subsequently requested implementation of “Resolve product rules and establish contracts — coordinator” from `docs/implementation.md` in a new branch and worktree, with commits and pushes as substantial chunks are completed, reconciliation against current main, and integration into main after checks pass. This supersedes the planning-only execution note for that scope; it does not approve unrelated assistant product interpretations.
 
 The user also requested a repeatable browser UI review harness and an interactive browser-control layer. Keep both usable by agents generally, rather than tying them to Codex. Agents should be able to iteratively inspect and improve the actual rendered game UI.
+
+
+## Browser automation and CI
+
+The user requested an agent-neutral Playwright/MCP harness and CI with useful screenshots, traces and failure artifacts. Verify the existing scaffold honestly and enable gameplay scenarios as real controls become available. Keep this work scoped to automation, CI and browser-review documentation; coordinate package changes with the slice agent. Work in a new worktree and branch based on `main`, and commit and push cohesive chunks. See [browser testing](../docs/browser-testing.md) for the current workflow and explicit coverage limits.
