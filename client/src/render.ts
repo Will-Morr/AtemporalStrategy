@@ -154,18 +154,6 @@ export class Renderer {
       ctx.fillStyle = `rgba(77,208,225,${0.15 + 0.6 * Math.max(0, remaining / initial)})`;
       ctx.fillRect(px + 1, py + 1, s - 2, s - 2);
     }
-    // Blueprints from exact state.
-    const exact = this.game.exact?.state;
-    if (exact && this.game.exact?.revision === this.game.current && this.game.exact.tick === Math.floor(this.game.playhead)) {
-      for (const b of exact.blueprints) {
-        if (b.site_id) continue;
-        const [px, py] = this.screen(b.tile.x, b.tile.y);
-        ctx.strokeStyle = this.game.color(b.owner);
-        ctx.setLineDash([3, 3]);
-        ctx.strokeRect(px + 2, py + 2, s - 4, s - 4);
-        ctx.setLineDash([]);
-      }
-    }
     const visible = this.game.visibility();
     const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
     const cornerA=this.worldAt(0,64),cornerB=this.worldAt(width,height);
@@ -361,7 +349,7 @@ export class Renderer {
     const x = (tick: number) => ((tick - t0) / (t1 - t0)) * width;
     const players = this.game.config.player_count;
     const rowH = (height - 14) / players;
-    const max = Math.max(1, ...rev.timeline.map(b => b.affected_entities));
+
     // Immutable history hatch.
     if (this.game.editableFrom > 0) {
       g.fillStyle = '#ffffff12';
@@ -370,17 +358,20 @@ export class Renderer {
       g.save();g.beginPath();g.rect(0,0,edge,height);g.clip();g.strokeStyle='#aaa5';
       for(let hx=-height;hx<edge;hx+=10){g.beginPath();g.moveTo(hx,0);g.lineTo(hx+height,height);g.stroke();}g.restore();
     }
-    for (const b of rev.timeline) {
-      const bx = x(b.from_tick), bw = Math.max(1, x(b.to_tick_exclusive) - bx);
-      if (bx > width || bx + bw < 0) continue;
-      const h = Math.max(2, (b.affected_entities / max) * (rowH - 2));
-      g.fillStyle = ACTIVITY_COLORS[b.activity] ?? '#888';
-      g.fillRect(bx, b.player_id * rowH + (rowH - h), bw, h);
+    const turns = this.game.experience.turns.get(this.game.current) ?? [];
+    const latest:Record<number,number>={}, actionTicks:Record<number,number[]>={};
+    for(let p=0;p<players;p++) {
+      const own=turns.filter(t=>t.player===p && t.commands.length>0);
+      const recent=own.reduce<typeof own[number]|undefined>((a,b)=>!a||b.round>a.round?b:a,undefined);
+      actionTicks[p]=[...new Set(own.map(t=>t.tick))].sort((a,b)=>a-b);
+      if(recent)latest[p]=recent.tick;
+      g.fillStyle=this.game.color(p)+'22';g.fillRect(0,p*rowH,width,rowH-1);
+      g.fillStyle=this.game.color(p);g.fillRect(0,p*rowH,3,rowH-1);
+      for(const tick of actionTicks[p])g.fillRect(x(tick)-1,p*rowH+2,2,rowH-4);
+      if(recent){g.fillStyle=this.game.color(p);g.fillRect(x(recent.tick)-3,p*rowH,6,rowH-1);g.strokeStyle='#ffffff';g.strokeRect(x(recent.tick)-4,p*rowH+.5,8,rowH-2);}
+      g.font='9px system-ui';g.fillStyle='#e5f2ff';g.fillText(`P${p}`,7,p*rowH+10);
     }
-    for (let p = 0; p < players; p++) {
-      g.fillStyle = this.game.color(p);
-      g.fillRect(0, p * rowH, 3, rowH - 1);
-    }
+    this.timeline.dataset.actionTicks=JSON.stringify(actionTicks);this.timeline.dataset.latestTicks=JSON.stringify(latest);
     // Ruler labels.
     g.fillStyle = '#9a9aa6';
     g.font = '10px system-ui';
@@ -389,7 +380,7 @@ export class Renderer {
     for (let tick = Math.ceil(t0 / step) * step; tick <= t1; tick += step) g.fillText(String(tick), x(tick) + 2, height - 3);
     // Authoritative delivery ticks, including indirect group recipients and settings.
     const round=this.game.experience.rounds.get(this.game.current);
-    const turns=this.game.experience.turns.get(this.game.current) ?? [];
+
     const ticks = new Set<number>();
     for(const turn of turns) for(const c of turn.commands) {
       const outcome=round?.command_outcomes.find(o=>JSON.stringify(o.command_id)===JSON.stringify(c.id));

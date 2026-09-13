@@ -106,6 +106,12 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect(a.locator('#draft-list')).toContainText('edit_group_members');
   await a.locator('#groups summary').click();
   await expect(a.locator('#group-list')).toContainText('3: 1 living');
+  await clickTile(a, await findEntity(a,0,'constructor')); await a.keyboard.press('h'); await a.keyboard.press('3');
+  await expect(a.locator('#group-list')).toContainText('3: 2 living');
+  await a.getByRole('button',{name:'Clear group',exact:true}).click(); await a.keyboard.press('3');
+  await expect(a.locator('#group-list')).toContainText('3: 0 living');
+  await a.keyboard.press('Control+z'); await a.keyboard.press('Control+z');
+  await clickTile(a,originalMiner);
   await a.keyboard.press('Control+z');
   await a.keyboard.press('Shift+h'); await a.keyboard.press('3');
   await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.at(-1).command.edit.kind)).toBe('add');
@@ -118,7 +124,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect(a.locator('#draft-list')).toContainText('group 3: attack_move');
   await a.keyboard.press('Control+z');
   await clickTile(a, originalMiner);
-  await expect(a.locator('#recipient')).toContainText('Selected units');
+  await expect(a.locator('#recipient')).toContainText('Selection');
   await a.locator('#groups summary').click();
   // Every stored-order kind uses the same action/target gestures (factory tests below).
   // Wall line placement uses connected axis steps, with visible validity feedback.
@@ -291,13 +297,13 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.fill('#tick-input','154'); await a.locator('#tick-input').press('Enter');
   await expect.poll(async () => (await state(a)).exactTick).toBe(154);
   await clickTile(a,factoryTile);
-  const active = a.locator('#queue button').filter({hasText:/^Active:/});
-  await expect(active).toHaveCount(1); await active.click(); await a.keyboard.press('Delete');
+  const active = a.getByRole('button',{name:/^Cancel active /});
+  await expect(active).toHaveCount(1); await active.click();
   await expect(a.locator('#draft-list')).toContainText('cancel_active'); await a.keyboard.press('Control+z');
-  await a.getByRole('button',{name:'Replace pending (empty)',exact:true}).click();
+  await a.getByRole('button',{name:'Clear waiting queue',exact:true}).click();
   await expect(a.locator('#draft-list')).toContainText('replace_pending'); await a.keyboard.press('Control+z');
-  const pending = a.locator('#queue button').filter({hasText:/^Pending:/}).first();
-  await pending.click(); await a.keyboard.press('ArrowDown'); await pending.focus(); await a.keyboard.press('Delete');
+  const pending = a.getByRole('button',{name:/^Remove one queued /}).first();
+  await pending.focus(); await pending.press('Enter');
   await expect(a.locator('#draft-list')).toContainText('remove_pending'); await a.keyboard.press('Control+z');
   await a.keyboard.press('Escape');
   // A same-instance reconnect also preserves historical inspection and a live draft.
@@ -320,17 +326,19 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect.poll(async () => (await state(a)).exactTick, { timeout: 15000 }).toBe(40);
   await clickTile(a, await findEntity(a, 0, 'constructor'));
   await a.keyboard.press('o');
-  await expect(a.locator('#draft-title')).toContainText('drop_all');
+  expect(await a.evaluate(()=>window.atemporal.draft.policy)).toBe('drop_all');
   await a.keyboard.press('x');
   await expect.poll(async () => (await state(a)).draft).toBe(1);
   await expect(a.locator('#lock-preview')).toContainText('1 member deliveries');
-  const blueprint = a.locator('#queue button').filter({hasText:/^Blueprint/}).first();
-  await blueprint.click(); await a.keyboard.press('Delete');
+  await clickTile(a,factoryTile);
+  await a.getByRole('button',{name:'Cancel construction',exact:true}).click();
   await expect(a.locator('#draft-list')).toContainText('cancel_blueprints');
   await a.keyboard.press('Escape');
   await a.keyboard.press('Enter');
   await b.keyboard.press('Enter');
   await waitRevision(a, 3);
+  await expect.poll(()=>a.evaluate(()=>JSON.parse(document.getElementById('timeline').dataset.latestTicks)[0])).toBe(40);
+  expect(await a.evaluate(()=>JSON.parse(document.getElementById('timeline').dataset.actionTicks)[0])).toEqual([0,40,153]);
   await a.fill('#tick-input', '153');
   await a.locator('#tick-input').press('Enter');
   await expect.poll(async () => (await state(a)).exactTick, { timeout: 15000 }).toBe(153);

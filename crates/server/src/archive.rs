@@ -300,6 +300,23 @@ impl Archive {
         )?;
         Ok(name)
     }
+    pub fn write_draft(&self, round: u32, player: PlayerId, draft: &TurnDraft) -> Result<()> {
+        atomic_write(
+            &self.root.join(format!("turns/{round}-{player}.draft")),
+            &serde_json::to_vec(draft).map_err(|e| e.to_string())?,
+        )
+    }
+    pub fn read_draft(&self, round: u32, player: PlayerId) -> Option<TurnDraft> {
+        read_json(&self.root.join(format!("turns/{round}-{player}.draft"))).ok()
+    }
+    /// Removing the accepted input is the withdrawal's durable commit point.
+    pub fn withdraw_turn(&self, round: u32, player: PlayerId) -> Result<()> {
+        fs::remove_file(self.root.join(format!("turns/{round}-{player}.json")))
+            .map_err(|e| e.to_string())?;
+        fs::File::open(self.root.join("turns"))
+            .and_then(|dir| dir.sync_all())
+            .map_err(|e| e.to_string())
+    }
     pub fn write_round(&self, record: &RoundRecord) -> Result<()> {
         atomic_write(
             &self.root.join(format!("rounds/{}.json", record.round)),

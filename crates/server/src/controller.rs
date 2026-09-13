@@ -85,7 +85,7 @@ pub struct Controller {
     pub revisions: BTreeMap<Revision, RevisionData>,
     pub current: Revision,
     pub round: u32,
-    committed: BTreeMap<PlayerId, (String, AcceptedTurn)>,
+    committed: BTreeMap<PlayerId, (String, AcceptedTurn, Option<TurnDraft>)>,
     ready_at: BTreeMap<PlayerId, Instant>,
     planning_opened_at: Instant,
     last_commit_at: Option<Instant>,
@@ -785,7 +785,9 @@ impl Controller {
         let outcome = data.outcome.clone().ok_or("missing outcome")?;
         let round = data.round;
         if round > 0 {
-            if let Objective::Scoreboard { rules } = &self.config.objective {
+            if let Objective::Scoreboard { rules } | Objective::Hybrid { rules, .. } =
+                &self.config.objective
+            {
                 let previous = self.scores.last();
                 let score = scoring::resolve_round(
                     round,
@@ -800,7 +802,7 @@ impl Controller {
                 self.scores.push(score.clone());
                 data.score = Some(score);
             }
-            if let Objective::Timed { .. } = &self.config.objective {
+            if let Objective::Timed { .. } | Objective::Hybrid { .. } = &self.config.objective {
                 let locked = timed_state.ok_or("timed adjudication requires the locked state")?;
                 let previously_lost = self
                     .timed
@@ -815,7 +817,9 @@ impl Controller {
                     &previously_lost,
                 )?;
                 self.editable_from = timed.boundary;
-                self.match_winners = timed.match_winners.clone();
+                if matches!(self.config.objective, Objective::Timed { .. }) {
+                    self.match_winners = timed.match_winners.clone();
+                }
                 data.timed = Some(timed.clone());
                 self.timed = Some(timed);
             }
@@ -964,7 +968,7 @@ impl Controller {
         request: &CommitRequest,
     ) -> Result<Option<ServerMessage>> {
         // A retry answers from the recorded turn even after the round closed.
-        if let Some((request_id, _)) = self.committed.get(&player) {
+        if let Some((request_id, _, _)) = self.committed.get(&player) {
             if *request_id == request.request_id {
                 return Ok(Some(ServerMessage::CommitAccepted {
                     request_id: request.request_id.clone(),
@@ -1194,12 +1198,19 @@ impl Controller {
             duration_ms: duration.try_into().unwrap_or_default(),
         };
         if let Some(archive) = &self.archive {
+            archive.write_draft(self.round, player, &request.draft)?;
             archive.write_turn(&turn, &request.request_id)?;
         }
         fail_point("after_turn_written", self.round);
         self.time_totals[usize::from(player)] += duration;
-        self.committed
-            .insert(player, (request.request_id.clone(), turn));
+        self.committed.insert(
+            player,
+            (
+                request.request_id.clone(),
+                turn,
+                Some(request.draft.clone()),
+            ),
+        );
         let accepted = ServerMessage::CommitAccepted {
             request_id: request.request_id.clone(),
             round: self.round,
@@ -1212,6 +1223,43 @@ impl Controller {
         Ok((accepted, Some(self.close_round()?)))
     }
 
+    pub fn uncommit(
+        &mut self,
+        player: PlayerId,
+        request_id: String,
+        round: u32,
+        revision: Revision,
+    ) -> Result<ServerMessage> {
+        if self.phase != Phase::Planning || self.round != round || self.current != revision {
+            return Err("The turn has already started; moves can no longer be uncommitted.".into());
+        }
+        let (_, turn, draft) = self
+            .committed
+            .get(&player)
+            .ok_or("You have not committed this turn.")?;
+        let draft = draft.clone();
+        let duration = turn.duration_ms.get();
+        if let Some(archive) = &self.archive {
+            archive.withdraw_turn(round, player)?;
+        }
+        self.committed.remove(&player);
+        // Retain thinking already spent, but exclude time spent waiting after committing.
+        self.ready_at.insert(
+            player,
+            Instant::now()
+                .checked_sub(std::time::Duration::from_millis(duration))
+                .unwrap_or_else(Instant::now),
+        );
+        self.time_totals[usize::from(player)] =
+            self.time_totals[usize::from(player)].saturating_sub(duration);
+        self.send(self.planning_opened());
+        Ok(ServerMessage::Uncommitted {
+            request_id,
+            round,
+            draft,
+        })
+    }
+
     /// Every player committed: run the round on the ledger so far.
     fn close_round(&mut self) -> Result<mpsc::Receiver<WorkerMessage>> {
         let parent = self
@@ -1219,7 +1267,7 @@ impl Controller {
             .get(&self.current)
             .ok_or("missing current revision")?;
         let mut turns = parent.turns.clone();
-        turns.extend(self.committed.values().map(|(_, t)| t.clone()));
+        turns.extend(self.committed.values().map(|(_, t, _)| t.clone()));
         let mut precedence = parent.precedence.clone();
         precedence.push(identity::round_precedence(
             self.round,
@@ -1716,7 +1764,12 @@ impl Controller {
                     .cloned()
                     .unwrap_or_else(|| format!("recovered-{}-{player}", c.round));
                 c.time_totals[usize::from(player)] += turn.duration_ms.get();
-                c.committed.insert(player, (request_id, turn.clone()));
+                let draft = c
+                    .archive
+                    .as_ref()
+                    .and_then(|a| a.read_draft(c.round, player));
+                c.committed
+                    .insert(player, (request_id, turn.clone(), draft));
             }
         }
         c.phase = Phase::Planning;
@@ -1808,7 +1861,13 @@ pub fn minimum_end_tick(config: &MatchConfig, editable_from: Tick) -> Tick {
     match config.objective {
         Objective::Timed {
             lock_ticks_per_round,
-        } => (editable_from + lock_ticks_per_round).min(config.max_tick),
+        }
+        | Objective::Hybrid {
+            lock_ticks_per_round,
+            ..
+        } => editable_from
+            .saturating_add(lock_ticks_per_round)
+            .min(config.max_tick),
         Objective::Scoreboard { .. } => 0,
     }
 }
@@ -2110,6 +2169,16 @@ fn rule_summary(config: &MatchConfig, content: &Content) -> String {
         Objective::Timed {
             lock_ticks_per_round,
         } => format!("timed: {lock_ticks_per_round} ticks lock per round"),
+        Objective::Hybrid {
+            rules,
+            lock_ticks_per_round,
+        } => {
+            let goal = match rules.victory_rule {
+                VictoryRule::FixedTarget { points } => format!("first to {points} points"),
+                VictoryRule::Lead { margin } => format!("lead every rival by {margin} points"),
+            };
+            format!("hybrid: {goal}; {lock_ticks_per_round} ticks lock per round")
+        }
     };
     format!(
         "{} players, {}×{} map, {objective}; inactivity stop after {} quiet ticks, cap {} ticks; ore {} per start ≈ {} ticks of one uninterrupted miner (estimate, not exclusive ownership)",
@@ -2362,6 +2431,10 @@ pub(crate) mod tests {
                     let timed_state = match c.config.objective {
                         Objective::Timed {
                             lock_ticks_per_round,
+                        }
+                        | Objective::Hybrid {
+                            lock_ticks_per_round,
+                            ..
                         } if data.round > 0 => {
                             let boundary =
                                 (c.editable_from + lock_ticks_per_round).min(c.config.max_tick);
@@ -2454,6 +2527,72 @@ pub(crate) mod tests {
             loaded,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn hybrid_publishes_scores_and_fixed_history_and_restores_both() {
+        let mut c = started(false, |setup| {
+            let Objective::Scoreboard { rules } = setup.match_defaults.objective.clone() else {
+                panic!()
+            };
+            setup.match_defaults.objective = Objective::Hybrid {
+                rules,
+                lock_ticks_per_round: 10,
+            };
+        });
+        for round in 1..=3 {
+            let tick = c.editable_from;
+            assert!(commit(&mut c, 0, &format!("a{round}"), tick).is_none());
+            let rx = commit(&mut c, 1, &format!("b{round}"), tick).unwrap();
+            run_round(&mut c, rx);
+            assert_eq!(c.editable_from, round * 10);
+            assert!(c.revisions[&c.current].score.is_some());
+            assert!(c.timed.as_ref().unwrap().timed_lost_players.is_empty());
+            assert_eq!(c.phase, Phase::Planning);
+        }
+        let r = reopen(&c);
+        assert_eq!(r.editable_from, c.editable_from);
+        assert_eq!(r.scores, c.scores);
+        let (_, loaded) = Archive::open(&c.replay_root, &c.match_id).unwrap();
+        assert!(verify_archive(&loaded, &c.content).unwrap());
+    }
+
+    #[test]
+    fn uncommit_restores_draft_survives_restart_and_cannot_reopen_closed_turn() {
+        let mut c = started(false, |_| {});
+        assert!(commit(&mut c, 0, "first", 0).is_none());
+        let mut c = reopen(&c);
+        let reply = c.uncommit(0, "withdraw".into(), 1, 0).unwrap();
+        let ServerMessage::Uncommitted {
+            draft: Some(draft), ..
+        } = reply
+        else {
+            panic!("missing draft")
+        };
+        assert_eq!(draft.tick, 0);
+        assert_eq!(draft.commands.len(), 1);
+        assert!(c.committed.is_empty());
+        let mut c = reopen(&c);
+        assert!(
+            c.committed.is_empty(),
+            "withdrawn input must not return after restart"
+        );
+        assert_eq!(c.time_totals[0], 0);
+        assert!(c.uncommit(0, "again".into(), 1, 0).is_err());
+        assert!(commit(&mut c, 0, "replacement", 1).is_none());
+        let rx = commit(&mut c, 1, "final", 0).unwrap();
+        assert!(c.uncommit(0, "too-late".into(), 1, 0).is_err());
+        run_round(&mut c, rx);
+        assert_eq!(
+            c.revisions[&1]
+                .turns
+                .iter()
+                .find(|t| t.player == 0)
+                .unwrap()
+                .tick,
+            1
+        );
+        assert!(c.uncommit(0, "stale".into(), 1, 0).is_err());
     }
 
     #[test]

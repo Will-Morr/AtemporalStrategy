@@ -1257,3 +1257,61 @@ fn configured_ghost_starts_production_and_inherited_order_on_completion() {
             .is_empty()
     );
 }
+
+#[test]
+fn arrived_attack_move_responds_to_a_turret_beyond_its_vision() {
+    let mut w = World::new(&OPEN);
+    let grunt = w.spawn_with(0, "grunt", 1, 1, attack_move(1, 1));
+    let turret = w.spawn(1, "turret", 7, 1);
+    let run = w.run();
+    assert!(!run.attacks(&turret).is_empty());
+    assert!(
+        !run.attacks(&grunt).is_empty(),
+        "a parked attack-mover must advance and return fire"
+    );
+    assert_checkpoint_equivalence(&w, &run);
+}
+
+#[test]
+fn constructor_yields_paid_factory_output_without_losing_its_order() {
+    let mut w = World::new(&OPEN);
+    w.bank(0, 1000.0);
+    let factory = w.spawn(0, "factory", 1, 1);
+    let order = Order::Construct {
+        area: Rect {
+            min: tile(0, 0),
+            max: tile(4, 4),
+        },
+    };
+    let constructor = w.spawn_with(0, "constructor", 2, 1, order.clone());
+    w.turn(
+        1,
+        0,
+        0,
+        vec![
+            Command::SetStoredOrder {
+                factories: vec![factory.clone()],
+                order: attack_move(12, 1),
+            },
+            Command::EditProduction {
+                factories: vec![factory],
+                edit: ProductionEdit::Append {
+                    items: vec!["grunt".into()],
+                },
+            },
+        ],
+    );
+    let run = w.run();
+    let state = w.at(30);
+    assert_ne!(entity(&state, &constructor).tile, tile(2, 1));
+    assert_eq!(entity(&state, &constructor).action, order);
+    assert_eq!(
+        state
+            .entities
+            .iter()
+            .filter(|e| e.type_key == "grunt")
+            .count(),
+        1
+    );
+    assert_checkpoint_equivalence(&w, &run);
+}

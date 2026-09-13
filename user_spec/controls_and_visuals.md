@@ -51,3 +51,17 @@ Show stored matter clearly at the viewed tick. Timeline markers include every ti
 Hide full-health bars. Use distinct layered geometric silhouettes with readable direction: square factories, circular turrets on square bases, and distinguishable combinations for mobile units. Group related input buttons in left-aligned columns. Emphasize construction/production discovery and key game information over secondary diagnostics. Show unmistakable color-coded win/loss results and clearly explain continued simulation after elimination and playback after match end.
 
 Complete and commit these fixes before implementing multiplayer, single-order, and recovery browser coverage. The user requested a separate implementation branch and worktree, and completion for real players without an intermediate human-playtest gate.
+
+
+## Follow-up playtest usability
+
+Reduce the bottom command deck height by 30%, replace dense diagnostic text with readable summaries, and make destructive/clearing buttons state exactly what they remove. Show single-unit stats in a corner and icons for the current selection. Factories, including unfunded blueprints and construction sites, need visible queue icons/counts, priority and loop status, straightforward queue removal, and clear newborn orders. Looping must be configurable before completion. Replay speed must be visibly adjustable.
+
+Refresh/rejoin must visibly identify the player and preserve independent identities in multiple windows. Never briefly reveal enemy blueprints while seeking. Replace the activity-filled timeline with one bar divided horizontally by player, marking every exact command tick and highlighting each player's most recently written tick. Retain selected-recipient tick highlights.
+
+H adds the selection to a group; provide an explicit clear-group action. This supersedes the previous H-replace/Shift+H-add gesture.
+
+
+## Queued feature: replay during simulation
+
+Allow players to view and scrub the completed portion of a replay while the simulation is still running. The early ticks they want to inspect may finish within half a second even when the long tail takes several more seconds. Queue this feature alongside the ongoing playtest work.

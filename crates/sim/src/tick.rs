@@ -21,7 +21,6 @@ struct Intent {
 /// Results of the serial field-touching prepass, consumed by the read-only intent pass.
 #[derive(Clone, Default)]
 struct Prep {
-    at_destination: bool,
     blueprint: Option<usize>,
 }
 
@@ -55,6 +54,7 @@ impl Sim {
         let (growth, healing) = self.allocate(consumers)?;
         let damage = self.combat(&intents);
         self.resolve(&growth, &healing, &damage, &mut intents)?;
+        self.clear_factory_outputs(&mut intents);
         self.motion(&intents)?;
         self.births()?;
         self.create_sites()?;
@@ -76,6 +76,15 @@ impl Sim {
     /// Nearest hostile living entity within `radius`, by squared distance then identity. Line of
     /// sight is traced in that order and only until the first visible candidate.
     fn nearest_hostile(&self, i: usize, radius: f64, need_los: bool) -> Option<usize> {
+        self.nearest_hostile_matching(i, radius, need_los, false)
+    }
+    fn nearest_hostile_matching(
+        &self,
+        i: usize,
+        radius: f64,
+        need_los: bool,
+        incoming_only: bool,
+    ) -> Option<usize> {
         let e = &self.state.entities[i];
         let r = radius.floor() as i32;
         let (cx, cy) = (i32::from(e.tile.x), i32::from(e.tile.y));
@@ -95,7 +104,9 @@ impl Sim {
                 }
                 let o = o as usize;
                 let other = &self.state.entities[o];
-                if !self.hostile(e.owner, other.owner) {
+                if !self.hostile(e.owner, other.owner)
+                    || (incoming_only && other.engaged_target.as_ref() != Some(&e.id))
+                {
                     continue;
                 }
                 let d = Self::dist2(e.tile, other.tile);
@@ -137,12 +148,6 @@ impl Sim {
             }
             let def = self.def(i);
             match &e.action {
-                Order::AttackMove { destination } if def.movement.is_some() => {
-                    let neighbors = def.movement.as_ref().unwrap().neighbors;
-                    let (dest, tile) = (*destination, e.tile);
-                    let f = self.field(dest, neighbors);
-                    p.at_destination = f[self.idx(tile)] == 0;
-                }
                 Order::Construct { area } if def.construction.is_some() => {
                     let area = area.clone();
                     p.blueprint = self.choose_blueprint(i, &area);
@@ -224,7 +229,9 @@ impl Sim {
             match &e.action {
                 Order::Idle {} => zone = zone_defend,
                 Order::AttackMove { .. } => {
-                    zone = if def.movement.is_some() && !prep.at_destination {
+                    // Attack-move remains vigilant after arrival: visible longer-ranged
+                    // enemies must not be able to fire on a parked unit indefinitely.
+                    zone = if def.movement.is_some() {
                         def.vision
                     } else {
                         zone_defend
@@ -241,6 +248,18 @@ impl Sim {
                     }
                 }
                 Order::Mine { .. } | Order::Construct { .. } => {}
+            }
+            if matches!(e.action, Order::AttackMove { .. }) && def.movement.is_some() {
+                // Prior-snapshot attackers reveal a threat even when they outrange vision.
+                let threat_range = self
+                    .content
+                    .types
+                    .iter()
+                    .filter_map(|d| d.weapon.as_ref().map(|w| w.range))
+                    .fold(def.vision, f64::max);
+                candidate = self
+                    .nearest_hostile_matching(i, threat_range, direct, true)
+                    .or(candidate);
             }
             if candidate.is_none() && zone > 0.0 {
                 let retained = e
@@ -1084,6 +1103,66 @@ impl Sim {
             let e = &mut self.state.entities[i];
             e.local_detour = detour;
             e.failed_move_attempts = 0;
+        }
+    }
+
+    /// Let an allied worker step away from a paid factory output without replacing its order.
+    /// Normal motion handles cooldowns/collisions, so this never moves an entity twice.
+    fn clear_factory_outputs(&self, intents: &mut [Intent]) {
+        for factory in &self.state.entities {
+            let Some(p) = &factory.production else {
+                continue;
+            };
+            if factory.lifecycle != Lifecycle::Complete
+                || !p.active_item.as_ref().is_some_and(|a| a.awaiting_output)
+            {
+                continue;
+            }
+            let index = self.occ[self.idx(p.output_tile)];
+            if index == NONE || index == RESERVED {
+                continue;
+            }
+            let i = index as usize;
+            let blocker = &self.state.entities[i];
+            if self.def(i).construction.is_none() {
+                continue;
+            }
+            let Some(movement) = &self.def(i).movement else {
+                continue;
+            };
+            if self.hostile(factory.owner, blocker.owner)
+                || blocker.lifecycle != Lifecycle::Complete
+                || intents[i].attack.is_some()
+                || intents[i].heal.is_some()
+            {
+                continue;
+            }
+            // Do not interrupt units already departing under their own order.
+            if intents[i].goal.is_some() && !intents[i].hold {
+                continue;
+            }
+            let count = if movement.neighbors == Neighbors::Eight {
+                8
+            } else {
+                4
+            };
+            if let Some(tile) = DIRS[..count]
+                .iter()
+                .filter_map(|(dx, dy, _)| {
+                    self.step_legal(blocker.tile, *dx, *dy, movement.neighbors)
+                })
+                .find(|tile| {
+                    self.occ[self.idx(*tile)] == NONE
+                        && !self.state.entities.iter().any(|e| {
+                            e.production
+                                .as_ref()
+                                .is_some_and(|p| p.output_tile == *tile)
+                        })
+                })
+            {
+                intents[i].hold = false;
+                intents[i].goal = Some((tile, false));
+            }
         }
     }
 

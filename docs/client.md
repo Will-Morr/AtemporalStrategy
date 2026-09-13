@@ -24,8 +24,8 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | Left click / drag | Select entity / box select |
 | Shift + select | Add to selection; Shift-click selected entity toggles it |
 | `0`–`9` | Select the corresponding control group |
-| `H`, then `0`–`9` | Stage replacement of group membership with current selection |
-| `Shift+H`, then `0`–`9` | Stage adding current selection to a group |
+| `H`, then `0`–`9` | Add selection to the group |
+| Clear group, then `0`–`9` | Remove every member from the group |
 | `J`, then `0`–`9` | Stage output-group binding for selected factories |
 | `J`, then `Backspace` | Stage clearing selected factories’ output-group binding |
 | WASD | Pan camera |
@@ -56,7 +56,7 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | `V` | Statistics overlay |
 | `?` | Hotkey/help overlay |
 
-Queue panel supports arrow-key navigation, Delete removal, and explicit Cancel active / Replace pending controls with keyboard shortcuts displayed in context. Number keys recall groups in the default map mode; explicit building, recipe, priority and factory-binding prompts temporarily consume digits and display the pending choice. Escape returns to default group recall. H then digit (Shift+H to add) stages persistent membership changes as shown above; plain group recall never consumes a turn. Minimap click selects camera center and drag pans. Area/line previews show valid and blocked tiles before finalizing. Placement enumerates tiles in deterministic coordinate order; no diagonal wall gaps unless explicitly selected.
+Queue panel supports arrow-key navigation, Delete removal, and explicit Cancel active / Replace pending controls with keyboard shortcuts displayed in context. Number keys recall groups in the default map mode; explicit building, recipe, priority and factory-binding prompts temporarily consume digits and display the pending choice. Escape returns to default group recall. H then digit adds members; Clear group then digit empties a group; plain group recall never consumes a turn. Minimap click selects camera center and drag pans. Area/line previews show valid and blocked tiles before finalizing. Placement enumerates tiles in deterministic coordinate order; no diagonal wall gaps unless explicitly selected.
 
 Timeline supports click-to-seek, wheel zoom, drag-to-pan on a dedicated ruler or middle button, playback speed presets 0.25×/0.5×/1×/2×/4×/8× and direct tick entry. Use a separate playhead and draft marker; hatch immutable history. Event colors also have labels/tooltips. Timeline navigation does not consume a turn. Exact-state loading at an unsampled tick shows a brief indicator and disables dependent command staging until complete.
 
@@ -123,3 +123,5 @@ Related commands form left-aligned columns, with capability filtering and clicka
 Matter is emphasized at the inspected tick, with sampled values labeled during playback. Purple timeline ticks come from authoritative applied recipients. The outcome banner distinguishes final timeline WIN/LOSS/DRAW/STALEMATE from match completion and explains post-elimination simulation and retained replay. Full-health bars are hidden; incomplete sites keep a completion bar. Unit silhouettes use layered geometric roles and last-move facing.
 
 Fog currently uses Euclidean vision radius from completed friendly units/buildings and shares vision with configured teammates. This is an implementation interpretation of the vision requirement; terrain remains dimly inspectable and spectators see all. Hidden enemies cannot be selected or drawn; combat effects require visible involved tiles. Timeline and statistical inspection remain available by design.
+
+Players can uncommit while waiting for other players. The commit button becomes “Uncommit · edit my moves”; successful withdrawal restores the submitted draft, including local blueprint and queue references. The final commit closes the turn immediately. Each browser tab stores its own player token; a saved-player chooser supports explicit rejoin and switching without overwriting another tab’s identity.

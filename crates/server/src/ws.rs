@@ -247,7 +247,6 @@ async fn handle(
     match client {
         ClientMessage::Hello { slot_token, .. } => {
             let mut c = app.controller.lock().unwrap();
-            let _ = tx.send(c.welcome());
             // A repeated hello on the same socket must not count as another connection.
             let already = *player;
             if let Some(p) = already.or_else(|| c.connect(slot_token.as_deref())) {
@@ -257,6 +256,7 @@ async fn handle(
                     private_token: slot_token.unwrap_or_default(),
                 });
             }
+            let _ = tx.send(c.welcome());
             if c.phase != Phase::Lobby {
                 if let Some(m) = c.revision_published(c.current) {
                     let _ = tx.send(m);
@@ -343,6 +343,23 @@ async fn handle(
                 app.controller.lock().unwrap().planning_ready(p, round);
             }
         }
+        ClientMessage::Uncommit {
+            request_id,
+            slot_token,
+            round,
+            revision,
+        } => {
+            let mut c = app.controller.lock().unwrap();
+            let Some(p) = c.player_for(&slot_token) else {
+                return reject(tx, &request_id, "unauthorized", "unknown slot token".into());
+            };
+            match c.uncommit(p, request_id.clone(), round, revision) {
+                Ok(reply) => {
+                    let _ = tx.send(reply);
+                }
+                Err(message) => reject(tx, &request_id, "rejected", message),
+            }
+        }
         ClientMessage::Commit { request } => {
             let request_id = request.request_id.clone();
             let Some(p) = app
@@ -394,6 +411,14 @@ async fn handle(
                         "stale",
                         "planning round changed while validating".into(),
                     );
+                }
+                match c.precheck_commit(p, &request) {
+                    Ok(Some(original)) => {
+                        let _ = tx.send(original);
+                        return;
+                    }
+                    Err(message) => return reject(tx, &request_id, "stale", message),
+                    Ok(None) => {}
                 }
                 c.validate_against_state(p, &commands, &state)
                     .and_then(|_| c.accept_commit(p, &request, commands))
@@ -611,6 +636,10 @@ pub fn drive_job(app: App, mut rx: mpsc::Receiver<WorkerMessage>) {
                         match c.config.objective {
                             Objective::Timed {
                                 lock_ticks_per_round,
+                            }
+                            | Objective::Hybrid {
+                                lock_ticks_per_round,
+                                ..
                             } if data.round > 0 => {
                                 let boundary =
                                     (c.editable_from + lock_ticks_per_round).min(c.config.max_tick);

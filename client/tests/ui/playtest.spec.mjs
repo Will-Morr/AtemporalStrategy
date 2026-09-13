@@ -30,12 +30,33 @@ test('playtest fixes: reachable map, contextual production, ghosts, fog and appl
     // Choose a valid output after rotation.
     await tile(a,build);await expect(a.locator('#draft-list')).toContainText('place factory');await tile(a,build);
     await a.getByRole('button',{name:'Q Build units',exact:true}).click();await a.locator('#mode-options button').filter({hasText:'grunt'}).click();
+    await a.getByRole('button',{name:'Queue grunt',exact:true}).click();
+    await expect(a.locator('.queue-icons')).toContainText('grunt ×2');
+    await a.getByRole('button',{name:'Remove one queued grunt',exact:true}).click();
+    await expect(a.locator('.queue-icons')).toContainText('grunt ×1');
+    await a.getByRole('button',{name:'↻ Loop: Off',exact:true}).click();
+    await expect(a.getByRole('button',{name:'↻ Loop: On',exact:true})).toHaveAttribute('aria-pressed','true');
     await a.getByRole('button',{name:'P Priority',exact:true}).click();await a.locator('#mode-options button').filter({hasText:'High'}).click();
     await a.keyboard.press('f');await tile(a,{x:start.x+4,y:start.y+2});
-    await expect(a.locator('#queue')).toContainText('queue: grunt');await expect(a.locator('#queue')).toContainText('high');await expect(a.locator('#queue')).toContainText('attack_move');
+    await expect(a.locator('#queue')).toContainText('grunt ×1');await expect(a.locator('#queue')).toContainText('High');await expect(a.locator('#queue')).toContainText('Attack move');
     await review.capture('ghost-production-configured',a);
     await tile(a,start);await a.keyboard.press('c');await area(a,build);
+    const enemyGhost = await a.evaluate(()=>{const g=window.atemporal;const c=g.entities().find(e=>e.owner===0&&e.type_key==='constructor');for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},false))return{x,y};});
+    await tile(b,await b.evaluate(()=>{const c=window.atemporal.entities().find(e=>e.owner===1&&e.type_key==='constructor');return{x:c.x,y:c.y};}));
+    await b.keyboard.press('b');await b.keyboard.press('2');await tile(b,enemyGhost);
     await a.locator('#commit').click();await expect(a.locator('#top-phase')).toContainText('committed');await b.locator('#commit').click();await revision(a,1);
+    await seek(a,10);await tile(a,build);
+    expect(await a.evaluate(()=>window.atemporal.selectedViews()[0].lifecycle)).toBe('site');
+    await expect(a.getByRole('button',{name:'↻ Loop: On',exact:true})).toBeVisible();
+    await a.getByRole('button',{name:'↻ Loop: On',exact:true}).click();
+    expect(await a.evaluate(()=>window.atemporal.draft.commands.at(-1).command)).toMatchObject({kind:'set_queue_loop',enabled:false});
+    await a.keyboard.press('Control+z');
+    await review.capture('factory-under-construction-loop-and-queue',a);
+    expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.some(b=>b.owner===1))).toBe(true);
+    expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.owner===1&&e.lifecycle==='blueprint'))).toBe(false);
+    await a.selectOption('#speed','16');expect(await a.evaluate(()=>window.atemporal.rate)).toBe(16);
+    await a.selectOption('#speed','1');
+
     await seek(a,153);
     const actual=await a.evaluate(()=>{const g=window.atemporal;return g.exact.state.entities.filter(e=>e.owner===0).map(e=>({type:e.type_key,priority:e.priority,order:e.action.kind,stored:e.production?.stored_order.kind}));});
     expect(actual).toContainEqual({type:'factory',priority:'high',order:'idle',stored:'attack_move'});

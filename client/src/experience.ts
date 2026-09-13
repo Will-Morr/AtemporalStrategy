@@ -1,3 +1,5 @@
+import { unitIcon } from './icons';
+import { factoryPlan, orderLabel } from './factory';
 import type { AcceptedTurn, Command, ControlGroupState, EntityId, PlayerStats, ServerMessage, StatsSample } from './contracts.generated';
 import { Game, idKey, type RevisionView } from './game';
 
@@ -25,14 +27,14 @@ export class Experience {
     const categories: [string,string,[string,string][]][] = [
       ['Orders','orders',[['F Attack','f'],['G Support','g'],['M Mine','m'],['C Construct','c'],['X Idle','x']]],
       ['Build & produce','production',[['B Build structure','b'],['Q Build units','q'],['P Priority','p'],['L Loop','l'],['R Rotate factory','r']]],
-      ['Groups','groups',[['H Members','h'],['⇧H Add','H'],['J Output group','j']]],
+      ['Groups','groups',[['H Add to group','h'],['Clear group','clear-group'],['J Output group','j']]],
       ['Planning','planning',[['O Future policy','o'],['Undo · Ctrl Z','Control+z'],['Redo · Ctrl U','Control+u'],['V Statistics','v'],['? Help','?']]],
     ];
     for (const [title,category,keys] of categories) {
       const column=document.createElement('div');column.className=`action-group ${category}`;
       const label=document.createElement('strong');label.textContent=title;column.append(label);
       for(const [label,key] of keys){const b=button(label,()=>{
-        if(key==='Control+z')g.undo();else if(key==='Control+u')g.redo();else g.key(new KeyboardEvent('keydown',{key,shiftKey:key==='H'}));
+        if(key==='clear-group'){g.mode={kind:'membership',add:false};g.updateMode();}else if(key==='Control+z')g.undo();else if(key==='Control+u')g.redo();else g.key(new KeyboardEvent('keydown',{key,shiftKey:key==='H'}));
       });b.dataset.key=key;column.append(b);}
       toolbar.append(column);
     }
@@ -42,7 +44,7 @@ export class Experience {
       g.draft.undo.push({commands:[...g.draft.commands],tick:g.draft.tick}); g.draft.redo = [];
       g.draft.tick = g.draft.commands.length ? Math.floor(g.playhead) : null; g.updatePanels();
     }));
-    planning.append(button('Clear draft', () => g.clearDraft()));
+    planning.append(button('Discard all uncommitted changes', () => g.clearDraft()));
     planning.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
     const guide = document.createElement('a'); guide.href = '/guide/'; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
     const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
@@ -52,17 +54,18 @@ export class Experience {
     if (g.spectator) { const owner=document.createElement('select');owner.setAttribute('aria-label','Inspect player groups');for(let p=0;p<g.config.player_count;p++)owner.add(new Option(g.name(p),String(p)));owner.onchange=()=>{this.groupOwner=Number(owner.value);g.selection.clear();g.recalledGroup=null;g.updatePanels();};groups.append(owner); }
     $('selection').append(groups);
     const recipient = document.createElement('div'); recipient.id = 'recipient'; $('selection').prepend(recipient);
-    const queue = document.createElement('div'); queue.id = 'queue'; $('selection').append(queue);
-    const preview = document.createElement('div'); preview.id = 'lock-preview'; $('draft-panel').append(preview);
+    const queue = document.createElement('div'); queue.id = 'queue'; $('selection').insertBefore(queue, groups);
+    const preview = document.createElement('div'); preview.id = 'lock-preview'; const diagnostics=document.createElement('details');diagnostics.innerHTML='<summary>Future-order details</summary>';diagnostics.append(preview);$('draft-panel').append(diagnostics);
     const replay = document.createElement('details'); replay.id = 'replay';
     replay.innerHTML = '<summary>Rounds, inputs and rewrite results</summary><label>Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
     $('game').append(replay);
     replay.addEventListener('toggle',()=>{if(replay.open)this.loadComparison();});
     $('return-live').onclick = () => void this.selectRound(g.latest);
     ($('round-picker') as HTMLSelectElement).onchange = e => void this.selectRound(Number((e.target as HTMLSelectElement).value));
+    const speedLabel=document.createElement('label');speedLabel.className='speed-control';speedLabel.textContent='Replay speed ';
     const rates = document.createElement('select'); rates.id = 'speed'; rates.setAttribute('aria-label', 'Playback speed');
-    for (const n of [.25,.5,1,2,4,8]) rates.add(new Option(`${n}×`,String(n)));
-    rates.value = '1'; rates.onchange = () => { g.rate = Number(rates.value); g.updatePanels(); }; $('transport').append(rates);
+    for (const n of [.25,.5,1,2,4,8,16]) rates.add(new Option(`${n}×`,String(n)));
+    rates.value = '1'; rates.onchange = () => { g.rate = Number(rates.value); g.updatePanels(); }; speedLabel.append(rates);$('transport').append(speedLabel);
     $('transport').append(button('− Zoom', () => g.zoomTimeline(1.25)), button('+ Zoom', () => g.zoomTimeline(.8)), button('Pan ◀', () => g.panTimeline(-(g.view.t1-g.view.t0)/4)), button('Pan ▶', () => g.panTimeline((g.view.t1-g.view.t0)/4)));
     const overlay = document.createElement('div'); overlay.id = 'statistics'; overlay.className = 'overlay';
     overlay.innerHTML = '<button id="close-stats">Close statistics (V)</button><h2>Statistics</h2><label>Metric <select id="metric"></select></label> <label>Player <select id="graph-player"></select></label> <label>Opponent <select id="graph-opponent"></select></label> <label>Window <select id="graph-window"><option value="full">Full run</option><option value="visible">Visible timeline</option></select></label><p id="graph-caption"></p><canvas id="graph" width="900" height="330"></canvas><p id="graph-hover"></p><p>Thinking time is cumulative committed time by round, separate from the live planning timer. Attrition is this player’s spend divided by the selected opponent’s spend; no spend has no defined ratio.</p>';
@@ -99,6 +102,7 @@ export class Experience {
         const end = r.outcome.terminal_state_tick;
         const commands = await this.g.net.request({ kind:'get_commands', revision, from_tick:0, to_tick:Math.max(end,this.g.config.max_tick) }, 'commands', m => m.revision === revision);
         this.turns.set(revision,commands.turns);
+        if (this.g.current === revision && this.g.view.t0 === 0 && this.g.view.t1 >= end) this.g.view.t1 = this.g.timelineEnd();
         const stats = await this.g.net.request({ kind:'get_stats', revision, from_tick:0, to_tick:end, bucket_width:Math.max(this.g.config.snapshot_interval, Math.ceil(end / 1000 / this.g.config.snapshot_interval)*this.g.config.snapshot_interval) }, 'stats_range', m => m.revision === revision);
         this.stats.set(revision,stats.buckets);
         const events = await this.g.net.request({kind:'get_events',revision,from_tick:0,to_tick:end,effects_only:true},'events',m => m.revision === revision);
@@ -166,8 +170,10 @@ export class Experience {
   update(): void {
     const g = this.g;
     this.actions();
+    const policy = document.querySelector<HTMLButtonElement>('#actions [data-key="o"]');
+    if (policy) policy.textContent = `O ${g.draft.policy === 'keep' ? 'Keep future orders' : g.draft.policy === 'drop_all' ? 'Replace all future' : 'Replace next window'}`;
     $('stop-archive').hidden = g.spectator || !!g.finished || g.current !== g.latest;
-    $('recipient').textContent = g.recalledGroup === null ? 'Selected units · factories set newborn orders' : `Group ${g.recalledGroup}: current members + future spawns`;
+    $('recipient').textContent = g.recalledGroup === null ? 'Selection' : `Group ${g.recalledGroup}`;
     ($('speed') as HTMLSelectElement).value = String(g.rate);
     const list = $('group-list'); list.replaceChildren();
     const groups = this.groups();
@@ -225,7 +231,7 @@ export class Experience {
     const g=this.g, views=g.selectedViews().filter(v=>g.ownSelectable(v));
     const has=(cap:'movement'|'mining'|'construction'|'production')=>views.some(v=>!!g.types.get(v.type_key)?.[cap]);
     const factory=has('production');
-    const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.length>0,b:has('construction'),q:factory,p:views.length>0,l:factory,r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production,h:views.some(v=>!v.blueprint),H:views.some(v=>!v.blueprint),j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production)};
+    const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.length>0,b:has('construction'),q:factory,p:views.length>0,l:factory,r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production,h:views.some(v=>!v.blueprint),'clear-group':g.player!==null,j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production)};
     for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
     for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden);
     const options=$('mode-options');options.replaceChildren();
@@ -233,31 +239,33 @@ export class Experience {
     choices.forEach((label,index)=>{const digit=g.mode.kind==='membership'||g.mode.kind==='binding'?index:index+1;const cost=g.types.get(label)?.matter_cost;options.append(button(`${digit} · ${label}${cost===undefined?'':` · ${cost} matter`}`,()=>g.digit(digit)));});
   }
   queue(): void {
-    const g = this.g, root = $('queue');
-    // Preserve focused queue buttons through redraws caused by exact-state arrival.
-    if (root.contains(document.activeElement)) return;
-    root.replaceChildren(); this.focusDelete = null;
-    const add = (label: string, remove: () => void) => {
-      const b = button(label, () => { this.focusDelete = remove; b.focus(); });
-      b.onfocus = () => { this.focusDelete = remove; g.draft.selected = null; };
-      b.onkeydown = e => {
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const all = Array.from(root.querySelectorAll('button')); all[(all.indexOf(b)+(e.key === 'ArrowDown'?1:all.length-1))%all.length]?.focus(); }
-      }; root.append(b);
-    };
-    for (const v of g.selectedViews()) {
-      if(v.blueprint && v.owner===g.player){const info=document.createElement('p');info.textContent=`Planned ${v.type_key} · ${v.settings?.priority} · queue: ${v.settings?.queue.join(', ')||'empty'} · newborn ${v.settings?.order.kind} · starts on completion`;root.append(info);root.append(button('Clear planned queue',()=>g.configureGhosts(s=>{s.queue=[];})));continue;}
-      const p = structuredClone(v.exact?.production);
-      if (!p || v.owner !== g.player) continue;
-      if(g.draft.tick === Math.floor(g.playhead) && g.current === g.latest) for(const d of g.draft.commands) {const c=d.command;if('factories' in c && c.factories.some(id=>idKey(id)===idKey(v.id))) {if(c.kind==='bind_factory_group')p.spawn_group=c.group;if(c.kind==='set_stored_order')p.stored_order=c.order;}}
-      const info = document.createElement('p');
-      const group = this.groups().find(x => x.id.owner === p.spawn_group?.owner && x.id.slot === p.spawn_group?.slot);
-      info.textContent = `Output group ${p.spawn_group?.slot ?? 'none'} · newborn ${group?.latest_order?.order.kind ?? p.stored_order.kind} · ${p.active_item?.awaiting_output ? 'blocked' : 'ready'}`; root.append(info);
-      root.append(button('Cancel active (Delete on active)', () => g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));
-      if (p.active_item) add(`Active: ${p.active_item.type_key}`, () => g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}}));
-      for (const item of p.pending_items) add(`Pending: ${item.type_key}`, () => g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[{kind:'persistent',id:item.item_id}]}}));
-      root.append(button('Replace pending (empty)', () => g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}})));
+    const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && v.owner===g.player);
+    const signature=JSON.stringify([g.canStage().ok,views.map(v=>[v.id,v.lifecycle,factoryPlan(g,v)])]);
+    if(root.dataset.plan===signature)return;root.dataset.plan=signature;root.replaceChildren();this.focusDelete=null;
+    const enabled=g.canStage().ok;
+    for(const v of views) {
+      const plan=factoryPlan(g,v), card=document.createElement('section');card.className='factory-plan';
+      const heading=document.createElement('strong');heading.append(unitIcon(v.type_key,g.color(v.owner)),document.createTextNode(v.lifecycle==='complete'?'Factory output':v.lifecycle==='site'?'Factory under construction':'Planned factory'));card.append(heading);
+      const configure=(change:(settings:NonNullable<typeof v.settings>)=>void)=>{const settings=structuredClone(v.settings!);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
+      const settings=document.createElement('div');settings.className='factory-settings';
+      const loop=button(`↻ Loop: ${plan.loop?'On':'Off'}`,()=>{if(v.blueprint)configure(s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});});loop.setAttribute('aria-pressed',String(plan.loop));loop.disabled=!enabled;settings.append(loop);
+      const priorityLabel=document.createElement('label');priorityLabel.textContent='↑ Priority ';const priority=document.createElement('select');priority.setAttribute('aria-label','Factory priority');for(const value of ['high','medium','low'] as const)priority.add(new Option(value[0].toUpperCase()+value.slice(1),value));priority.value=plan.priority;priority.disabled=!enabled;priority.onchange=()=>{const value=priority.value as typeof plan.priority;if(v.blueprint)configure(s=>{s.priority=value;});else g.stage({kind:'set_priority',entities:[v.id],priority:value});};priorityLabel.append(priority);settings.append(priorityLabel);card.append(settings);
+      const summary=document.createElement('div');summary.className='factory-order';summary.textContent=`New units: ${plan.order.kind==='idle'?'Idle at output — give a destination':orderLabel(plan.order)}${plan.group ? ` · group ${plan.group.slot}` : ''}`;card.append(summary);
+      if(v.lifecycle!=='complete'){const note=document.createElement('small');note.textContent='Queue starts as soon as construction finishes.';card.append(note);}
+      const queue=document.createElement('div');queue.className='queue-icons';
+      if(plan.active){const active=document.createElement('div');active.className='queue-item active';const progress=plan.active.awaiting_output?'Output blocked':`${Math.round(plan.active.paid_matter)} / ${g.types.get(plan.active.type_key)?.matter_cost} matter`;active.append(unitIcon(plan.active.type_key,g.color(v.owner)),document.createTextNode(`Building ${plan.active.type_key} · ${progress}`));const cancel=button('×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}}));cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key}`);cancel.title='Cancel this unit; spent matter is lost';cancel.disabled=!enabled;active.append(cancel);queue.append(active);}
+      // Group adjacent recipes, preserving build order and each item reference for removal.
+      const batches:{type:string,indices:number[]}[]=[];
+      plan.pending.forEach((item,index)=>{const last=batches.at(-1);if(last?.type===item.type)last.indices.push(index);else batches.push({type:item.type,indices:[index]});});
+      for(const batch of batches){const chip=document.createElement('div');chip.className='queue-item';chip.title=`${batch.type} ×${batch.indices.length}`;chip.append(unitIcon(batch.type,g.color(v.owner)),document.createTextNode(`${batch.type} ×${batch.indices.length}`));const index=batch.indices.at(-1)!;const remove=button('−',()=>{if(v.blueprint)configure(s=>{s.queue.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[plan.pending[index].ref!]}});});remove.setAttribute('aria-label',`Remove one queued ${batch.type}`);remove.disabled=!enabled;chip.append(remove);queue.append(chip);}
+      if(!plan.active && !plan.pending.length){const empty=document.createElement('span');empty.className='muted';empty.textContent='Queue empty — add units below.';queue.append(empty);}card.insertBefore(queue,summary);
+      const recipes=document.createElement('div');recipes.className='recipe-icons';
+      for(const type of g.types.get(v.type_key)?.production?.recipes ?? []){const add=button('',()=>{if(v.blueprint)configure(s=>{s.queue.push(type);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items:[type]}});});add.append(unitIcon(type,g.color(v.owner)),document.createTextNode('+'));add.setAttribute('aria-label',`Queue ${type}`);add.title=`Queue ${type} · ${g.types.get(type)?.matter_cost} matter`;add.disabled=!enabled;recipes.append(add);}card.append(recipes);
+      const clear=button('Clear waiting queue',()=>{if(v.blueprint)configure(s=>{s.queue=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});});clear.disabled=!enabled||!plan.pending.length;card.append(clear);
+      const siteBlueprint = v.blueprint ?? (v.lifecycle === 'site' ? g.exact?.state.blueprints.find(b => b.site_id && idKey(b.site_id) === idKey(v.id)) : null);
+      if(siteBlueprint){const ref = 'kind' in siteBlueprint ? siteBlueprint : {kind:'persistent' as const,id:siteBlueprint.id};const cancel=button(v.lifecycle==='site'?'Cancel construction':'Cancel factory blueprint',()=>g.stage({kind:'cancel_blueprints',blueprint_ids:[ref]}));cancel.disabled=!enabled;card.append(cancel);}
+      root.append(card);
     }
-    for (const b of g.exact?.state.blueprints ?? []) if (b.owner === g.player) add(`Blueprint ${b.type_key} @${b.tile.x},${b.tile.y} (Delete)`, () => g.stage({kind:'cancel_blueprints',blueprint_ids:[{kind:'persistent',id:b.id}]}));
   }
   lockPreview(): string {
     const g = this.g, turns = this.turns.get(g.current);

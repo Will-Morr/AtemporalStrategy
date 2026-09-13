@@ -1,5 +1,6 @@
 import type { LobbyState, MatchConfig, Phase } from './contracts.generated';
 import type { Net } from './net';
+import { savedPlayers, rememberPlayer, choosePlayer } from './session';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -9,7 +10,7 @@ export interface Session {
 }
 
 /** Landing page: profile inputs, live roster, start/spectate. Resolves when the match is running. */
-export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, phase: Phase, session: Session): Promise<{ session: Session; lobby: LobbyState }> {
+export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, phase: Phase, session: Session, matchId: string): Promise<{ session: Session; lobby: LobbyState }> {
   const username = $<HTMLInputElement>('username');
   const color = $<HTMLInputElement>('color');
   const teamWrap = $<HTMLSpanElement>('team-wrap');
@@ -56,6 +57,11 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
         };
         li.append(claim);
       }
+      const saved = savedPlayers().find(p => p.match === matchId && p.slot === slot.slot);
+      if (slot.claimed && saved && session.slot === null) {
+        const rejoin = document.createElement('button'); rejoin.textContent = `Rejoin ${slot.profile?.username ?? saved.name}`;
+        rejoin.onclick = () => choosePlayer(saved.token); li.append(rejoin);
+      }
       if (session.slot === slot.slot) li.style.outline = '1px solid var(--accent)';
       roster.append(li);
     }
@@ -63,7 +69,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
     start.disabled = !(lobby.can_start && session.slot !== null && session.slot === first);
     start.textContent = session.slot === first && first !== null ? 'Start match' : 'Start match (first occupied slot starts)';
     release.style.display = session.slot !== null ? '' : 'none';
-    status.textContent = session.slot !== null ? `You hold slot ${session.slot}.` : phase === 'lobby' ? 'Claim a slot to play or spectate.' : 'Match in progress — spectate or refresh with your slot token.';
+    status.textContent = session.slot !== null ? `You hold slot ${session.slot}.` : phase === 'lobby' ? 'Claim a slot to play or spectate.' : 'Match in progress. Rejoin a saved player below, or spectate. Each tab keeps its own player.';
   };
   const updateProfile = () => {
     if (!session.token) return;
@@ -74,7 +80,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
   };
   username.onchange = updateProfile; color.onchange = updateProfile; team.onchange = updateProfile;
   render();
-  const objective = config.objective.kind === 'scoreboard' ? 'Scoreboard' : 'Timed';
+  const objective = config.objective.kind === 'scoreboard' ? 'Scoreboard' : config.objective.kind === 'hybrid' ? 'Hybrid' : 'Timed';
   document.title = `Atemporal Strategy — ${objective}`;
   return new Promise(resolve => {
     net.on('welcome', m => {lobby = m.lobby; phase = m.phase; render();});
@@ -91,7 +97,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
     net.on('slot_claimed', m => {
       session.slot = m.slot;
       session.token = m.private_token;
-      localStorage.setItem('atemporal-slot-token', m.private_token);
+      rememberPlayer(matchId, m.slot, m.private_token, username.value || `Player ${m.slot}`);
       render();
     });
     start.onclick = () => {
@@ -101,11 +107,11 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
       if (session.token) net.send({ kind: 'release_slot', slot_token: session.token });
       session.slot = null;
       session.token = null;
-      localStorage.removeItem('atemporal-slot-token');
+      sessionStorage.removeItem('atemporal-slot-token');
       render();
     };
     spectate.onclick = () => resolve({ session, lobby });
-    net.on('revision_published', () => resolve({ session, lobby }));
-    if (phase !== 'lobby') resolve({ session, lobby });
+    net.on('revision_published', () => { if(session.slot !== null) resolve({ session, lobby }); });
+    if (phase !== 'lobby' && session.slot !== null) resolve({ session, lobby });
   });
 }

@@ -1,3 +1,5 @@
+import { unitIcon } from './icons';
+import { factoryPlan, orderLabel } from './factory';
 import type {
   BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   TypeDefinition, WorldEvent, WorldState,
@@ -9,7 +11,7 @@ import { Experience } from './experience';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const CHUNK = 1000;
-const RATES = [0.25, 0.5, 1, 2, 4, 8];
+const RATES = [0.25, 0.5, 1, 2, 4, 8, 16];
 export const idKey = (id: EntityId): string => JSON.stringify(id);
 
 export interface RevisionView {
@@ -331,7 +333,7 @@ export class Game {
     const visible = this.visibility(all);
     const views = all.filter(e => this.spectator || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
     if (this.exact?.revision === this.current && this.exact.tick === Math.floor(this.playhead)) {
-      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.spectator || visible.has(`${b.tile.x},${b.tile.y}`))) {
+      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.spectator)) {
         views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
       }
     }
@@ -339,6 +341,7 @@ export class Game {
       this.draft.commands.forEach((d,index) => {
         const c = d.command;
         if (c.kind === 'place_blueprints') c.tiles.forEach((tile,item_index) => views.push({index:-1,id:{birth_command:{command:{round:this.round,player:this.player!,index},target_index:0},item_index,occurrence:0},owner:this.player!,type_key:c.type_key,x:tile.x,y:tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'draft',local_id:d.local_id,item_index},settings:{queue:[],order:{kind:'idle'},priority:c.priority,loop_enabled:false}}));
+        if (c.kind === 'cancel_blueprints') for (let i = views.length - 1; i >= 0; i--) if (c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(views[i].blueprint ?? (views[i].exact?.blueprint_id ? {kind:'persistent',id:views[i].exact!.blueprint_id} : null)))) views.splice(i, 1);
         if (c.kind === 'configure_blueprints') for (const v of views) if (v.blueprint && c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(v.blueprint))) v.settings = c.settings;
       });
     }
@@ -539,23 +542,53 @@ export class Game {
     this.stage({ kind: 'assign_order', entities, order }, this.draft.policy);
   }
 
+  private turnRequestPending = false;
+
+  async uncommit(): Promise<void> {
+    if (this.turnRequestPending || !this.net.connected || !this.session.token || !this.phase || this.committed.length >= this.config.player_count) return;
+    this.turnRequestPending = true;
+    this.updatePanels();
+    const request_id = `uncommit-${this.player}-${this.round}-${Date.now()}`;
+    try {
+      const reply = await this.net.request({ kind: 'uncommit', request_id, slot_token: this.session.token, round: this.round, revision: this.latest }, 'uncommitted', m => m.request_id === request_id);
+      if (reply.round === this.round) {
+        this.committed = this.committed.filter(p => p !== this.player);
+        this.clearDraft();
+        if (reply.draft) {
+          this.draft.tick = reply.draft.tick;
+          this.draft.commands = reply.draft.commands;
+          this.current = reply.draft.based_on_revision;
+          this.seek(reply.draft.tick);
+          this.toast('Turn uncommitted. Your moves are ready to edit.');
+        } else this.toast('Turn uncommitted. This older archive has no editable draft; enter your moves again.');
+      }
+    } catch (err) { this.toast(`Could not uncommit: ${(err as Error).message}`); }
+    finally { this.turnRequestPending = false; this.updatePanels(); }
+  }
+
   async commit(): Promise<void> {
-    if (!this.net.connected || this.current !== this.latest || this.spectator || !this.session.token || !this.phase) return;
-    if (this.committed.includes(this.player ?? -1)) return;
+    if (!this.net.connected || this.spectator || !this.session.token || !this.phase) return;
+    if (this.committed.includes(this.player ?? -1)) { await this.uncommit(); return; }
+    if (this.current !== this.latest) return;
+    if (this.turnRequestPending) return;
     const tick = this.draft.tick ?? Math.floor(this.playhead);
     if (tick < this.editableFrom || tick > this.availableThrough) {
       this.toast(`Pass tick must be within ${this.editableFrom}–${this.availableThrough}.`);
       return;
     }
+    this.turnRequestPending = true;
+    this.updatePanels();
+    const submittedRound = this.round;
     const request_id = `${this.player}-${this.round}-${Date.now()}`;
     try {
       await this.net.request({ kind: 'commit', request: { request_id, slot_token: this.session.token, draft: { based_on_revision: this.current, tick, commands: this.draft.commands } } }, 'commit_accepted', m => m.request_id === request_id);
-      this.committed.push(this.player!);
+      if (this.round === submittedRound && !this.committed.includes(this.player!)) this.committed.push(this.player!);
       this.clearDraft();
       this.toast('Turn committed. Waiting for the other players…');
     } catch (err) {
       this.toast(`Commit rejected: ${(err as Error).message}`);
     }
+    this.turnRequestPending = false;
     this.updatePanels();
   }
 
@@ -664,8 +697,9 @@ export class Game {
     });
     timeline.addEventListener('mousemove', e => {
       this.timelineCursor = this.renderer.timelineTick(e.clientX);
-      const bars = this.rev()?.timeline.filter(b => b.from_tick <= this.timelineCursor && b.to_tick_exclusive > this.timelineCursor) ?? [];
-      timeline.title = `Tick ${Math.floor(this.timelineCursor)} · ${bars.map(b => `${this.name(b.player_id)}: ${b.activity} (${b.affected_entities})`).join(' · ')} · Drag bottom ruler or middle button to pan`;
+      const tolerance = 4 / timeline.clientWidth * (this.view.t1 - this.view.t0);
+      const turns = (this.experience.turns.get(this.current) ?? []).filter(t => t.commands.length && Math.abs(t.tick - this.timelineCursor) <= tolerance);
+      timeline.title = `Tick ${Math.floor(this.timelineCursor)} · ${turns.map(t => `${this.name(t.player)}: ${t.commands.length} orders at tick ${t.tick} (round ${t.round})`).join(' · ')} · White outline: latest write · Purple: selected units · Shift + scroll or Drag bottom ruler to pan`;
     });
     timeline.addEventListener('wheel', e => {
       e.preventDefault();
@@ -740,14 +774,17 @@ export class Game {
     const [dx,dy] = offsets[this.renderer.outputDirection];
     return clear(tile) && (!factory || clear({ x: tile.x + dx, y: tile.y + dy }));
   }
+  timelineEnd(): number {
+    return Math.max(1, this.rev()?.outcome.terminal_state_tick ?? 1, ...(this.experience?.turns.get(this.current) ?? []).filter(t => t.commands.length).map(t => t.tick));
+  }
   panTimeline(delta: number): void {
-    const end = this.rev()?.outcome.terminal_state_tick ?? 1;
+    const end = this.timelineEnd();
     const span = Math.min(end, this.view.t1 - this.view.t0);
     const t0 = Math.max(0, Math.min(end - span, this.view.t0 + delta));
     this.view = { t0, t1: t0 + span };
   }
   zoomTimeline(factor: number, at = this.timelineCursor || this.playhead): void {
-    const end = Math.max(1, this.rev()?.outcome.terminal_state_tick ?? 1);
+    const end = this.timelineEnd();
     const old = this.view.t1 - this.view.t0;
     const span = Math.max(Math.min(10, end), Math.min(end, old * factor));
     const fraction = Math.max(0, Math.min(1, (at - this.view.t0) / old));
@@ -813,15 +850,16 @@ export class Game {
       case 'q': this.mode = { kind: 'recipe' }; break;
       case 'p': this.mode = { kind: 'priority' }; break;
       case 'r': if (this.mode.kind === 'place') this.renderer.cycleOutput(); break;
-      case 'h': this.mode = { kind: 'membership', add: e.shiftKey }; break;
+      case 'h': this.mode = { kind: 'membership', add: true }; break;
       case 'j': this.mode = { kind: 'binding' }; break;
       case 'v': this.experience.toggleStats(); break;
       case 'z': if (this.mode.kind === 'place') this.renderer.cycleOutput(); break;
       case 'x': this.assign({ kind: 'idle' }, () => true); this.mode = { kind: 'none' }; break;
       case 'l': {
-        const ghosts = this.configureGhosts(s => { s.loop_enabled = !s.loop_enabled; });
+        const enabled = !this.selectedViews().filter(v=>this.types.get(v.type_key)?.production).every(v=>factoryPlan(this,v).loop);
+        const ghosts = this.configureGhosts(s => { s.loop_enabled = enabled; });
         const factories = this.selectedIds(t => !!t.production);
-        if (factories.length) this.stage({ kind: 'set_queue_loop', factories, enabled: !this.selectedViews().filter(v => v.exact?.production).every(v => v.exact?.production?.loop_enabled) });
+        if (factories.length) this.stage({ kind: 'set_queue_loop', factories, enabled });
         else if (!ghosts) this.toast('Select a factory first.');
         break;
       }
@@ -869,7 +907,7 @@ export class Game {
   digit(n: number): void {
     const mode = this.mode;
     if (mode.kind === 'membership') {
-      if (this.player !== null) this.stage({ kind: 'edit_group_members', group: { owner: this.player, slot: n }, edit: { kind: mode.add ? 'add' : 'replace', entities: this.selectedIds() } });
+      if (this.player !== null) this.stage({ kind: 'edit_group_members', group: { owner: this.player, slot: n }, edit: { kind: mode.add ? 'add' : 'replace', entities: mode.add ? this.selectedIds() : [] } });
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'binding') {
       this.experience.bind(n);
@@ -921,7 +959,7 @@ export class Game {
         case 'place': return `Place ${this.mode.type_key}: click a floor tile${this.types.get(this.mode.type_key)?.production ? ` (output ${this.renderer.outputDirection.toUpperCase()}, R rotates)` : ''}`;
         case 'recipe': return `Queue: ${this.producible().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
         case 'priority': return 'Priority: 1=high 2=medium 3=low';
-        case 'membership': return `${this.mode.add ? 'Add to' : 'Replace'} group membership: 0–9`;
+        case 'membership': return `${this.mode.add ? 'Add selection to' : 'Clear'} group: 0–9`;
         case 'binding': return 'Factory output group: 0–9, Backspace clears';
         case 'stored': return 'Stored order: F destination, G ally, M mine area, C construct area, X idle';
         case 'stored-target': return 'Stored attack-move: click a destination tile';
@@ -934,7 +972,7 @@ export class Game {
 
   updateTop(): void {
     const rev = this.rev();
-    const phase = this.replayErrors.has(this.current) ? `Replay unavailable: ${/mismatch/i.test(this.replayErrors.get(this.current)!) ? 'local replay mismatch' : 'loading failed'}` : this.current !== this.latest ? `Historical round ${this.experience?.rounds.get(this.current)?.round ?? '…'} (read-only)` : this.finished ? this.finished : this.committed.includes(this.player ?? -1) ? `Round ${this.round}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${this.round}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
+    const phase = this.replayErrors.has(this.current) ? `Replay unavailable: ${/mismatch/i.test(this.replayErrors.get(this.current)!) ? 'local replay mismatch' : 'loading failed'}` : this.current !== this.latest ? `Historical round ${this.experience?.rounds.get(this.current)?.round ?? '…'} (read-only)` : this.finished ? this.finished : this.committed.length >= this.config.player_count ? `Round ${this.round}: simulating…` : this.committed.includes(this.player ?? -1) ? `Round ${this.round}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${this.round}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
     $('top-phase').textContent = `${this.spectator ? 'Spectator' : this.name(this.player!)} · ${phase} · revision ${this.current}`;
     $('top-tick').innerHTML = `tick <b>${Math.floor(this.playhead)}</b> / ${rev?.outcome.terminal_state_tick ?? 0} · editable ${this.editableFrom}–${this.availableThrough}`;
     const sample = this.sampleAt(this.playhead);
@@ -947,7 +985,7 @@ export class Game {
     const round = this.experience?.rounds.get(this.current);
     if (round) {
       const fastest = Math.max(1000,Math.min(...round.time_totals.map(t=>t.total_ms)));
-      const penalty = this.config.objective.kind === 'scoreboard' ? this.config.objective.rules.time_penalty : 'none';
+      const penalty = this.config.objective.kind !== 'timed' ? this.config.objective.rules.time_penalty : 'none';
       $('top-sim').textContent = `Sim ${round.sim_duration_ms}ms · committed time ratio ${round.time_totals.map(t=>`${this.name(t.player_id)} ${(Math.max(1000,t.total_ms)/fastest).toFixed(2)}×`).join(' / ')} · penalty ${penalty}${!this.finished && this.current === this.latest && this.phase && !this.committed.includes(this.player ?? -1) && !this.spectator ? ` · live planning ${((performance.now()-this.planningSince)/1000).toFixed(0)}s` : ''}`;
     }
   }
@@ -985,28 +1023,26 @@ export class Game {
     // Selection panel.
     const body = $('selection-body');
     const views = this.selectedViews();
+    $('selection').classList.toggle('factory-selected', views.length === 1 && !!this.types.get(views[0].type_key)?.production);
+
     if (!views.length) {
-      body.innerHTML = this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : '<span class="muted">Click or drag to select units.</span><p style="color:#ffe1a0"><b>Build your first units</b></p><p>Select a constructor → <b>B Build structure</b> → factory. Give the constructor <b>C Construct</b> over the blueprint.</p><p>Select the factory, even before it is built → <b>Q Build units</b>. Order a miner with <b>M Mine</b> over cyan ore to fund production.</p><a href="/guide/" target="_blank">How to play & unit reference ↗</a>';
+      body.innerHTML = this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : '<p>Select units to see their stats and orders.</p><p>Start an army: constructor → B Factory → C Construct.</p><a href="/guide/" target="_blank">How to play ↗</a>';
     } else {
-      const rows = views.slice(0, 12).map(v => {
-        const t = this.types.get(v.type_key);
-        let extra = '';
-        const e = v.exact;
-        if (e) {
-          extra = ` · ${this.effectiveOrder(v)?.kind ?? e.action.kind}${e.action.kind === 'attack_move' ? ` → ${e.action.destination.x},${e.action.destination.y}` : ''} · ${e.priority}`;
-          if (e.production) {
-            const p = e.production;
-            const active = p.active_item ? `${p.active_item.type_key} ${p.active_item.paid_matter.toFixed(0)}/${this.types.get(p.active_item.type_key)?.matter_cost}${p.active_item.awaiting_output ? ' (output blocked)' : ''}` : 'idle';
-            extra += `<br>queue: ${active}; pending ${p.pending_items.map(i => i.type_key).join(', ') || '—'}; loop ${p.loop_enabled ? 'on' : 'off'}; stored ${p.stored_order.kind}; output ${p.output_tile.x},${p.output_tile.y}`;
-          }
-          if (t?.mining && v.type_key === 'constructor') extra += ' · mines at half rate';
-        }
-        return `<div>P${v.owner} <span class="swatch" style="background:${this.color(v.owner)}"></span> ${v.type_key} ${v.lifecycle === 'blueprint' ? '(planned)' : `${v.lifecycle === 'site' ? '(site)' : ''} hp ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)}`} @${Math.round(v.x)},${Math.round(v.y)}${extra}</div>`;
-      });
-      if (views.length > 12) rows.push(`<div class="muted">…and ${views.length - 12} more</div>`);
-      if (this.recalledGroup !== null) rows.unshift(`<div><b>Group ${this.recalledGroup}</b>: orders go to current members + future spawns</div>`);
-      rows.push(`<div class="muted">Capable: move ${views.filter(v=>this.types.get(v.type_key)?.movement).length}, mine ${views.filter(v=>this.types.get(v.type_key)?.mining).length}, construct ${views.filter(v=>this.types.get(v.type_key)?.construction).length}, produce ${views.filter(v=>this.types.get(v.type_key)?.production).length}</div>`);
-      body.innerHTML = rows.join('');
+      body.replaceChildren();
+      const icons=document.createElement('div'); icons.id='selection-icons';
+      const counts=new Map<string,{v:EntityView,count:number}>();
+      for(const v of views){const key=`${v.owner}:${v.type_key}`;const entry=counts.get(key);if(entry)entry.count++;else counts.set(key,{v,count:1});}
+      for(const {v,count} of counts.values()){const chip=document.createElement('span');chip.className='unit-chip';chip.title=`${count} ${v.type_key}`;chip.append(unitIcon(v.type_key,this.color(v.owner)),document.createTextNode(`×${count}`));icons.append(chip);}
+      body.append(icons);
+      if(views.length===1){const v=views[0],t=this.types.get(v.type_key)!;const title=document.createElement('strong');title.textContent=`${v.type_key} · ${v.lifecycle==='site'?'Under construction':v.lifecycle==='blueprint'?'Planned':this.name(v.owner)}`;body.append(title);
+        const stats=document.createElement('div');stats.id='unit-stats';stats.className='unit-stats';
+        const values=[['Health',v.blueprint ? `${t.max_hp} when built` : `${v.hp.toFixed(0)} / ${v.maxHp.toFixed(0)}`],['Cost',`${t.matter_cost} matter`],['Vision',`${t.vision} tiles`]];
+        if(t.weapon)values.push(['Damage',`${t.weapon.damage} / ${t.weapon.cooldown} ticks`],['Range',`${t.weapon.range} tiles`]);
+        if(t.movement)values.push(['Move',`1 tile / ${t.movement.cooldown} ticks`]);
+        if(t.mining)values.push(['Mining',`${t.mining.rate} / ${t.mining.cooldown} ticks`]);
+        if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
+        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}if(t.production){const details=document.createElement('details');details.innerHTML='<summary>Unit stats</summary>';details.append(stats);body.append(details);}else { body.append(stats); const order=document.createElement('div');order.className='unit-order';order.textContent=`Order: ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order); }
+      } else {const label=document.createElement('strong');label.textContent=`${views.length} units selected`;body.append(label);}
     }
     // Draft panel.
     const list = $('draft-list');
@@ -1021,13 +1057,18 @@ export class Game {
       };
       list.append(li);
     });
-    const gate = this.canStage();
-    $('draft-title').textContent = `Draft${this.draft.tick !== null ? ` @ tick ${this.draft.tick}` : ''} · policy ${this.draft.policy}${gate.ok ? '' : ` · ${gate.reason}`}`;
+    $('draft-title').textContent = `Plan${this.draft.tick !== null ? ` · tick ${this.draft.tick}` : ''} · ${this.draft.commands.length} changes`;
     const commit = $<HTMLButtonElement>('commit');
     const canCommit = this.net.connected && !this.spectator && !!this.phase && this.phase.revision === this.current && !this.committed.includes(this.player ?? -1) && !this.finished;
     const commitTick = this.draft.tick ?? Math.floor(this.playhead);
     commit.disabled = !canCommit || this.current !== this.latest || commitTick < this.editableFrom || commitTick > this.availableThrough;
     commit.textContent = this.draft.commands.length ? `Commit turn (${this.draft.commands.length} at tick ${this.draft.tick})` : `Pass turn (tick ${Math.floor(this.playhead)})`;
+    if (this.committed.includes(this.player ?? -1)) {
+      const waiting = !!this.phase && this.phase.revision === this.latest && !this.progress && this.committed.length < this.config.player_count && !this.finished;
+      commit.textContent = waiting ? 'Uncommit · edit my moves' : 'Turn started';
+      commit.disabled = !waiting || !this.net.connected || this.spectator;
+    }
+    if (this.turnRequestPending) commit.disabled = true;
   }
 
   toast(text: string): void {
@@ -1044,7 +1085,7 @@ export class Game {
       ['F then click', 'Attack-move'], ['G then click ally', 'Support'], ['M then drag', 'Mine area'], ['C then drag', 'Construct area'],
       ['B then 1/2/3 then click', 'Place factory / turret / wall (R rotates output)'], ['X', 'Idle'], ['O', 'Cycle future-order policy'],
       ['P then 1/2/3', 'Priority high / medium / low'], ['Q then 1–7', 'Queue a unit at selected factories'], ['L', 'Toggle factory loop'],
-      ['H / Shift+H then digit', 'Replace / add group members'], ['J then digit / Backspace', 'Bind / clear factory output group'], ['Factory + F/G/M/C/X', 'Starting order for newborns'], ['V', 'Statistics graphs'], ['- / =, Shift+[ / Shift+]', 'Timeline zoom / pan'], ['Delete', 'Remove selected draft / blueprint / queue item'], ['Ctrl+Z / Ctrl+U', 'Undo / redo draft'],
+      ['H then digit / Clear group', 'Add members / empty a group'], ['J then digit / Backspace', 'Bind / clear factory output group'], ['Factory + F/G/M/C/X', 'Starting order for newborns'], ['V', 'Statistics graphs'], ['- / =, Shift+[ / Shift+]', 'Timeline zoom / pan'], ['Delete', 'Remove selected draft / blueprint / queue item'], ['Ctrl+Z / Ctrl+U', 'Undo / redo draft'],
       ['Enter', 'Commit / pass'], ['Space', 'Play / pause'], [', .', 'Step one tick'], ['< >', 'Jump 100 ticks'], ['Home / End', 'Editable start / end'],
       ['[ ]', 'Playback speed'], ['T', 'Return to draft tick'], ['Esc', 'Cancel mode, then clear selection'], ['?', 'This help'],
     ];
@@ -1062,7 +1103,7 @@ function describe(c: DraftCommand): string {
     case 'edit_production': return `queue ${cmd.edit.kind}${'items' in cmd.edit ? ` ${cmd.edit.items.join(',')}` : ''} × ${cmd.factories.length}`;
     case 'set_queue_loop': return `loop ${cmd.enabled ? 'on' : 'off'} × ${cmd.factories.length}`;
     case 'set_stored_order': return `stored ${cmd.order.kind} × ${cmd.factories.length}`;
-    case 'configure_blueprints': return `Plan building: ${cmd.settings.priority} · queue ${cmd.settings.queue.join(', ') || 'empty'} · newborn ${cmd.settings.order.kind}`;
+    case 'configure_blueprints': return `Factory plan: ${cmd.settings.queue.length} queued · ${cmd.settings.priority} · loop ${cmd.settings.loop_enabled?'on':'off'} · ${cmd.settings.order.kind.replace('_',' ')}`;
     case 'set_priority': return `priority ${cmd.priority} × ${cmd.entities.length}`;
     default: return cmd.kind;
   }

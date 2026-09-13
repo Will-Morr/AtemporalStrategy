@@ -195,3 +195,41 @@ fn exhausted_history_is_unfinished_and_sites_do_not_satisfy_timed_survival() {
     .unwrap();
     assert_eq!(result.timed_lost_players, vec![0]);
 }
+
+#[test]
+fn hybrid_advances_history_without_timed_elimination() {
+    let mut fixture = quiet();
+    fixture.request.config.objective = Objective::Hybrid {
+        rules: ScoreboardRules::default(),
+        lock_ticks_per_round: 2,
+    };
+    let mut locked = fixture.request.checkpoint.clone();
+    locked.tick = 2;
+    locked.entities.retain(|e| e.owner == 1);
+    let result = timed::adjudicate(
+        &fixture.request.config,
+        &fixture.request.content,
+        0,
+        &locked,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(result.boundary, 2);
+    assert_eq!(result.status, TimedStatus::Planning);
+    assert!(result.match_winners.is_empty());
+    assert!(result.timed_lost_players.is_empty());
+    assert_eq!(result.eligible_sides.len(), 2);
+    fixture.request.config.max_tick = 2;
+    assert_eq!(
+        timed::adjudicate(
+            &fixture.request.config,
+            &fixture.request.content,
+            0,
+            &locked,
+            &[]
+        )
+        .unwrap()
+        .status,
+        TimedStatus::HistoryExhausted
+    );
+}

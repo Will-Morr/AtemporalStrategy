@@ -187,8 +187,16 @@ impl Default for ScoreboardRules {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Objective {
-    Timed { lock_ticks_per_round: Tick },
-    Scoreboard { rules: ScoreboardRules },
+    Timed {
+        lock_ticks_per_round: Tick,
+    },
+    Scoreboard {
+        rules: ScoreboardRules,
+    },
+    Hybrid {
+        rules: ScoreboardRules,
+        lock_ticks_per_round: Tick,
+    },
 }
 record!(TeamAssignment {
     player_id: PlayerId,
@@ -663,6 +671,12 @@ pub enum ClientMessage {
     Commit {
         request: CommitRequest,
     },
+    Uncommit {
+        request_id: String,
+        slot_token: String,
+        round: u32,
+        revision: Revision,
+    },
     GetSnapshotRange {
         revision: Revision,
         from_tick: Tick,
@@ -745,6 +759,11 @@ pub enum ServerMessage {
     CommitAccepted {
         request_id: String,
         round: u32,
+    },
+    Uncommitted {
+        request_id: String,
+        round: u32,
+        draft: Option<TurnDraft>,
     },
     CommitRejected {
         request_id: String,

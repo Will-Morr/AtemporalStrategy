@@ -126,6 +126,10 @@ The integrated engine supports bounded parallel intents, 2–4-player maps, alli
 
 The coordinator retains shared content/contracts and merges changes sequentially. Compact transport, exact-state reconstruction and real lock application should be settled in the slice before separate owners depend on them. These assignments do not authorize an early user playtest.
 
+## Queued feature work
+
+- [ ] Progressive replay: publish a viewable, completed prefix while simulation continues, and clearly show the available tick range and advancing simulation frontier. Proposed implementation constraints: keep provisional replay separate from the last fully published revision, keep planning closed until final publication, and handle worker retries/reconnects without mixing generations. These are engineering proposals to validate when implementing the feature.
+
 ## Remaining review coverage
 
 - [ ] Measure an actual 2,000-live-entity controller/browser workload at non-sample ticks, including peripheral replication, cold seeks and peak memory. The authored simulation benchmark reaches 2,000; the current end-to-end congestion scenario reaches 1,264, so it does not close this scale-specific review item.

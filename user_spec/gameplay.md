@@ -38,6 +38,10 @@ Advance the immutable history boundary by a fixed, configurable number of ticks 
 
 Timed adjudication considers only the constructor/factory end state: the game is decided when locked history shows a player with no constructors or factories. Loss of all active buildings while a constructor still exists is not sufficient for timed finalization. Exact multiplayer team aggregation remains an explicit implementation interpretation.
 
+## Hybrid mode
+
+Add a hybrid mode with the scoreboard goal of five timeline wins and a fixed advance of immutable history each round.
+
 ## Dynamic simulation horizon
 
 Use a configurable inactivity duration to stop dynamically based on lack of order progress or unit destruction, with an ambitious absolute tick limit as a backup.
@@ -75,3 +79,10 @@ Provide a quickstart script that builds and launches the default 1v1 server.
 ## Allied traffic and deadlocks
 
 The user expects a very simple mechanism to resolve unit deadlocks, such as allowing a unit to enter a teammate bot's occupied tile and moving the displaced bot by swapping positions or pseudorandomly placing it on an adjacent tile. Prefer such lightweight mechanics over a complex crowd/pathfinding system. Exact displacement precedence, legal moves and deterministic arbitration remain implementation proposals.
+
+
+Constructors must not remain parked on a factory output indefinitely blocking production. Attack-moving armed units must respond to enemies firing on them when their capabilities permit, including grunt/turret encounters.
+
+## Uncommitting while waiting
+
+Players may uncommit a submitted turn while waiting for the other players, recover their moves for editing, and commit again. The turn still closes immediately when all players commit; uncommit is unavailable once simulation starts. This should encourage early commitment without penalizing someone who immediately notices a missing action.

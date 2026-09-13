@@ -8,11 +8,15 @@ pub fn adjudicate(
     locked: &WorldState,
     previously_lost: &[PlayerId],
 ) -> Result<TimedAdjudication> {
-    let Objective::Timed {
-        lock_ticks_per_round,
-    } = config.objective
-    else {
-        return Err("timed adjudication requires timed configuration".into());
+    let lock_ticks_per_round = match config.objective {
+        Objective::Timed {
+            lock_ticks_per_round,
+        }
+        | Objective::Hybrid {
+            lock_ticks_per_round,
+            ..
+        } => lock_ticks_per_round,
+        _ => return Err("timed adjudication requires an advancing-history configuration".into()),
     };
     if lock_ticks_per_round == 0 || old_boundary > config.max_tick {
         return Err("invalid timed boundary/increment".into());
@@ -24,6 +28,19 @@ pub fn adjudicate(
         return Err("adjudication requires exact S[new_L]".into());
     }
     let sides = scoring::sides(config.player_count, &config.multiplayer)?;
+    if matches!(config.objective, Objective::Hybrid { .. }) {
+        return Ok(TimedAdjudication {
+            boundary,
+            timed_lost_players: vec![],
+            eligible_sides: sides.into_keys().collect(),
+            match_winners: vec![],
+            status: if boundary == config.max_tick {
+                TimedStatus::HistoryExhausted
+            } else {
+                TimedStatus::Planning
+            },
+        });
+    }
     let mut lost: BTreeSet<_> = previously_lost.iter().copied().collect();
     if lost.len() != previously_lost.len() || lost.iter().any(|p| *p >= config.player_count) {
         return Err("invalid previous timed losses".into());

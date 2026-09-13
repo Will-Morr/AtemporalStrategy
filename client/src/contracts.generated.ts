@@ -45,6 +45,13 @@ export type ClientMessage =
       request: CommitRequest;
     }
   | {
+      kind: "uncommit";
+      request_id: string;
+      revision: number;
+      round: number;
+      slot_token: string;
+    }
+  | {
       from_tick: number;
       kind: "get_snapshot_range";
       revision: number;
@@ -353,6 +360,11 @@ export type Objective =
   | {
       kind: "scoreboard";
       rules: ScoreboardRules;
+    }
+  | {
+      kind: "hybrid";
+      lock_ticks_per_round: number;
+      rules: ScoreboardRules;
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -544,6 +556,12 @@ export type ServerMessage =
     }
   | {
       kind: "commit_accepted";
+      request_id: string;
+      round: number;
+    }
+  | {
+      draft?: TurnDraft | null;
+      kind: "uncommitted";
       request_id: string;
       round: number;
     }

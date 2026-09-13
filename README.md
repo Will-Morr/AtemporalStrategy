@@ -86,3 +86,5 @@ npm run ui:review --prefix client        # real-browser gameplay scenarios
 - [Architecture](docs/architecture.md) — deterministic simulation and timeline replay.
 - [Verification results and limits](docs/integration-verification.md) — tested scenarios and performance measurements.
 - [Remaining work](docs/implementation.md#remaining-review-coverage) — open review items.
+
+To combine the default first-to-five scoreboard with 100 ticks of fixed history per round, launch `./quickstart.sh --config config/hybrid.yaml`.

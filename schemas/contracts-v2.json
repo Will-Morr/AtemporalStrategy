@@ -513,6 +513,41 @@
         {
           "additionalProperties": false,
           "properties": {
+            "kind": {
+              "const": "uncommit",
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "round": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "slot_token": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "request_id",
+            "slot_token",
+            "round",
+            "revision"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "from_tick": {
               "format": "uint32",
               "maximum": 4294967295,
@@ -2503,6 +2538,30 @@
             "rules"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "hybrid",
+              "type": "string"
+            },
+            "lock_ticks_per_round": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rules": {
+              "$ref": "#/$defs/ScoreboardRules"
+            }
+          },
+          "required": [
+            "kind",
+            "rules",
+            "lock_ticks_per_round"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3853,6 +3912,40 @@
           "properties": {
             "kind": {
               "const": "commit_accepted",
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "round": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "request_id",
+            "round"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "draft": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TurnDraft"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "const": "uncommitted",
               "type": "string"
             },
             "request_id": {

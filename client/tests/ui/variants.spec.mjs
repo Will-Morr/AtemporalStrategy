@@ -2,13 +2,15 @@ import { test, expect } from './fixtures.mjs';
 import { isolatedServer, players, revision, seek, tile, area } from './game-helpers.mjs';
 import { readdir, readFile } from 'node:fs/promises';
 
-function configure(c,{count,teams,timed,single}){
+function configure(c,{count,teams,timed,single,hybrid}){
   const m=c.match_defaults;m.player_count=count;m.symmetric=count!==3;m.map_size=48;m.max_tick=1200;m.stall_ticks=100;
   m.control_limit=single?'single_order':'timestamp';
-  if(timed)m.objective={kind:'timed',lock_ticks_per_round:100};
+  if(hybrid)m.objective={kind:'hybrid',rules:m.objective.rules,lock_ticks_per_round:100};
+  else if(timed)m.objective={kind:'timed',lock_ticks_per_round:100};
   if(teams){m.multiplayer={kind:'teams',assignments:Array.from({length:count},(_,player_id)=>({player_id,team_id:player_id<2?'cyan':'orange'}))};c.available_teams=[{team_id:'cyan',label:'Cyan',capacity:2},{team_id:'orange',label:'Orange',capacity:2}];}
 }
 for(const variant of [
+  {label:'1v1 hybrid timestamp',count:2,teams:false,timed:true,single:false,hybrid:true},
   {label:'3-player FFA scoreboard single-order',count:3,teams:false,timed:false,single:true},
   {label:'4-player FFA timed timestamp',count:4,teams:false,timed:true,single:false},
   {label:'2v2 scoreboard timestamp',count:4,teams:true,timed:false,single:false},
@@ -44,7 +46,7 @@ for(const variant of [
   expect(await a.evaluate(()=>window.atemporal.draft.commands.map(d=>d.command.kind))).toEqual(['assign_group_order']);
   await review.capture('group-single-delivery-and-timeline',a);
   for(const p of ps){if(p!==a)await seek(p,tick);await p.locator('#commit').click();}for(const p of [...ps,spectator])await revision(p,2);
-  await seek(a,tick+1);await a.keyboard.press('2');await expect(a.locator('#selection-body')).toContainText('attack_move');
+  await seek(a,tick+1);await a.keyboard.press('2');await expect(a.locator('#selection-body')).toContainText('Attack move');
   await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.rounds.get(2)?.command_outcomes.find(o=>o.command_id.round===2&&o.command_id.player===0)?.applied_entities.length)).toBe(1);
   await expect(a.locator('#timeline')).toHaveAttribute('data-order-ticks',variant.timed?'0,100':'0');
   // Preserve tokens, accepted commands, revision, score and exact state across real archive resume.
@@ -54,7 +56,7 @@ for(const variant of [
   await server.stop();await server.start(['--resume',match]);
   for(const p of [...ps,spectator])await p.context().setOffline(false);
   await expect(a.locator('#connection')).toContainText('Server restarted',{timeout:15000});await review.capture('archive-resumed-reload-prompt',a);
-  for(const p of [...ps,spectator]){await p.reload();await revision(p,2);}
+  for(const p of [...ps,spectator]){await p.reload();if(p===spectator)await p.getByRole('button',{name:'Spectate',exact:true}).click();await revision(p,2);}
   await seek(a,tick+1);
   expect(await a.evaluate(()=>({round:window.atemporal.round,score:window.atemporal.rev().score,timed:window.atemporal.editableFrom,groups:window.atemporal.exact.state.control_groups}))).toEqual(before);
   await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.rounds.size)).toBe(3);
