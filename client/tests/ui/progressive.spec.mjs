@@ -31,6 +31,8 @@ for(const peripheral of [false,true]) test(`progressive replay: ${peripheral?'pe
   await expect(a.locator('#commit')).toBeDisabled();
   await expect(a.locator('#outcome-banner')).toContainText('Result pending');
   await expect(a.locator('#timeline')).toHaveAttribute('data-available-through',/\d+/);
+  await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-wins','0');
+  await expect(a.locator('#scoreboard')).toContainText('result pending');
   await review.capture('viewing-completed-prefix',a);
   await a.locator('#play').click();
   await expect.poll(()=>a.evaluate(()=>window.atemporal.playhead)).toBeGreaterThan(73);

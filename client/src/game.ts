@@ -452,8 +452,8 @@ export class Game {
     return visible;
   }
 
-  configureGhosts(change: (s: BlueprintSettings) => void): boolean {
-    const ghosts = this.selectedViews().filter(v => v.blueprint && this.ownSelectable(v));
+  configureGhosts(change: (s: BlueprintSettings) => void, accepts: (v: EntityView) => boolean = () => true): boolean {
+    const ghosts = this.selectedViews().filter(v => v.blueprint && this.ownSelectable(v) && accepts(v));
     for (const v of ghosts) {
       const settings = structuredClone(v.settings!); settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false); change(settings);
       this.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});
@@ -1004,7 +1004,7 @@ export class Game {
       case 'x': this.assign({ kind: 'idle' }, () => true); this.mode = { kind: 'none' }; break;
       case 'l': {
         const enabled = !this.selectedViews().filter(v=>this.types.get(v.type_key)?.production).every(v=>factoryPlan(this,v).loop);
-        const ghosts = this.configureGhosts(s => { s.loop_enabled = enabled; });
+        const ghosts = this.configureGhosts(s => { s.loop_enabled = enabled; }, v=>!!this.types.get(v.type_key)?.production);
         const factories = this.selectedIds(t => !!t.production);
         if (factories.length) this.stage({ kind: 'set_queue_loop', factories, enabled });
         else if (!ghosts) this.toast('Select a factory first.');
@@ -1069,7 +1069,7 @@ export class Game {
     } else if (mode.kind === 'recipe') {
       const key = this.producible()[n - 1];
       const factories = this.selectedIds(t => !!t.production);
-      const ghosts = key ? this.configureGhosts(s => { s.queue_loop_flags ??= s.queue.map(()=>false);s.queue.push(...Array(five?5:1).fill(key));s.queue_loop_flags.push(...Array(five?5:1).fill(s.loop_enabled)); }) : false;
+      const ghosts = key ? this.configureGhosts(s => { s.queue_loop_flags ??= s.queue.map(()=>false);s.queue.push(...Array(five?5:1).fill(key));s.queue_loop_flags.push(...Array(five?5:1).fill(s.loop_enabled)); }, v=>!!this.types.get(v.type_key)?.production?.recipes.includes(key)) : false;
       if (key && factories.length) this.stage({ kind: 'edit_production', factories, edit: { kind: 'append', items: Array(five?5:1).fill(key) } });
       else if (!ghosts) this.toast(key ? 'Select a factory first.' : 'No such recipe.');
       this.mode = { kind: 'none' };

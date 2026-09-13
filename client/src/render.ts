@@ -30,7 +30,7 @@ export class Renderer {
   resize(): void {
     this.map.width = window.innerWidth;
     this.headerHeight = document.getElementById('top')!.offsetHeight;
-    this.map.height = Math.max(this.headerHeight+100, document.getElementById('panels')!.getBoundingClientRect().top);
+    this.map.height = Math.max(100, document.getElementById('panels')!.getBoundingClientRect().top);
     this.map.style.height = `${this.map.height}px`;
     this.minimap.width = this.minimap.clientWidth || 200;
     this.minimap.height = this.minimap.clientHeight || 200;

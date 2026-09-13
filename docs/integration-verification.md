@@ -1,5 +1,24 @@
 # Browser integration verification — 2026-09-13
 
+## Production, turret repair and persistent scoreboard
+
+Implemented on `agent/production-priority`, rebased onto `0b61078` without conflicts. Factories capture repeat flags per queue item, including blueprint settings and active production; Shift-click adds five. Mixed blueprint selections only receive compatible recipe/loop edits. A shared bottom priority dropdown supports High/Medium/Low/Off with no battlefield priority labels. Off pauses spending; complete turrets automatically repair at 0.5 HP/tick for 1 matter/HP, half their construction efficiency, independently of firing. Terrain is darkest for walls, medium for unseen floor, lightest for seen floor; miners have blocky owner-colored silhouettes.
+
+The persistent scoreboard shows each player's completed timeline wins, the configured target, and Leading/Winner labels. Latest published match totals survive historical viewing and refresh, and remain unchanged during progressive replay. Team/adjusted points are separate from individual wins. Camera transforms reserve the responsive header height.
+
+Verification:
+
+- `scripts/check.sh` passed: workspace Rust tests, strict workspace/simulator Clippy, serial simulator tests, client build, JavaScript contract/plot/scoreboard checks, guide generation and generated-file drift. Final client build and tests also passed after the mixed-selection filter and short-viewport bound correction.
+- New simulator tests cover per-item loops through checkpoint reconstruction, editing an existing loop, turret repair efficiency/rate/caps and simultaneous fire, Off on all three consumers, and repair priority. Contract tests reject misaligned blueprint flags. Archive tests reject the prior simulator rules stamp.
+- Focused desktop/narrow production, blueprint and scoreboard runs passed. The full 42-scenario run at `artifacts/ui/2026-09-13T20-50-49.573Z-895219` passed 40; the two opening walkthroughs used outdated miner-priority/global-loop steps and the removed `top-score` locator. The intermediate opening retry (`2026-09-13T20-54-37.153Z-899679`) timed out on that locator and reported a trace cleanup stream error; it was stopped and is retained as failed evidence.
+- After updating those walkthrough inputs/selectors, both opening/rewrite/archive scenarios and both expanded mixed-blueprint production scenarios passed in `artifacts/ui/2026-09-13T21-00-37.392Z-903777` (4/4). All four final traces passed ZIP integrity checks. This gives all 42 distinct scenarios passing coverage, not a claim of one uninterrupted clean 42-case run. The broad cases cover multiplayer, single-order, timed/hybrid, archive recovery, progressive replay, uncommit and mismatch handling across authoritative/peripheral transports.
+- Scoreboard scenarios play an actual five-win match on both screen sizes, test history and refresh between wins, and verify the final winner and losing-player displays. Score aggregation checks separately cover teams, ties, draw credits, adjusted leadership, revision ancestry and missing history.
+
+Manually reviewed full desktop/narrow frames for terrain, miner ownership/shape, shared/mixed priority, turret repair Off, blueprint/site/completed mixed-loop queues, scoreboard ties/leaders/five-win victory, and four-player team totals. Narrow command panels retain their existing scroll behavior; long player names truncate visually with the full name available in accessible labels/tooltips. Representative PNGs, final check logs and reports are retained under `artifacts/review/2026-09-13-production-scoreboard`; full run evidence remains in the worktree.
+
+Compatibility: simulator rules stamp 3 intentionally requires the original binary to resume older-rule archives; same-rules archive restart and peripheral replication are verified. The separate 2,000-live-entity end-to-end stress measurement remains open; these browser scenarios do not close it.
+
+
 ## Blueprint and economy feedback pass
 
 Implemented in `agent/ui-feedback` on main's central-clearing map baseline (`702f57c`), then rebased without conflicts onto the subsequently published side-lane map change (`af1a223`). Every unfinished structure has a visible cancellation action. Newly placed blueprints can be configured and cancelled in one draft; deleting their placement removes dependent settings. Rebased drafts check blueprint availability locally and preserve the draft with an actionable explanation before submission.

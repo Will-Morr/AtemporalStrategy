@@ -17,6 +17,14 @@ test('per-item loops, five-unit additions and shared spending controls survive c
   await tile(a,constructor);
   const build=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},true))return{x,y};});
   await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'factory'}).click();await tile(a,build);await tile(a,build);
+  const turretPlan=await a.evaluate(()=>{const g=window.atemporal,c=g.entities().find(e=>e.owner===0&&e.type_key==='constructor');for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},false))return{x,y};});
+  await tile(a,constructor);await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'turret'}).click();await tile(a,turretPlan);await tile(a,turretPlan);
+  const factoryPoint=await a.evaluate(t=>window.atemporal.renderer.screen(t.x+.5,t.y+.5),build);await a.keyboard.down('Shift');await a.mouse.click(...factoryPoint);await a.keyboard.up('Shift');
+  await a.keyboard.press('l');await a.keyboard.press('q');await a.locator('#mode-options button').filter({hasText:'scout'}).click({modifiers:['Shift']});
+  const mixed=await a.evaluate(()=>window.atemporal.selectedViews().map(v=>({type:v.type_key,queue:v.settings.queue,loop:v.settings.loop_enabled})));
+  expect(mixed.find(v=>v.type==='turret')).toMatchObject({queue:[],loop:false});expect(mixed.find(v=>v.type==='factory')).toMatchObject({queue:Array(5).fill('scout'),loop:true});
+  await a.keyboard.press('Control+z');await a.keyboard.press('Control+z');
+  await tile(a,turretPlan);await a.locator('#cancel-blueprints').click();await tile(a,build);
   await a.getByRole('button',{name:'↻ Loop new items: Off',exact:true}).click();
   await a.getByRole('button',{name:'Queue grunt',exact:true}).click({modifiers:['Shift']});
   await expect(a.locator('.queue-icons')).toContainText('grunt ×5');await expect(a.getByRole('button',{name:'Loop queued grunt',exact:true})).toHaveAttribute('aria-pressed','true');

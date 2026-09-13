@@ -118,6 +118,8 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('Shift+h'); await a.keyboard.press('3');
   await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.at(-1).command.edit.kind)).toBe('add');
   await a.keyboard.press('Control+z');
+  await expect(a.getByRole('combobox',{name:'Selection priority'})).toBeHidden();
+  await clickTile(a,await findEntity(a,0,'constructor'));
   await a.keyboard.press('p');await a.keyboard.press('1');
   await expect(a.locator('#draft-list')).toContainText('priority high');await a.keyboard.press('Control+z');
   await a.keyboard.press('3');
@@ -244,9 +246,9 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   // Round 2 at tick 153: queue looping grunts with a stored attack-move toward the enemy miner.
   await clickTile(a, factoryTile);
   await expect(a.locator('#selection-body')).toContainText('factory');
+  await a.keyboard.press('l');
   await a.keyboard.press('q');
   await a.keyboard.press('4');
-  await a.keyboard.press('l');
   await a.keyboard.press('r');
   await a.keyboard.press('f');
   const enemyMiner = await findEntity(s, 1, 'miner');
@@ -359,12 +361,12 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await s.locator('#groups summary').click();
   await s.getByLabel('Inspect player groups').selectOption('1');
   await expect(s.locator('#group-list button')).toHaveCount(0);
-  const scoreBeforeArchive = await a.locator('#top-score').textContent();
+  const scoreBeforeArchive = await a.locator('#scoreboard').textContent();
   await a.getByRole('button',{name:'Stop and archive unfinished',exact:true}).click();
   await expect(a.locator('#result')).toContainText('unfinished');
   await expect(a.locator('#commit')).toBeDisabled();
   await expect(a.locator('#top-sim')).not.toContainText('live planning');
-  expect(await a.locator('#top-score').textContent()).toBe(scoreBeforeArchive);
+  expect(await a.locator('#scoreboard').textContent()).toBe(scoreBeforeArchive);
   await review.capture('unfinished-archive',a);
 });
 
