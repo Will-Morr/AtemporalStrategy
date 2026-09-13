@@ -1,0 +1,4139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContractCatalog",
+  "type": "object",
+  "properties": {
+    "client": {
+      "$ref": "#/$defs/ClientEnvelope"
+    },
+    "guide": {
+      "$ref": "#/$defs/GuideManifest"
+    },
+    "score": {
+      "$ref": "#/$defs/RoundScore"
+    },
+    "server": {
+      "$ref": "#/$defs/ServerEnvelope"
+    },
+    "setup": {
+      "$ref": "#/$defs/Setup"
+    },
+    "simulation": {
+      "$ref": "#/$defs/SimRequest"
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerEnvelope"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "client",
+    "server",
+    "worker",
+    "simulation",
+    "setup",
+    "guide",
+    "score"
+  ],
+  "$defs": {
+    "AcceptedTurn": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommittedCommand"
+          }
+        },
+        "duration_ms": {
+          "$ref": "#/$defs/SafeInt"
+        },
+        "player": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "round": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player",
+        "round",
+        "tick",
+        "commands",
+        "duration_ms"
+      ]
+    },
+    "ActiveItem": {
+      "type": "object",
+      "properties": {
+        "awaiting_output": {
+          "type": "boolean"
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "occurrence": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "paid_matter": {
+          "type": "number",
+          "format": "double"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "occurrence",
+        "type_key",
+        "paid_matter",
+        "awaiting_output"
+      ]
+    },
+    "Activity": {
+      "type": "string",
+      "enum": [
+        "combat",
+        "construction",
+        "mining",
+        "movement",
+        "idle"
+      ]
+    },
+    "AvailableTeam": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "label": {
+          "type": "string"
+        },
+        "team_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "team_id",
+        "label"
+      ]
+    },
+    "AwardReason": {
+      "type": "string",
+      "enum": [
+        "survival",
+        "draw",
+        "none"
+      ]
+    },
+    "Blueprint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "precedence": {
+          "$ref": "#/$defs/EventKey"
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority"
+        },
+        "site_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_command_id": {
+          "type": "string"
+        },
+        "tile": {
+          "$ref": "#/$defs/Tile"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "owner",
+        "type_key",
+        "tile",
+        "priority",
+        "source_command_id",
+        "precedence"
+      ]
+    },
+    "ClientEnvelope": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/ClientMessage"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "message"
+      ]
+    },
+    "ClientMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hello"
+            },
+            "last_revision": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "protocol_version": {
+              "$ref": "#/$defs/Version"
+            },
+            "slot_token": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "protocol_version"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "claim_slot"
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "team_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "username": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "slot",
+            "username",
+            "color"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "release_slot"
+            },
+            "slot_token": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "slot_token"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "update_lobby_profile"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "slot_token": {
+              "type": "string"
+            },
+            "team_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "username": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "request_id",
+            "slot_token"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "based_on_lobby_revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "start_match"
+            },
+            "slot_token": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "slot_token",
+            "based_on_lobby_revision"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "planning_ready"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "round",
+            "revision"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "commit"
+            },
+            "request": {
+              "$ref": "#/$defs/CommitRequest"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "request"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "from_tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "get_snapshot_range"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "stride": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "to_tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "from_tick",
+            "to_tick",
+            "stride"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "get_exact_state"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "tick"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bucket_width": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "from_tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "get_stats"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "to_tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "from_tick",
+            "to_tick",
+            "bucket_width"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "based_on_revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "draft_command": {
+              "$ref": "#/$defs/DraftCommand"
+            },
+            "kind": {
+              "type": "string",
+              "const": "preview_future_orders"
+            },
+            "preceding_commands": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/DraftCommand"
+              }
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "based_on_revision",
+            "tick",
+            "draft_command",
+            "preceding_commands"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "get_entity_order_history"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "entity_ids"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "get_control_groups"
+            },
+            "player": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "tick",
+            "player"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            "kind": {
+              "type": "string",
+              "const": "get_group_order_history"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "group"
+          ]
+        }
+      ]
+    },
+    "Command": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "assign_order"
+            },
+            "order": {
+              "$ref": "#/$defs/Order"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entities",
+            "order"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            "kind": {
+              "type": "string",
+              "const": "assign_group_order"
+            },
+            "order": {
+              "$ref": "#/$defs/Order"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group",
+            "order"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edit": {
+              "$ref": "#/$defs/MemberEdit"
+            },
+            "group": {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            "kind": {
+              "type": "string",
+              "const": "edit_group_members"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group",
+            "edit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "factories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "group": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ControlGroupId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "bind_factory_group"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "factories"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "set_priority"
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entities",
+            "priority"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "place_blueprints"
+            },
+            "priority": {
+              "$ref": "#/$defs/Priority"
+            },
+            "tiles": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Tile"
+              }
+            },
+            "type_key": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "type_key",
+            "tiles",
+            "priority"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "blueprint_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "cancel_blueprints"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "blueprint_ids"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "edit": {
+              "$ref": "#/$defs/ProductionEdit"
+            },
+            "factories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "edit_production"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "factories",
+            "edit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "factories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "set_queue_loop"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "factories",
+            "enabled"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "factories": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "set_stored_order"
+            },
+            "order": {
+              "$ref": "#/$defs/Order"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "factories",
+            "order"
+          ]
+        }
+      ]
+    },
+    "CommandOutcome": {
+      "type": "object",
+      "properties": {
+        "applied_entities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command_id": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SkippedTarget"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command_id",
+        "applied_entities",
+        "skipped"
+      ]
+    },
+    "CommitRequest": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/TurnDraft"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "slot_token": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "slot_token",
+        "draft"
+      ]
+    },
+    "CommittedCommand": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "future_orders": {
+          "$ref": "#/$defs/FutureOrderPolicy"
+        },
+        "id": {
+          "type": "string"
+        },
+        "suppressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Suppression"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "command",
+        "future_orders",
+        "suppressions"
+      ]
+    },
+    "Content": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "starting_roster": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TypeDefinition"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "types",
+        "starting_roster"
+      ]
+    },
+    "ControlGroupId": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "slot": {
+          "$ref": "#/$defs/GroupSlot"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "slot"
+      ]
+    },
+    "ControlGroupState": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ControlGroupId"
+        },
+        "latest_order": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SavedOrder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "members"
+      ]
+    },
+    "ControlLimit": {
+      "type": "string",
+      "enum": [
+        "timestamp",
+        "single_order"
+      ]
+    },
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ]
+    },
+    "DraftCommand": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "future_orders": {
+          "$ref": "#/$defs/FutureOrderPolicy"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "future_orders"
+      ]
+    },
+    "DrawScoring": {
+      "type": "string",
+      "enum": [
+        "none",
+        "all_players"
+      ]
+    },
+    "EntityState": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Order"
+        },
+        "blueprint_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hp": {
+          "type": "number",
+          "format": "double"
+        },
+        "id": {
+          "type": "string"
+        },
+        "last_move_direction": {
+          "$ref": "#/$defs/Direction"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        },
+        "next_action_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "next_move_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "owner": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "paid_matter": {
+          "type": "number",
+          "format": "double"
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority"
+        },
+        "production": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Production"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "support_target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tile": {
+          "$ref": "#/$defs/Tile"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "owner",
+        "type_key",
+        "tile",
+        "last_move_direction",
+        "hp",
+        "paid_matter",
+        "lifecycle",
+        "action",
+        "priority",
+        "next_action_tick",
+        "next_move_tick"
+      ]
+    },
+    "EventKey": {
+      "type": "object",
+      "properties": {
+        "command_index": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "player_rank": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "round": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tick",
+        "round",
+        "player_rank",
+        "command_index"
+      ]
+    },
+    "Fingerprint": {
+      "type": "object",
+      "properties": {
+        "config_hash": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "sim_build": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "sim_build",
+        "target",
+        "config_hash",
+        "content_hash"
+      ]
+    },
+    "FutureOrderPolicy": {
+      "type": "string",
+      "enum": [
+        "keep",
+        "drop_all",
+        "drop_window"
+      ]
+    },
+    "FutureOrdersConfig": {
+      "type": "object",
+      "properties": {
+        "window_ticks": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "GroupSlot": {
+      "type": "integer",
+      "maximum": 9,
+      "minimum": 0
+    },
+    "GuideManifest": {
+      "type": "object",
+      "properties": {
+        "content_hash": {
+          "type": "string"
+        },
+        "generated_files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "locale": {
+          "type": "string"
+        },
+        "rules_build": {
+          "type": "string"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "content_hash",
+        "rules_build",
+        "locale",
+        "generated_files"
+      ]
+    },
+    "Healing": {
+      "type": "object",
+      "properties": {
+        "cooldown": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "demand": {
+          "type": "number",
+          "format": "double"
+        },
+        "hp_per_matter": {
+          "type": "number",
+          "format": "double"
+        },
+        "range": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "range",
+        "hp_per_matter",
+        "demand",
+        "cooldown"
+      ]
+    },
+    "HistoryComponent": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/Command"
+        },
+        "command_id": {
+          "type": "string"
+        },
+        "suppressed_by": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Suppression"
+          }
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tick",
+        "command_id",
+        "command",
+        "suppressed_by"
+      ]
+    },
+    "Lifecycle": {
+      "type": "string",
+      "enum": [
+        "site",
+        "complete"
+      ]
+    },
+    "LobbySlot": {
+      "type": "object",
+      "properties": {
+        "claimed": {
+          "type": "boolean"
+        },
+        "connected": {
+          "type": "boolean"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlayerProfile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slot": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "slot",
+        "claimed",
+        "connected"
+      ]
+    },
+    "LobbyState": {
+      "type": "object",
+      "properties": {
+        "available_teams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AvailableTeam"
+          }
+        },
+        "can_start": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rule_summary": {
+          "type": "string"
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LobbySlot"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "slots",
+        "available_teams",
+        "can_start",
+        "rule_summary"
+      ]
+    },
+    "MatchConfig": {
+      "type": "object",
+      "properties": {
+        "checkpoint_interval": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "control_limit": {
+          "$ref": "#/$defs/ControlLimit"
+        },
+        "future_orders": {
+          "$ref": "#/$defs/FutureOrdersConfig"
+        },
+        "map_size": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "max_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "multiplayer": {
+          "$ref": "#/$defs/Multiplayer"
+        },
+        "objective": {
+          "$ref": "#/$defs/Objective"
+        },
+        "player_count": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "replay_directory": {
+          "type": "string"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "seed": {
+          "$ref": "#/$defs/SafeInt"
+        },
+        "simulation_threads": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "snapshot_interval": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "stall_ticks": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "starting_matter": {
+          "type": "number",
+          "format": "double"
+        },
+        "symmetric": {
+          "type": "boolean"
+        },
+        "ticks_per_second": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "transport": {
+          "$ref": "#/$defs/Transport"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "seed",
+        "map_size",
+        "player_count",
+        "symmetric",
+        "multiplayer",
+        "objective",
+        "control_limit",
+        "future_orders",
+        "max_tick",
+        "stall_ticks",
+        "ticks_per_second",
+        "starting_matter",
+        "simulation_threads",
+        "checkpoint_interval",
+        "snapshot_interval",
+        "transport",
+        "replay_directory"
+      ]
+    },
+    "MemberEdit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "replace"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entities"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entities"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "remove"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entities"
+          ]
+        }
+      ]
+    },
+    "Movement": {
+      "type": "object",
+      "properties": {
+        "cooldown": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "neighbors": {
+          "$ref": "#/$defs/Neighbors"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "neighbors",
+        "cooldown"
+      ]
+    },
+    "Multiplayer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "ffa"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "assignments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TeamAssignment"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "teams"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "assignments"
+          ]
+        }
+      ]
+    },
+    "Neighbors": {
+      "type": "string",
+      "enum": [
+        "four",
+        "eight"
+      ]
+    },
+    "Objective": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "timed"
+            },
+            "lock_ticks_per_round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "lock_ticks_per_round"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "scoreboard"
+            },
+            "rules": {
+              "$ref": "#/$defs/ScoreboardRules"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "rules"
+          ]
+        }
+      ]
+    },
+    "Order": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "idle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "destination": {
+              "$ref": "#/$defs/Tile"
+            },
+            "kind": {
+              "type": "string",
+              "const": "attack_move"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "destination"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "support"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "area": {
+              "$ref": "#/$defs/Rect"
+            },
+            "kind": {
+              "type": "string",
+              "const": "mine"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "area"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "area": {
+              "$ref": "#/$defs/Rect"
+            },
+            "kind": {
+              "type": "string",
+              "const": "construct"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "area"
+          ]
+        }
+      ]
+    },
+    "Outcome": {
+      "type": "object",
+      "properties": {
+        "eliminated": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/OutcomeKind"
+        },
+        "last_progress_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "stop_reason": {
+          "$ref": "#/$defs/StopReason"
+        },
+        "survival_transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SurvivalTransition"
+          }
+        },
+        "surviving_sides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SideId"
+          }
+        },
+        "survivors": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "terminal_state_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "stop_reason",
+        "terminal_state_tick",
+        "last_progress_tick",
+        "survivors",
+        "eliminated",
+        "surviving_sides",
+        "survival_transitions"
+      ]
+    },
+    "OutcomeKind": {
+      "type": "string",
+      "enum": [
+        "stalemate",
+        "win",
+        "draw"
+      ]
+    },
+    "Phase": {
+      "type": "string",
+      "enum": [
+        "lobby",
+        "planning",
+        "simulating",
+        "finished"
+      ]
+    },
+    "PlayerProfile": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "team_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "username",
+        "color"
+      ]
+    },
+    "PlayerRatio": {
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "ratio": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "ratio"
+      ]
+    },
+    "PlayerState": {
+      "type": "object",
+      "properties": {
+        "bank": {
+          "type": "number",
+          "format": "double"
+        },
+        "counters": {
+          "$ref": "#/$defs/SpendCounters"
+        },
+        "currently_eliminated": {
+          "type": "boolean"
+        },
+        "elimination_reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reason"
+          }
+        },
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "status_since_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "bank",
+        "counters",
+        "currently_eliminated",
+        "status_since_tick",
+        "elimination_reasons"
+      ]
+    },
+    "PlayerStats": {
+      "type": "object",
+      "properties": {
+        "active_workers": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "bank": {
+          "type": "number",
+          "format": "double"
+        },
+        "counters": {
+          "$ref": "#/$defs/SpendCounters"
+        },
+        "entity_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "living_army_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "living_infrastructure_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "bank",
+        "counters",
+        "living_army_value",
+        "living_infrastructure_value",
+        "entity_count",
+        "active_workers"
+      ]
+    },
+    "PlayerTime": {
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "total_ms": {
+          "$ref": "#/$defs/SafeInt"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "total_ms"
+      ]
+    },
+    "PresentationEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "entity_id": {
+              "type": "string"
+            },
+            "from": {
+              "$ref": "#/$defs/Tile"
+            },
+            "kind": {
+              "type": "string",
+              "const": "move"
+            },
+            "to": {
+              "$ref": "#/$defs/Tile"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entity_id",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "attacker_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "attack"
+            },
+            "source_tile": {
+              "$ref": "#/$defs/Tile"
+            },
+            "target_id": {
+              "type": "string"
+            },
+            "target_tile": {
+              "$ref": "#/$defs/Tile"
+            },
+            "visual_style": {
+              "$ref": "#/$defs/VisualStyle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "attacker_id",
+            "source_tile",
+            "target_id",
+            "target_tile",
+            "visual_style"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "impact"
+            },
+            "target_tile": {
+              "$ref": "#/$defs/Tile"
+            },
+            "visual_style": {
+              "$ref": "#/$defs/VisualStyle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target_tile",
+            "visual_style"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entity_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "destroyed"
+            },
+            "tile": {
+              "$ref": "#/$defs/Tile"
+            },
+            "visual_style": {
+              "$ref": "#/$defs/VisualStyle"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entity_id",
+            "tile",
+            "visual_style"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "survival"
+            },
+            "transition": {
+              "$ref": "#/$defs/SurvivalTransition"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "transition"
+          ]
+        }
+      ]
+    },
+    "PreviewInterval": {
+      "type": "object",
+      "properties": {
+        "after_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "through_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "after_tick",
+        "through_tick"
+      ]
+    },
+    "Priority": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "Production": {
+      "type": "object",
+      "properties": {
+        "active_item": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActiveItem"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loop_enabled": {
+          "type": "boolean"
+        },
+        "occurrence_counters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "output_tile": {
+          "$ref": "#/$defs/Tile"
+        },
+        "pending_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QueueItem"
+          }
+        },
+        "spawn_group": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stored_order": {
+          "$ref": "#/$defs/Order"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pending_items",
+        "loop_enabled",
+        "stored_order",
+        "output_tile",
+        "occurrence_counters"
+      ]
+    },
+    "ProductionCapability": {
+      "type": "object",
+      "properties": {
+        "rate": {
+          "type": "number",
+          "format": "double"
+        },
+        "recipes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rate",
+        "recipes"
+      ]
+    },
+    "ProductionEdit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "append"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "replace_pending"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "item_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "remove_pending"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "item_ids"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "cancel_active"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "QueueItem": {
+      "type": "object",
+      "properties": {
+        "item_id": {
+          "type": "string"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "item_id",
+        "type_key"
+      ]
+    },
+    "Reason": {
+      "type": "string",
+      "enum": [
+        "no_active_building",
+        "no_build_ability"
+      ]
+    },
+    "Rect": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "$ref": "#/$defs/Tile"
+        },
+        "min": {
+          "$ref": "#/$defs/Tile"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ]
+    },
+    "RoundPrecedence": {
+      "type": "object",
+      "properties": {
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "round": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "round",
+        "players"
+      ]
+    },
+    "RoundScore": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScoreEntry"
+          }
+        },
+        "match_winners": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SideId"
+          }
+        },
+        "round": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "victory_rule": {
+          "$ref": "#/$defs/VictoryRule"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "round",
+        "entries",
+        "victory_rule",
+        "match_winners"
+      ]
+    },
+    "SafeInt": {
+      "type": "integer",
+      "maximum": 9007199254740991,
+      "minimum": 0
+    },
+    "SavedOrder": {
+      "type": "object",
+      "properties": {
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "source_command_id": {
+          "type": "string"
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_command_id",
+        "tick",
+        "order"
+      ]
+    },
+    "ScoreEntry": {
+      "type": "object",
+      "properties": {
+        "adjusted_delta": {
+          "type": "number",
+          "format": "double"
+        },
+        "adjusted_total": {
+          "type": "number",
+          "format": "double"
+        },
+        "award_reason": {
+          "$ref": "#/$defs/AwardReason"
+        },
+        "credited_players": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        },
+        "raw_delta": {
+          "type": "number",
+          "format": "double"
+        },
+        "raw_total": {
+          "type": "number",
+          "format": "double"
+        },
+        "side_id": {
+          "$ref": "#/$defs/SideId"
+        },
+        "surviving_members": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "side_id",
+        "surviving_members",
+        "credited_players",
+        "award_reason",
+        "raw_delta",
+        "adjusted_delta",
+        "raw_total",
+        "adjusted_total"
+      ]
+    },
+    "ScoreboardRules": {
+      "type": "object",
+      "properties": {
+        "draw_scoring": {
+          "$ref": "#/$defs/DrawScoring"
+        },
+        "tie_policy": {
+          "$ref": "#/$defs/TiePolicy"
+        },
+        "time_penalty": {
+          "$ref": "#/$defs/TimePenalty"
+        },
+        "victory_rule": {
+          "$ref": "#/$defs/VictoryRule"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "victory_rule",
+        "tie_policy",
+        "draw_scoring",
+        "time_penalty"
+      ]
+    },
+    "ServerEnvelope": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/ServerMessage"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "server_instance_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "server_instance_id",
+        "message"
+      ]
+    },
+    "ServerMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/MatchConfig"
+            },
+            "fingerprint": {
+              "$ref": "#/$defs/Fingerprint"
+            },
+            "guide_url": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "welcome"
+            },
+            "lobby": {
+              "$ref": "#/$defs/LobbyState"
+            },
+            "match_id": {
+              "type": "string"
+            },
+            "phase": {
+              "$ref": "#/$defs/Phase"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "match_id",
+            "config",
+            "phase",
+            "lobby",
+            "fingerprint",
+            "guide_url"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "slot_claimed"
+            },
+            "private_token": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "slot",
+            "private_token"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "lobby_updated"
+            },
+            "lobby": {
+              "$ref": "#/$defs/LobbyState"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "lobby"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "lobby_update_rejected"
+            },
+            "lobby": {
+              "$ref": "#/$defs/LobbyState"
+            },
+            "message": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "request_id",
+            "code",
+            "message",
+            "lobby"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "available_through": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "committed_players": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0
+              }
+            },
+            "editable_from": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "planning_opened"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "time_totals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlayerTime"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "round",
+            "revision",
+            "editable_from",
+            "available_through",
+            "committed_players",
+            "time_totals"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "commit_accepted"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "round": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "request_id",
+            "round"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "commit_rejected"
+            },
+            "message": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "request_id",
+            "code",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "end_tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "simulation_progress"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "tick",
+            "end_tick"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "revision_published"
+            },
+            "outcome": {
+              "$ref": "#/$defs/Outcome"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "score": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RoundScore"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sim_duration_ms": {
+              "$ref": "#/$defs/SafeInt"
+            },
+            "time_ratios": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlayerRatio"
+              }
+            },
+            "time_totals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlayerTime"
+              }
+            },
+            "timeline_index": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TimelineBucket"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "outcome",
+            "timeline_index",
+            "time_totals",
+            "time_ratios",
+            "sim_duration_ms"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "snapshot_range"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "samples": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorldState"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "samples"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "exact_state"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "snapshot": {
+              "$ref": "#/$defs/WorldState"
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "tick",
+            "snapshot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "buckets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StatsSample"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "stats_range"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "buckets"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "final_outcome": {
+              "$ref": "#/$defs/Outcome"
+            },
+            "kind": {
+              "type": "string",
+              "const": "match_finished"
+            },
+            "match_winners": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SideId"
+              }
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "match_winners",
+            "final_outcome",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "affected_components": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Suppression"
+              }
+            },
+            "counts_by_kind": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "interval": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreviewInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "future_orders_preview"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "affected_components",
+            "counts_by_kind"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "components": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/HistoryComponent"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "order_history"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "components"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ControlGroupState"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "control_groups"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "tick",
+            "groups"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/MatchConfig"
+            },
+            "content": {
+              "$ref": "#/$defs/Content"
+            },
+            "fingerprint": {
+              "$ref": "#/$defs/Fingerprint"
+            },
+            "initial_state": {
+              "$ref": "#/$defs/WorldState"
+            },
+            "kind": {
+              "type": "string",
+              "const": "replay_bootstrap"
+            },
+            "ledger": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AcceptedTurn"
+              }
+            },
+            "precedence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RoundPrecedence"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "fingerprint",
+            "config",
+            "content",
+            "initial_state",
+            "ledger",
+            "precedence"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "editable_from": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "round_inputs"
+            },
+            "precedence": {
+              "$ref": "#/$defs/RoundPrecedence"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "turns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AcceptedTurn"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "turns",
+            "precedence",
+            "editable_from"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "hash": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "reference_hash"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "revision",
+            "tick",
+            "hash"
+          ]
+        }
+      ]
+    },
+    "Setup": {
+      "type": "object",
+      "properties": {
+        "available_teams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AvailableTeam"
+          }
+        },
+        "default_port": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "match_defaults": {
+          "$ref": "#/$defs/MatchConfig"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "match_defaults",
+        "available_teams",
+        "default_port"
+      ]
+    },
+    "Shape": {
+      "type": "string",
+      "enum": [
+        "circle",
+        "rectangle"
+      ]
+    },
+    "SideId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "player"
+            },
+            "player_id": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "player_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "team"
+            },
+            "team_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "team_id"
+          ]
+        }
+      ]
+    },
+    "SimRequest": {
+      "type": "object",
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/WorldState"
+        },
+        "config": {
+          "$ref": "#/$defs/MatchConfig"
+        },
+        "content": {
+          "$ref": "#/$defs/Content"
+        },
+        "end_tick_exclusive": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AcceptedTurn"
+          }
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        },
+        "job_id": {
+          "type": "string"
+        },
+        "minimum_end_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "precedence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RoundPrecedence"
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "suppressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Suppression"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "job_id",
+        "revision",
+        "fingerprint",
+        "config",
+        "content",
+        "checkpoint",
+        "events",
+        "precedence",
+        "suppressions",
+        "end_tick_exclusive",
+        "minimum_end_tick"
+      ]
+    },
+    "SkipReason": {
+      "type": "string",
+      "enum": [
+        "absent",
+        "dead",
+        "wrong_owner",
+        "incompatible",
+        "blocked",
+        "missing_support_target"
+      ]
+    },
+    "SkippedTarget": {
+      "type": "object",
+      "properties": {
+        "entity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/SkipReason"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ]
+    },
+    "SpendCounters": {
+      "type": "object",
+      "properties": {
+        "damage_dealt": {
+          "type": "number",
+          "format": "double"
+        },
+        "destroyed_replacement_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "lost_invested_matter": {
+          "type": "number",
+          "format": "double"
+        },
+        "mined": {
+          "type": "number",
+          "format": "double"
+        },
+        "structure_spend": {
+          "type": "number",
+          "format": "double"
+        },
+        "total_spend": {
+          "type": "number",
+          "format": "double"
+        },
+        "unit_spend": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mined",
+        "total_spend",
+        "unit_spend",
+        "structure_spend",
+        "lost_invested_matter",
+        "destroyed_replacement_value",
+        "damage_dealt"
+      ]
+    },
+    "StatsSample": {
+      "type": "object",
+      "properties": {
+        "players": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlayerStats"
+          }
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tick",
+        "players"
+      ]
+    },
+    "StopReason": {
+      "type": "string",
+      "enum": [
+        "inactivity",
+        "absolute_horizon"
+      ]
+    },
+    "Suppression": {
+      "type": "object",
+      "properties": {
+        "historical_command_id": {
+          "type": "string"
+        },
+        "source_command_id": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/SuppressionTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_command_id",
+        "historical_command_id",
+        "target"
+      ]
+    },
+    "SuppressionTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "entity_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "entity_component"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "entity_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/ControlGroupId"
+            },
+            "kind": {
+              "type": "string",
+              "const": "entire_group_order"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "group"
+          ]
+        }
+      ]
+    },
+    "SurvivalStatus": {
+      "type": "string",
+      "enum": [
+        "alive",
+        "eliminated"
+      ]
+    },
+    "SurvivalTransition": {
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reason"
+          }
+        },
+        "resolved_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/$defs/SurvivalStatus"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "resolved_tick",
+        "status",
+        "reasons"
+      ]
+    },
+    "TeamAssignment": {
+      "type": "object",
+      "properties": {
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "team_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "player_id",
+        "team_id"
+      ]
+    },
+    "Terrain": {
+      "type": "object",
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TerrainCell"
+          }
+        },
+        "height": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "cells"
+      ]
+    },
+    "TerrainCell": {
+      "type": "string",
+      "enum": [
+        "floor",
+        "wall"
+      ]
+    },
+    "TiePolicy": {
+      "type": "string",
+      "enum": [
+        "continue_until_unique",
+        "shared_victory"
+      ]
+    },
+    "Tile": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ]
+    },
+    "TimePenalty": {
+      "type": "string",
+      "enum": [
+        "none",
+        "fastest_opponent_ratio"
+      ]
+    },
+    "TimelineBucket": {
+      "type": "object",
+      "properties": {
+        "activity": {
+          "$ref": "#/$defs/Activity"
+        },
+        "affected_entities": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "from_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "player_id": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "severity": {
+          "type": "number",
+          "format": "double"
+        },
+        "to_tick_exclusive": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "from_tick",
+        "to_tick_exclusive",
+        "player_id",
+        "activity",
+        "affected_entities",
+        "severity"
+      ]
+    },
+    "Transport": {
+      "type": "string",
+      "enum": [
+        "authoritative",
+        "inputs_only"
+      ]
+    },
+    "TurnDraft": {
+      "type": "object",
+      "properties": {
+        "based_on_revision": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DraftCommand"
+          }
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "based_on_revision",
+        "tick",
+        "commands"
+      ]
+    },
+    "TypeDefinition": {
+      "type": "object",
+      "properties": {
+        "construction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkRate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "counts_for_survival": {
+          "type": "boolean"
+        },
+        "healing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Healing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TypeKind"
+        },
+        "matter_cost": {
+          "type": "number",
+          "format": "double"
+        },
+        "max_hp": {
+          "type": "number",
+          "format": "double"
+        },
+        "mining": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkRate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "movement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Movement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "production": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductionCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provides_build_ability": {
+          "type": "boolean"
+        },
+        "shape": {
+          "$ref": "#/$defs/Shape"
+        },
+        "vision": {
+          "type": "number",
+          "format": "double"
+        },
+        "weapon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Weapon"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "kind",
+        "shape",
+        "matter_cost",
+        "max_hp",
+        "counts_for_survival",
+        "provides_build_ability",
+        "vision"
+      ]
+    },
+    "TypeKind": {
+      "type": "string",
+      "enum": [
+        "unit",
+        "structure"
+      ]
+    },
+    "Version": {
+      "type": "integer",
+      "maximum": 1,
+      "minimum": 1
+    },
+    "VictoryRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "fixed_target"
+            },
+            "points": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "points"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "lead"
+            },
+            "margin": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "margin"
+          ]
+        }
+      ]
+    },
+    "VisualStyle": {
+      "type": "string",
+      "enum": [
+        "direct",
+        "artillery",
+        "melee"
+      ]
+    },
+    "Weapon": {
+      "type": "object",
+      "properties": {
+        "cooldown": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "damage": {
+          "type": "number",
+          "format": "double"
+        },
+        "indirect": {
+          "type": "boolean"
+        },
+        "range": {
+          "type": "number",
+          "format": "double"
+        },
+        "visual_style": {
+          "$ref": "#/$defs/VisualStyle"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "range",
+        "damage",
+        "cooldown",
+        "indirect",
+        "visual_style"
+      ]
+    },
+    "WorkRate": {
+      "type": "object",
+      "properties": {
+        "cooldown": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rate": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rate",
+        "cooldown"
+      ]
+    },
+    "WorkerEnvelope": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "$ref": "#/$defs/WorkerMessage"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "message"
+      ]
+    },
+    "WorkerMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "end_tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "progress"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "tick": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "job_id",
+            "revision",
+            "tick",
+            "end_tick"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "checkpoints": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorldState"
+              }
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorldEvent"
+              }
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "batch"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "snapshots": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/WorldState"
+              }
+            },
+            "stats": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StatsSample"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "job_id",
+            "revision",
+            "snapshots",
+            "checkpoints",
+            "stats",
+            "events"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "command_outcomes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CommandOutcome"
+              }
+            },
+            "final_hash": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "complete"
+            },
+            "outcome": {
+              "$ref": "#/$defs/Outcome"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "sim_duration_ms": {
+              "$ref": "#/$defs/SafeInt"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "job_id",
+            "revision",
+            "outcome",
+            "final_hash",
+            "sim_duration_ms",
+            "command_outcomes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error_code": {
+              "type": "string"
+            },
+            "job_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "failed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "job_id",
+            "revision",
+            "error_code",
+            "message"
+          ]
+        }
+      ]
+    },
+    "WorldEvent": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/PresentationEvent"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tick",
+        "sequence",
+        "event"
+      ]
+    },
+    "WorldState": {
+      "type": "object",
+      "properties": {
+        "blueprints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Blueprint"
+          }
+        },
+        "control_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ControlGroupState"
+          }
+        },
+        "deterministic_identity_state": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityState"
+          }
+        },
+        "inactivity_deadline": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "last_progress_tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ore": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "players": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlayerState"
+          }
+        },
+        "rng_state": {
+          "type": "string"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/Version"
+        },
+        "terrain": {
+          "$ref": "#/$defs/Terrain"
+        },
+        "tick": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tick",
+        "last_progress_tick",
+        "inactivity_deadline",
+        "terrain",
+        "ore",
+        "players",
+        "entities",
+        "blueprints",
+        "control_groups",
+        "deterministic_identity_state",
+        "rng_state"
+      ]
+    }
+  }
+}
