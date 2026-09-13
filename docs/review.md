@@ -24,9 +24,9 @@ An independent review of the source prompt examined determinism, identity, time 
 | Timeline data can dominate runtime/memory | Sampled chunks, overview aggregates and bounded caches | Long default run with many units does not buffer all full snapshots in RAM |
 | Exact three-way square-grid rotational symmetry impossible | Reject symmetric three-player setup, allow asymmetric 3-player | Setup validation gives an actionable message |
 
-The earlier review suggested scoring only nonempty legal turns. The user subsequently confirmed awarding each resolved round, including passes, and a configurable five-point target in scoreboard rules. This supersedes that suggestion. Optional multiplayer lead-N victory remains available; team stalemates award zero by subsequent user confirmation; simultaneous fixed-target tie handling remains proposed.
+The earlier review suggested scoring only nonempty legal turns. The user subsequently confirmed awarding each resolved round, including passes, and a configurable five-point target in scoreboard rules. This supersedes that suggestion. Optional multiplayer lead-N victory remains available; team stalemates award zero by subsequent user confirmation; tie handling is now user-required configuration, defaulting to continued play until a unique side qualifies.
 
-The user resolved the opening problem with a starting turret and an active-building victory condition, and confirmed simultaneous turns plus fixed-tick timed advancement. The plan interprets “active” as completed and alive and makes survival eligibility a content capability. Add tests for walls-only survivors, unfinished factory sites, same-tick turret loss/factory completion, and simultaneous last-building destruction. Elimination makes remaining units inert for that branch, preventing a defeated army from changing later outcomes; earlier rewrites can reverse it.
+The user resolved the opening problem with a starting turret and an active-building victory condition, and confirmed simultaneous turns plus fixed-tick timed advancement. The user confirmed “active” requires completion; the plan also checks that entities are alive and makes survival eligibility a content capability. Add tests for walls-only survivors, unfinished factory sites, same-tick turret loss/factory completion, and simultaneous last-building destruction. The user superseded inert remnants: multiplayer units continue their orders and can restore their owner during the same simulation. Score endpoint status, not whether elimination ever occurred.
 
 Potential UX tradeoff: stable historical assignments may become no-ops, and later old assignments can override a newly issued early order. Show both on the timeline and in a command inspector. The user’s future-order replacement requirements now explicitly allows dropping all future orders or a configured following interval. Show the chosen policy and affected components; retain future orders when Keep is selected.
 
@@ -36,7 +36,7 @@ The architecture is ready for contract review, but remaining scoreboard policies
 
 The user refined termination after the first review: inactivity is the normal cutoff; the absolute horizon is a generous backstop. This is accepted, with the explicit correction that finite population/commands do not exclude persistent-order cycles. Regression scenarios must include productive peaceful mining, a blocked factory, a future order after a long quiet interval, a weapon cooldown longer than the stall window, mutual support movement, and full/checkpoint replay across an inactivity deadline.
 
-A second review of the written plan caught worker repositioning, conflicting event precedence, defeated-player participation, competing blueprint funding, queue occurrence timing, and peripheral loading-time accounting. These now have explicit rules in the decision/architecture/contracts files. Inactivity endpoints can accept a new order at the stopped state; terminal side-resolution endpoints cannot accept commands after that resolution. Timed runs carry a minimum end tick so inactivity does not freeze boundary advancement.
+A second review of the written plan caught worker repositioning, conflicting event precedence, defeated-player participation, competing blueprint funding, queue occurrence timing, and peripheral loading-time accounting. These now have explicit rules in the decision/architecture/contracts files. Inactivity endpoints can accept a new order at the stopped state; elimination-based early endpoints have been removed. Timed runs carry a minimum end tick so inactivity does not freeze boundary advancement.
 
 ## Review of the user’s gameplay requirements
 
@@ -45,10 +45,10 @@ These are desk-review consequences of the new requirements, not a new independen
 - The explicit OR predicate takes precedence over the broader “any player ... at least one constructor” motivation: a constructor still requires an active turret/factory. Record that distinction; do not silently switch to AND.
 - Presence of a factory counts as building ability even when unfunded or output-blocked. Viability/path/resource analysis would add an unrequested loss rule.
 - Three simulation results are independent of stopping cause. Empty survivors is draw; all survive is stalemate; partial survival is win. A partial FFA elimination can produce several scoring survivors.
-- Stopping at the first elimination would undercount subsequent team casualties. The proposed simulator continues while opposing sides remain.
+- Stopping at the first elimination would undercount subsequent team casualties. The user requires continuing beyond elimination regardless of current surviving-side count, allowing further casualties and recovery.
 - The former single-winner result shape and factory-only survival assumptions are superseded. Replay and score reduction need survivor arrays, team IDs, and a vector of same-round deltas.
-- Team scores use survivor count only when at least one player was eliminated, per team scoring rules; stalemates and all-eliminated draws award zero. Equal survival increments cannot break a tied lead, which is consistent with lead-N victory.
-- Shared banks/control, unfinished-site eligibility, and inert defeated units remain proposals, not new user requirements.
+- Team scores use survivor count only when at least one player was eliminated, per team scoring rules; stalemates always award zero, while draws now use configurable none/all-player awards. Equal survival increments cannot break a tied lead, which is consistent with lead-N victory.
+- Shared banks/control remain proposals. Completed-only eligibility and continuing orders after elimination are now user decisions.
 
 ## Future-order replacement review notes
 
@@ -69,3 +69,7 @@ The control-group requirements turns control groups into simulation state, repla
 ## Visual design consistency
 
 The user’s visual requirements adds minimal animation explicitly. Cosmetic projectiles fit the current tick-resolved combat proposal; do not silently convert them into authoritative delayed-hit mechanics. Facing must survive checkpoint/seek and cannot be inferred only from two adjacent sampled snapshots. Circular units need a directional detail for rotation to be visible. Short attack events need retained positions and playback-time lifetimes so effects remain meaningful after a target dies, on pause, and after a historical rewrite. “Last turn” is currently interpreted as last successful simulation movement, not planning-round camera state; this interpretation remains revisable.
+
+## Recovery, draws, and score ties
+
+The user explicitly removed the elimination early-stop shortcut. This resolves two failures: prematurely declaring a win before residual units cause mutual elimination, and freezing out a constructor that later completes a recovery factory. No player-status flag may gate orders, queues or group behavior. Even an all-eliminated intermediate state may later change; classify only at the actual inactivity/horizon endpoint. A fully recovered field is a non-scoring stalemate. Draw/all_players is a separate award path with an empty survivor set, not survivor scoring. Configurable score ties default to continued play; alternate shared winners require a result array. In timed mode immutable historical status failure is not proof of permanent defeat. The earlier inert-remnant and terminal-side-count rules are superseded throughout the plan.

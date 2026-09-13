@@ -12,7 +12,9 @@ Constructors can mine at 50% of the rate of a dedicated miner. The purpose is to
 
 A player loses if they have **no active building OR no ability to build**. Active buildings currently mean turrets and factories. No ability to build means having no constructors or factories.
 
-The objective is to have more simulations end in actual wins/losses, without rewarding players for hiding random cheap units to force draws in games they have clearly lost. The user's recovery rationale was “any player that has at least one constructor is still in the game”; the explicit loss predicate above also requires an active building. Keep that distinction visible rather than silently changing OR to AND. Whether unfinished buildings count as active has not been specified.
+The objective is to have more simulations end in actual wins/losses, without rewarding players for hiding random cheap units to force draws in games they have clearly lost. The user's recovery rationale was “any player that has at least one constructor is still in the game”; the explicit loss predicate above also requires an active building. Keep that distinction visible rather than silently changing OR to AND. Unfinished entities do not prevent elimination: only completed entities satisfy the survival requirements.
+
+In multiplayer, units persist after their player becomes eliminated and continue their orders. Elimination can reverse during the same simulation: a constructor can complete a factory while a teammate keeps the game going, restoring the player. A recovered player should not be considered eliminated. Results and survival scoring therefore use the status at the end, not whether the player ever temporarily failed a survival check.
 
 Simulations have three result types:
 
@@ -32,6 +34,8 @@ Advance the immutable history boundary by a fixed, configurable number of ticks 
 
 Use a configurable inactivity duration to stop dynamically based on lack of order progress or unit destruction, with an ambitious absolute tick limit as a backup.
 
+Remove the elimination-based early-stop shortcut. Continuing after elimination permits both recovery and draws when persisting units eliminate the remaining players. Do not stop just because zero or one side currently satisfies the survival checks.
+
 The user's precise wording and reasoning were:
 
 > The simulation horizon should be able to be handled dynamically by stopping if no order has progress made on it or no unit is destroyed for some amount of time. As games have strictly finite numbers of units that can be built and orders are only given by players, infinite sim runs should be impossible by this ruleset. Some ambitious absolute tick limit is probably still useful.
@@ -44,6 +48,8 @@ Award points each resolved round, including passes: an unchanged winning timelin
 
 Multiplayer supports **FFA or team play**. Add an optional dynamic score-to-win configuration requiring one player to have **N more points than every other player**, since several players may score together. Team scores are based on the number of their members still alive after the simulation.
 
-**Only award survival points when at least one player was eliminated.** Stalemates award none. All-eliminated draws also award none because no players survive.
+**Only award survival points when at least one player is eliminated at the end.** Temporary elimination followed by recovery does not count as an elimination for this condition. Stalemates never score. Draw scoring is configurable: either no players score or all players score. This draw-specific rule supersedes the earlier non-scoring-draw assumption; it does not change survival-based scoring for wins.
 
-The original request's optional time-based score penalty remains in scope. Team application of lead-N, simultaneous fixed-target ties, exact penalty formulas, and other unconfirmed details remain proposals in the architecture documents.
+Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-5 rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
+
+The original request's optional time-based score penalty remains in scope. Team application of lead-N, exact penalty formulas, and other unconfirmed details remain proposals in the architecture documents.
