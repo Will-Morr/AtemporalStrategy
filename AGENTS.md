@@ -6,3 +6,4 @@
 - Later user instructions supersede earlier conflicting requirements. Do not impose an approval gate just because an assistant proposal says it is required.
 - Keep `docs/` consistent with user decisions and label unresolved interpretations plainly.
 - Main planning documents state the current plan without reviewer identifiers or response history; keep any historical review record separate.
+- For browser UI changes, use the agent-neutral workflow in `docs/browser-testing.md`: run relevant real-browser scenarios, inspect screenshots/traces, and record actual verification limits. Do not treat DOM checks alone as visual review.

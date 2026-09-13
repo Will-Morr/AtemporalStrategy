@@ -3,3 +3,7 @@
 /client/dist/
 /.guide-cache/
 /replays/
+
+/artifacts/
+/client/test-results/
+/client/playwright-report/

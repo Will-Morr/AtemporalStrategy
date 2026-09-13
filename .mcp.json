@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "atemporal-browser": {
+      "command": "node",
+      "args": [
+        "scripts/browser-mcp.mjs"
+      ],
+      "env": {
+        "ATEMPORAL_BROWSER_NO_SANDBOX": "1"
+      }
+    }
+  }
+}

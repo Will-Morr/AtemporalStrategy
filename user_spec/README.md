@@ -27,3 +27,7 @@ The user requested committing and pushing all planning documents when ready, and
 The user requested review of the adversarial agent's findings and explicitly rejected its early-human-playtest recommendation: they only want to try playing once the game is ready according to the full current plan. Automated scenarios, agent-run browser checks and performance measurements can run during implementation. Do not introduce a reduced-scope human-playtest gate or require the user to play an unfinished slice.
 
 Keep the main planning documents focused on the current plan, without references to review findings, reviewer identifiers or response history. Preserve any review record separately. Fold accepted planning changes into the current architecture without carrying response history into core docs, then commit and push the completed updates.
+
+The user subsequently requested implementation of “Resolve product rules and establish contracts — coordinator” from `docs/implementation.md` in a new branch and worktree, with commits and pushes as substantial chunks are completed. This supersedes the planning-only execution note for that scope; it does not approve unrelated assistant product interpretations.
+
+The user also requested a repeatable browser UI review harness and an interactive browser-control layer. Keep both usable by agents generally, rather than tying them to Codex. Agents should be able to iteratively inspect and improve the actual rendered game UI.

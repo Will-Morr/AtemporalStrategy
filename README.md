@@ -13,3 +13,5 @@ Read the plan in this order:
 5. [Implementation and agent handoffs](docs/implementation.md) — nested checklist, worktrees, integration gates, and verification.
 
 Only user decisions are locked. Read [the user specification record](user_spec/README.md) for authoritative input. All architecture choices and defaults below are revisable proposals. Remaining implementation interpretations are labeled in the decision register. Build dependencies and toolchains are now pinned. See [development commands](docs/development.md) and the [implemented v1 contracts](docs/contracts-v1.md).
+
+For iterative visual checks from any compatible agent, use the [Playwright review harness and browser MCP setup](docs/browser-testing.md).

@@ -12,9 +12,15 @@
     "check": "tsc --noEmit",
     "test": "node ../scripts/check-fixtures.mjs",
     "build": "npm run generate && npm run check && node ../scripts/build-client.mjs",
-    "dev": "npm run build && node ../scripts/serve-client.mjs"
+    "dev": "npm run build && node ../scripts/serve-client.mjs",
+    "ui:install": "playwright install chromium",
+    "ui:review": "node ../scripts/review-ui.mjs",
+    "browser:mcp": "node ../scripts/browser-mcp.mjs",
+    "browser:check": "npm run build && node ../scripts/check-browser-mcp.mjs"
   },
   "devDependencies": {
+    "@playwright/mcp": "0.0.80",
+    "@playwright/test": "1.63.0",
     "ajv": "8.20.0",
     "esbuild": "0.25.10",
     "json-schema-to-typescript": "15.0.4",
