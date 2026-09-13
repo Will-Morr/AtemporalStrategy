@@ -469,7 +469,7 @@ record!(PlayerRatio {
 });
 record!(SimRequest { schema_version: Version, job_id: String, revision: Revision, fingerprint: Fingerprint, config: MatchConfig,
     content: Content, checkpoint: WorldState, events: Vec<AcceptedTurn>, precedence: Vec<RoundPrecedence>,
-    end_tick_exclusive: Tick, minimum_end_tick: Tick });
+    end_tick_exclusive: Tick, minimum_end_tick: Tick, entity_dictionary: Vec<EntityRef> });
 record!(RoundPrecedence { round: u32, players: Vec<PlayerId> });
 record!(PlayerStats {
     player_id: PlayerId,
@@ -481,6 +481,23 @@ record!(PlayerStats {
     active_workers: u32
 });
 record!(StatsSample { tick: Tick, players: Vec<PlayerStats> });
+// Compact per-revision transport: samples reference entities by dictionary index, never by identity.
+record!(EntityRef {
+    id: EntityId,
+    owner: PlayerId,
+    type_key: TypeKey
+});
+record!(SampleEntity { index: u32, tile: Tile, hp: f64, facing: Direction, lifecycle: Lifecycle, activity: Activity, engaged: Option<u32> });
+record!(SamplePlayer {
+    player_id: PlayerId,
+    bank: f64,
+    currently_eliminated: bool
+});
+record!(OreCell {
+    index: u32,
+    remaining: f64
+});
+record!(Sample { tick: Tick, players: Vec<SamplePlayer>, entities: Vec<SampleEntity>, ore: Vec<OreCell> });
 choices!(Activity {
     Combat,
     Construction,
@@ -550,10 +567,12 @@ pub enum WorkerMessage {
     Batch {
         job_id: String,
         revision: Revision,
-        snapshots: Vec<WorldState>,
+        dictionary: Vec<EntityRef>,
+        samples: Vec<Sample>,
         checkpoints: Vec<WorldState>,
         stats: Vec<StatsSample>,
         events: Vec<WorldEvent>,
+        timeline: Vec<TimelineBucket>,
     },
     Complete {
         job_id: String,
@@ -642,6 +661,11 @@ pub enum ClientMessage {
         from_tick: Tick,
         to_tick: Tick,
     },
+    GetEvents {
+        revision: Revision,
+        from_tick: Tick,
+        to_tick: Tick,
+    },
     StopAndArchive {
         request_id: String,
         based_on_revision: Revision,
@@ -715,7 +739,13 @@ pub enum ServerMessage {
     },
     SnapshotRange {
         revision: Revision,
-        samples: Vec<WorldState>,
+        index_width: u8,
+        entity_dictionary: Vec<EntityRef>,
+        samples: Vec<Sample>,
+    },
+    Events {
+        revision: Revision,
+        events: Vec<WorldEvent>,
     },
     ExactState {
         revision: Revision,

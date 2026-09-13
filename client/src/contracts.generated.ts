@@ -70,6 +70,12 @@ export type ClientMessage =
       to_tick: number;
     }
   | {
+      from_tick: number;
+      kind: "get_events";
+      revision: number;
+      to_tick: number;
+    }
+  | {
       based_on_revision: number;
       kind: "stop_and_archive";
       request_id: string;
@@ -547,9 +553,16 @@ export type ServerMessage =
       timeline_index: TimelineBucket[];
     }
   | {
+      entity_dictionary: EntityRef[];
+      index_width: number;
       kind: "snapshot_range";
       revision: number;
-      samples: WorldState[];
+      samples: Sample[];
+    }
+  | {
+      events: WorldEvent[];
+      kind: "events";
+      revision: number;
     }
   | {
       kind: "exact_state";
@@ -628,43 +641,6 @@ export type TimedStatus = "planning" | "finished" | "history_exhausted";
 export type Activity = "combat" | "construction" | "mining" | "movement" | "idle";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "WorkerMessage".
- */
-export type WorkerMessage =
-  | {
-      end_tick: number;
-      job_id: string;
-      kind: "progress";
-      revision: number;
-      tick: number;
-    }
-  | {
-      checkpoints: WorldState[];
-      events: WorldEvent[];
-      job_id: string;
-      kind: "batch";
-      revision: number;
-      snapshots: WorldState[];
-      stats: StatsSample[];
-    }
-  | {
-      command_outcomes: CommandOutcome[];
-      final_hash: string;
-      job_id: string;
-      kind: "complete";
-      outcome: Outcome;
-      revision: number;
-      sim_duration_ms: SafeInt;
-    }
-  | {
-      error_code: string;
-      job_id: string;
-      kind: "failed";
-      message: string;
-      revision: number;
-    };
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "PresentationEvent".
  */
 export type PresentationEvent =
@@ -706,6 +682,45 @@ export type PresentationEvent =
   | {
       kind: "survival";
       transition: SurvivalTransition;
+    };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorkerMessage".
+ */
+export type WorkerMessage =
+  | {
+      end_tick: number;
+      job_id: string;
+      kind: "progress";
+      revision: number;
+      tick: number;
+    }
+  | {
+      checkpoints: WorldState[];
+      dictionary: EntityRef[];
+      events: WorldEvent[];
+      job_id: string;
+      kind: "batch";
+      revision: number;
+      samples: Sample[];
+      stats: StatsSample[];
+      timeline: TimelineBucket[];
+    }
+  | {
+      command_outcomes: CommandOutcome[];
+      final_hash: string;
+      job_id: string;
+      kind: "complete";
+      outcome: Outcome;
+      revision: number;
+      sim_duration_ms: SafeInt;
+    }
+  | {
+      error_code: string;
+      job_id: string;
+      kind: "failed";
+      message: string;
+      revision: number;
     };
 
 export interface ContractCatalog {
@@ -942,6 +957,7 @@ export interface SimRequest {
   config: MatchConfig;
   content: Content;
   end_tick_exclusive: number;
+  entity_dictionary: EntityRef[];
   events: AcceptedTurn[];
   fingerprint: Fingerprint;
   job_id: string;
@@ -1223,6 +1239,15 @@ export interface Weapon {
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "EntityRef".
+ */
+export interface EntityRef {
+  id: EntityId;
+  owner: number;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "AcceptedTurn".
  */
 export interface AcceptedTurn {
@@ -1399,6 +1424,55 @@ export interface TimelineBucket {
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Sample".
+ */
+export interface Sample {
+  entities: SampleEntity[];
+  ore: OreCell[];
+  players: SamplePlayer[];
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SampleEntity".
+ */
+export interface SampleEntity {
+  activity: Activity;
+  engaged?: number | null;
+  facing: Direction;
+  hp: number;
+  index: number;
+  lifecycle: Lifecycle;
+  tile: Tile;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "OreCell".
+ */
+export interface OreCell {
+  index: number;
+  remaining: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SamplePlayer".
+ */
+export interface SamplePlayer {
+  bank: number;
+  currently_eliminated: boolean;
+  player_id: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorldEvent".
+ */
+export interface WorldEvent {
+  event: PresentationEvent;
+  sequence: number;
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "StatsSample".
  */
 export interface StatsSample {
@@ -1435,13 +1509,4 @@ export interface Setup {
 export interface WorkerEnvelope {
   message: WorkerMessage;
   schema_version: Version;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "WorldEvent".
- */
-export interface WorldEvent {
-  event: PresentationEvent;
-  sequence: number;
-  tick: number;
 }

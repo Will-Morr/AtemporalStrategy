@@ -609,6 +609,40 @@
         {
           "additionalProperties": false,
           "properties": {
+            "from_tick": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "get_events",
+              "type": "string"
+            },
+            "revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to_tick": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "revision",
+            "from_tick",
+            "to_tick"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "based_on_revision": {
               "format": "uint32",
               "maximum": 4294967295,
@@ -1512,6 +1546,29 @@
         "birth_command",
         "item_index",
         "occurrence"
+      ],
+      "type": "object"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/EntityId"
+        },
+        "owner": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "owner",
+        "type_key"
       ],
       "type": "object"
     },
@@ -2456,6 +2513,26 @@
       ],
       "type": "object"
     },
+    "OreCell": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remaining": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "index",
+        "remaining"
+      ],
+      "type": "object"
+    },
     "Outcome": {
       "additionalProperties": false,
       "properties": {
@@ -3223,6 +3300,111 @@
       "minimum": 0,
       "type": "integer"
     },
+    "Sample": {
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "items": {
+            "$ref": "#/$defs/SampleEntity"
+          },
+          "type": "array"
+        },
+        "ore": {
+          "items": {
+            "$ref": "#/$defs/OreCell"
+          },
+          "type": "array"
+        },
+        "players": {
+          "items": {
+            "$ref": "#/$defs/SamplePlayer"
+          },
+          "type": "array"
+        },
+        "tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tick",
+        "players",
+        "entities",
+        "ore"
+      ],
+      "type": "object"
+    },
+    "SampleEntity": {
+      "additionalProperties": false,
+      "properties": {
+        "activity": {
+          "$ref": "#/$defs/Activity"
+        },
+        "engaged": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "facing": {
+          "$ref": "#/$defs/Direction"
+        },
+        "hp": {
+          "format": "double",
+          "type": "number"
+        },
+        "index": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        },
+        "tile": {
+          "$ref": "#/$defs/Tile"
+        }
+      },
+      "required": [
+        "index",
+        "tile",
+        "hp",
+        "facing",
+        "lifecycle",
+        "activity"
+      ],
+      "type": "object"
+    },
+    "SamplePlayer": {
+      "additionalProperties": false,
+      "properties": {
+        "bank": {
+          "format": "double",
+          "type": "number"
+        },
+        "currently_eliminated": {
+          "type": "boolean"
+        },
+        "player_id": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "player_id",
+        "bank",
+        "currently_eliminated"
+      ],
+      "type": "object"
+    },
     "SavedOrder": {
       "additionalProperties": false,
       "properties": {
@@ -3695,6 +3877,18 @@
         {
           "additionalProperties": false,
           "properties": {
+            "entity_dictionary": {
+              "items": {
+                "$ref": "#/$defs/EntityRef"
+              },
+              "type": "array"
+            },
+            "index_width": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
             "kind": {
               "const": "snapshot_range",
               "type": "string"
@@ -3707,7 +3901,7 @@
             },
             "samples": {
               "items": {
-                "$ref": "#/$defs/WorldState"
+                "$ref": "#/$defs/Sample"
               },
               "type": "array"
             }
@@ -3715,7 +3909,36 @@
           "required": [
             "kind",
             "revision",
+            "index_width",
+            "entity_dictionary",
             "samples"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "events": {
+              "items": {
+                "$ref": "#/$defs/WorldEvent"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "events",
+              "type": "string"
+            },
+            "revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "revision",
+            "events"
           ],
           "type": "object"
         },
@@ -4076,6 +4299,12 @@
           "minimum": 0,
           "type": "integer"
         },
+        "entity_dictionary": {
+          "items": {
+            "$ref": "#/$defs/EntityRef"
+          },
+          "type": "array"
+        },
         "events": {
           "items": {
             "$ref": "#/$defs/AcceptedTurn"
@@ -4121,7 +4350,8 @@
         "events",
         "precedence",
         "end_tick_exclusive",
-        "minimum_end_tick"
+        "minimum_end_tick",
+        "entity_dictionary"
       ],
       "type": "object"
     },
@@ -4811,6 +5041,12 @@
               },
               "type": "array"
             },
+            "dictionary": {
+              "items": {
+                "$ref": "#/$defs/EntityRef"
+              },
+              "type": "array"
+            },
             "events": {
               "items": {
                 "$ref": "#/$defs/WorldEvent"
@@ -4830,9 +5066,9 @@
               "minimum": 0,
               "type": "integer"
             },
-            "snapshots": {
+            "samples": {
               "items": {
-                "$ref": "#/$defs/WorldState"
+                "$ref": "#/$defs/Sample"
               },
               "type": "array"
             },
@@ -4841,16 +5077,24 @@
                 "$ref": "#/$defs/StatsSample"
               },
               "type": "array"
+            },
+            "timeline": {
+              "items": {
+                "$ref": "#/$defs/TimelineBucket"
+              },
+              "type": "array"
             }
           },
           "required": [
             "kind",
             "job_id",
             "revision",
-            "snapshots",
+            "dictionary",
+            "samples",
             "checkpoints",
             "stats",
-            "events"
+            "events",
+            "timeline"
           ],
           "type": "object"
         },

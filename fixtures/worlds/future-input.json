@@ -934,7 +934,8 @@
       }
     ],
     "end_tick_exclusive": 8,
-    "minimum_end_tick": 0
+    "minimum_end_tick": 0,
+    "entity_dictionary": []
   },
   "initial_hash": "9c4afab72b64379ad0ffa1e25b0cdc6d049290e4f3282418a0c82f897f73d7a7",
   "expected": {

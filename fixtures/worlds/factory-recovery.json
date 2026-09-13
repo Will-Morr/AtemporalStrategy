@@ -955,7 +955,8 @@
     "events": [],
     "precedence": [],
     "end_tick_exclusive": 12,
-    "minimum_end_tick": 0
+    "minimum_end_tick": 0,
+    "entity_dictionary": []
   },
   "initial_hash": "336280b5900c7a09a5dc19b2464562f387f778ecda74f9e076c4ee57890ef935",
   "expected": {

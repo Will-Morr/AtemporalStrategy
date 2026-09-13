@@ -4,7 +4,8 @@
     "kind": "batch",
     "job_id": "displacement-example",
     "revision": 1,
-    "snapshots": [],
+    "dictionary": [],
+    "samples": [],
     "checkpoints": [],
     "stats": [],
     "events": [
@@ -67,6 +68,7 @@
           }
         }
       }
-    ]
+    ],
+    "timeline": []
   }
 }

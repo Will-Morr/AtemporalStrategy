@@ -114,6 +114,7 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
         precedence: vec![],
         end_tick_exclusive: max_tick,
         minimum_end_tick: 0,
+        entity_dictionary: vec![],
     };
     GoldenWorldFixture {
         schema_version: Version::default(),
