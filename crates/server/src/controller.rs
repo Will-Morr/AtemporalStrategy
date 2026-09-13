@@ -844,6 +844,21 @@ impl Controller {
                 .is_some_and(|t| t.status != TimedStatus::Planning)
         {
             self.phase = Phase::Finished;
+            if self.match_winners.is_empty() {
+                // Locked history reached max_tick undecided: unfinished, no invented result.
+                let archive = ArchiveRecord {
+                    request_id: format!("history-exhausted-{revision}"),
+                    revision,
+                    status: ArchiveStatus::Unfinished,
+                    reason: ArchiveReason::HistoryExhausted,
+                    actor: None,
+                    stopped_at_unix_ms: now_ms().try_into().unwrap_or_default(),
+                };
+                if let Some(a) = &self.archive {
+                    a.write_archive_record(&archive)?;
+                }
+                self.send(ServerMessage::MatchArchived { archive });
+            }
             self.send(ServerMessage::MatchFinished {
                 match_winners: self.match_winners.clone(),
                 final_outcome: outcome,
@@ -883,9 +898,7 @@ impl Controller {
         player: PlayerId,
         request: &CommitRequest,
     ) -> Result<Option<ServerMessage>> {
-        if self.phase != Phase::Planning {
-            return Err("planning is not open".into());
-        }
+        // A retry answers from the recorded turn even after the round closed.
         if let Some((request_id, _)) = self.committed.get(&player) {
             if *request_id == request.request_id {
                 return Ok(Some(ServerMessage::CommitAccepted {
@@ -894,6 +907,9 @@ impl Controller {
                 }));
             }
             return Err("already committed this round".into());
+        }
+        if self.phase != Phase::Planning {
+            return Err("planning is not open".into());
         }
         let draft = &request.draft;
         if draft.based_on_revision != self.current {
@@ -1389,6 +1405,19 @@ impl Controller {
         let player = self
             .player_for(token)
             .ok_or("only a claimed slot can stop the match")?;
+        // Same host role as starting: the first occupied slot operates the match.
+        let host = self
+            .lobby
+            .slots
+            .iter()
+            .position(|s| s.claimed)
+            .map(|p| p as u8);
+        if host != Some(player) {
+            return Err("only the first occupied slot may stop the match".into());
+        }
+        if !matches!(self.phase, Phase::Planning | Phase::Simulating) {
+            return Err(format!("match is {:?}; nothing to stop", self.phase));
+        }
         if based_on_revision != self.current {
             return Err("stale revision".into());
         }

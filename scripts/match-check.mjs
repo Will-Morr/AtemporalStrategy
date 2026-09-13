@@ -1,0 +1,283 @@
+// Match-controller check: timed mode, time penalty, manual stop and archive resume over the
+// real server and protocol; no browser. Usage: node scripts/match-check.mjs [--only NAME] [--keep]
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const args = process.argv.slice(2);
+const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
+const only = opt('--only', null);
+const work = `${root}target/match-check`;
+const now = () => performance.now();
+const sleep = ms => new Promise(ok => setTimeout(ok, ms));
+const assert = (cond, message) => { if (!cond) throw new Error(message); };
+
+async function freePort() {
+  const probe = createServer(); await new Promise((ok, err) => { probe.once('error', err); probe.listen(0, '127.0.0.1', ok); });
+  const port = probe.address().port; await new Promise(ok => probe.close(ok)); return String(port);
+}
+
+async function buildServer() {
+  await new Promise((ok, err) => { const b = spawn('cargo', ['build', '--release', '--quiet', '-p', 'atemporal-server'], { cwd: root, stdio: 'inherit' }); b.on('exit', c => (c === 0 ? ok() : err(new Error(`build exited ${c}`)))); });
+}
+
+/** Spawn the release server; `extra` may include --resume/--config. Resolves when listening. */
+async function startServer(name, extra, env = {}) {
+  const port = await freePort();
+  const log = [];
+  const child = spawn(`${root}target/release/atemporal-server`, ['--port', port, '--replays', `${work}/${name}/replays`, ...extra], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  child.stdout.on('data', c => log.push(c.toString()));
+  child.stderr.on('data', c => log.push(c.toString()));
+  await new Promise((ok, err) => {
+    const check = () => { if (log.join('').includes('listening')) ok(); };
+    child.stdout.on('data', check);
+    child.on('exit', code => err(new Error(`server exited ${code}: ${log.join('')}`)));
+  });
+  return { child, port, log, url: `ws://127.0.0.1:${port}/ws`, exited: new Promise(ok => child.on('exit', ok)) };
+}
+
+async function writeConfig(name, edit) {
+  const config = JSON.parse(await readFile(`${root}config/game.yaml`, 'utf8'));
+  edit(config);
+  await mkdir(`${work}/${name}`, { recursive: true });
+  const path = `${work}/${name}/game.yaml`;
+  await writeFile(path, JSON.stringify(config, null, 2));
+  return path;
+}
+
+class Client {
+  constructor(name, url) { this.name = name; this.url = url; this.waiters = []; this.unconsumed = []; this.token = null; }
+  async open() {
+    this.ws = new WebSocket(this.url);
+    await new Promise((ok, err) => { this.ws.onopen = ok; this.ws.onerror = err; });
+    this.ws.onmessage = event => {
+      const envelope = JSON.parse(event.data);
+      this.instance = envelope.server_instance_id;
+      const message = envelope.message;
+      const waiter = this.waiters.find(w => w.test(message));
+      if (waiter) { this.waiters.splice(this.waiters.indexOf(waiter), 1); waiter.resolve(message); }
+      else { this.unconsumed.push(message); if (this.unconsumed.length > 500) this.unconsumed.shift(); }
+    };
+  }
+  send(message) { this.ws.send(JSON.stringify({ schema_version: 2, message })); }
+  wait(kind, test = () => true, timeout = 120000) {
+    const early = this.unconsumed.findIndex(m => m.kind === kind && test(m));
+    if (early >= 0) return Promise.resolve(this.unconsumed.splice(early, 1)[0]);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${this.name}: timeout waiting for ${kind}`)), timeout);
+      this.waiters.push({ test: m => m.kind === kind && test(m), resolve: v => { clearTimeout(timer); resolve(v); } });
+    });
+  }
+  waitAny(kinds, test = () => true, timeout = 120000) {
+    const early = this.unconsumed.findIndex(m => kinds.includes(m.kind) && test(m));
+    if (early >= 0) return Promise.resolve(this.unconsumed.splice(early, 1)[0]);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${this.name}: timeout waiting for ${kinds}`)), timeout);
+      this.waiters.push({ test: m => kinds.includes(m.kind) && test(m), resolve: v => { clearTimeout(timer); resolve(v); } });
+    });
+  }
+  async request(message, kind, test) { const p = this.wait(kind, test); this.send(message); return p; }
+  hello(token = null) { this.send({ kind: 'hello', protocol_version: 2, last_revision: null, slot_token: token }); return this.wait('welcome'); }
+  async claim(slot, team = null) {
+    const m = await this.request({ kind: 'claim_slot', slot, username: this.name, color: '#4fc3f7', team_id: team }, 'slot_claimed');
+    this.token = m.private_token; return m;
+  }
+  sendAndWaitCommit(requestId, draft) {
+    const p = this.waitAny(['commit_accepted', 'commit_rejected'], m => m.request_id === requestId);
+    this.send({ kind: 'commit', request: { request_id: requestId, slot_token: this.token, draft } });
+    return p;
+  }
+  close() { this.ws.close(); }
+}
+
+/** Two players and a spectator, claimed and started; returns revision 0 publication. */
+async function lobby(url, teams = [null, null]) {
+  const a = new Client('A', url), b = new Client('B', url), s = new Client('S', url);
+  await Promise.all([a.open(), b.open(), s.open()]);
+  const welcome = await a.hello(); await b.hello(); await s.hello();
+  await a.claim(0, teams[0]); await b.claim(1, teams[1]);
+  const state = (await a.wait('lobby_updated', m => m.lobby.can_start)).lobby;
+  a.send({ kind: 'start_match', slot_token: a.token, based_on_lobby_revision: state.revision });
+  const rev0 = await a.wait('revision_published', m => m.revision === 0);
+  await a.wait('planning_opened', m => m.round === 1);
+  return { a, b, s, welcome, rev0, config: welcome.config };
+}
+
+const results = {};
+const scenarios = {
+  // Locked history advances lock_ticks_per_round per resolved round, survives a resume, and
+  // reaching max_tick undecided archives the match as history_exhausted without a winner.
+  async timed_exhausted() {
+    const name = 'timed_exhausted';
+    await rm(`${work}/${name}`, { recursive: true, force: true });
+    const config = await writeConfig(name, c => { c.match_defaults.objective = { kind: 'timed', lock_ticks_per_round: 100 }; c.match_defaults.max_tick = 400; });
+    let server = await startServer(name, ['--config', config]);
+    let { a, b, s } = await lobby(server.url);
+    const boundaries = [];
+    const pass = async (round, revision, tick) => {
+      const started = now();
+      const ra = await a.sendAndWaitCommit(`a${round}`, { based_on_revision: revision, tick, commands: [] });
+      const rb = await b.sendAndWaitCommit(`b${round}`, { based_on_revision: revision, tick, commands: [] });
+      assert(ra.kind === 'commit_accepted' && rb.kind === 'commit_accepted', `round ${round} commits: ${ra.message ?? ''} ${rb.message ?? ''}`);
+      const published = await a.wait('revision_published', m => m.revision === revision + 1);
+      boundaries.push({ round, boundary: published.timed.boundary, status: published.timed.status, lost: published.timed.timed_lost_players, terminal: published.outcome.terminal_state_tick, ms: Math.round(now() - started) });
+      return published;
+    };
+    await pass(1, 0, 0);
+    let planning = await a.wait('planning_opened', m => m.round === 2);
+    assert(planning.editable_from === 100, `editable_from advanced to ${planning.editable_from}`);
+    const stale = await a.sendAndWaitCommit('a-early', { based_on_revision: 1, tick: 50, commands: [] });
+    assert(stale.kind === 'commit_rejected' && /within 100/.test(stale.message), `locked tick rejected: ${stale.message}`);
+    await pass(2, 1, 100);
+    planning = await a.wait('planning_opened', m => m.round === 3);
+    assert(planning.editable_from === 200, 'second boundary');
+    // Resume mid-match: same match id, same tokens, same lock boundary.
+    const matchId = (await readFile(`${work}/${name}/replays/${(await import('node:fs')).readdirSync(`${work}/${name}/replays`)[0]}/manifest.json`, 'utf8').then(JSON.parse)).match_id;
+    const tokens = [a.token, b.token];
+    for (const c of [a, b, s]) c.close();
+    server.child.kill('SIGTERM'); await server.exited;
+    server = await startServer(name, ['--resume', matchId]);
+    a = new Client('A', server.url); b = new Client('B', server.url); s = new Client('S', server.url);
+    await Promise.all([a.open(), b.open(), s.open()]);
+    const welcome = await a.hello(tokens[0]); await b.hello(tokens[1]); await s.hello();
+    a.token = tokens[0]; b.token = tokens[1];
+    assert(welcome.phase === 'planning' && welcome.timed.boundary === 200, `resumed timed state ${JSON.stringify(welcome.timed)}`);
+    planning = await a.wait('planning_opened', m => m.round === 3);
+    assert(planning.editable_from === 200 && planning.revision === 2, 'resumed planning round 3 at lock 200');
+    await pass(3, 2, 200);
+    await a.wait('planning_opened', m => m.round === 4);
+    const last = await pass(4, 3, 300);
+    assert(last.timed.status === 'history_exhausted' && last.timed.boundary === 400, `final adjudication ${JSON.stringify(last.timed)}`);
+    const finished = await s.wait('match_finished');
+    const archived = await b.wait('match_archived');
+    assert(finished.reason === 'history_exhausted' && finished.match_winners.length === 0, 'no invented winner');
+    assert(archived.archive.reason === 'history_exhausted' && archived.archive.status === 'unfinished', 'archive record');
+    const late = await a.sendAndWaitCommit('a-late', { based_on_revision: 4, tick: 399, commands: [] });
+    assert(late.kind === 'commit_rejected', 'no planning after exhaustion');
+    assert(existsSync(`${work}/${name}/replays/${matchId}/archive.json`), 'archive.json written');
+    for (const c of [a, b, s]) c.close();
+    server.child.kill('SIGTERM'); await server.exited;
+    results[name] = { boundaries, finished: finished.reason, archive: archived.archive.reason, resumed_lines: server.log.join('').split('\n').filter(l => l.startsWith('resumed')) };
+  },
+
+  // A player whose constructor dies inside the locked window with no factory is timed-lost;
+  // the remaining side wins at S[new_L], not at the mutable simulation end.
+  async timed_loss() {
+    const name = 'timed_loss';
+    await rm(`${work}/${name}`, { recursive: true, force: true });
+    const config = await writeConfig(name, c => { c.match_defaults.objective = { kind: 'timed', lock_ticks_per_round: 500 }; c.match_defaults.max_tick = 3000; });
+    const server = await startServer(name, ['--config', config]);
+    const { a, b, s } = await lobby(server.url);
+    const state0 = (await a.request({ kind: 'get_exact_state', revision: 0, tick: 0 }, 'exact_state', m => m.tick === 0)).snapshot;
+    const find = (owner, key) => state0.entities.find(e => e.owner === owner && e.type_key === key);
+    const turretA = find(0, 'turret'), constructorB = find(1, 'constructor');
+    const started = now();
+    const ra = await a.sendAndWaitCommit('a1', { based_on_revision: 0, tick: 0, commands: [] });
+    const rb = await b.sendAndWaitCommit('b1', { based_on_revision: 0, tick: 0, commands: [{ local_id: 'c0', command: { kind: 'assign_order', entities: [constructorB.id], order: { kind: 'attack_move', destination: turretA.tile } }, future_orders: 'keep' }] });
+    assert(ra.kind === 'commit_accepted' && rb.kind === 'commit_accepted', `commits ${ra.message ?? ''} ${rb.message ?? ''}`);
+    const published = await s.wait('revision_published', m => m.revision === 1);
+    const finished = await a.wait('match_finished');
+    const locked = (await a.request({ kind: 'get_exact_state', revision: 1, tick: 500 }, 'exact_state', m => m.tick === 500)).snapshot;
+    const bBuilders = locked.entities.filter(e => e.owner === 1 && ['constructor', 'factory'].includes(e.type_key) && e.lifecycle === 'complete');
+    assert(bBuilders.length === 0, `B still has builders at S[500]: ${bBuilders.map(e => e.type_key)}`);
+    assert(published.timed.timed_lost_players.length === 1 && published.timed.timed_lost_players[0] === 1, `timed lost ${JSON.stringify(published.timed)}`);
+    assert(published.timed.status === 'finished' && finished.reason === 'victory', 'finished by locked-state adjudication');
+    assert(finished.match_winners.length === 1 && finished.match_winners[0].player_id === 0, 'A wins');
+    for (const c of [a, b, s]) c.close();
+    server.child.kill('SIGTERM'); await server.exited;
+    results[name] = { commit_to_publish_ms: Math.round(now() - started), terminal: published.outcome.terminal_state_tick, sim_outcome: published.outcome.kind, timed: published.timed, winners: finished.match_winners };
+  },
+
+  // Scoreboard with the fastest-opponent time penalty: the slower winner's adjusted delta is
+  // below the raw point. Then the first slot stops the match; the archive is unfinished with no
+  // extra score, later commits are rejected, and a resume reopens it read-only.
+  async penalty_and_stop() {
+    const name = 'penalty_and_stop';
+    await rm(`${work}/${name}`, { recursive: true, force: true });
+    const config = await writeConfig(name, c => { c.match_defaults.objective.rules.time_penalty = 'fastest_opponent_ratio'; });
+    let server = await startServer(name, ['--config', config]);
+    let { a, b, s, config: cfg } = await lobby(server.url);
+    a.send({ kind: 'planning_ready', round: 1, revision: 0 }); b.send({ kind: 'planning_ready', round: 1, revision: 0 });
+    const state0 = (await a.request({ kind: 'get_exact_state', revision: 0, tick: 0 }, 'exact_state', m => m.tick === 0)).snapshot;
+    const find = (owner, key) => state0.entities.find(e => e.owner === owner && e.type_key === key);
+    const miner = find(0, 'miner'), constructor = find(0, 'constructor'), enemyMiner = find(1, 'miner');
+    const w = state0.terrain.width;
+    const ore = state0.ore.map((v, i) => [v, i]).filter(([v]) => v > 0).map(([, i]) => ({ x: i % w, y: Math.floor(i / w) })).filter(t => Math.hypot(t.x - miner.tile.x, t.y - miner.tile.y) < 12);
+    const area = { min: { x: Math.min(...ore.map(t => t.x)), y: Math.min(...ore.map(t => t.y)) }, max: { x: Math.max(...ore.map(t => t.x)), y: Math.max(...ore.map(t => t.y)) } };
+    const factoryTile = { x: constructor.tile.x + 2, y: constructor.tile.y - 1 };
+    const draft = (revision, tick, commands) => ({ based_on_revision: revision, tick, commands: commands.map((command, i) => ({ local_id: `c${i}`, command, future_orders: 'keep' })) });
+    // B commits immediately; A thinks for a while so A's time penalty ratio is < 1.
+    let rb = await b.sendAndWaitCommit('b1', draft(0, 0, []));
+    await sleep(1500);
+    let ra = await a.sendAndWaitCommit('a1', draft(0, 0, [
+      { kind: 'assign_order', entities: [miner.id], order: { kind: 'mine', area } },
+      { kind: 'place_blueprints', type_key: 'factory', tiles: [factoryTile], priority: 'high', output_directions: ['e'] },
+      { kind: 'assign_order', entities: [constructor.id], order: { kind: 'construct', area: { min: factoryTile, max: factoryTile } } },
+    ]));
+    assert(ra.kind === 'commit_accepted' && rb.kind === 'commit_accepted', `round 1 ${ra.message ?? ''} ${rb.message ?? ''}`);
+    const rev1 = await a.wait('revision_published', m => m.revision === 1);
+    await a.wait('planning_opened', m => m.round === 2);
+    assert(rev1.score.entries.every(e => e.raw_delta === 0), 'stalemate scores nothing');
+    const factory = (await a.request({ kind: 'get_exact_state', revision: 1, tick: 153 }, 'exact_state', m => m.tick === 153)).snapshot.entities.find(e => e.owner === 0 && e.type_key === 'factory');
+    assert(factory?.lifecycle === 'complete', 'factory complete at 153');
+    rb = await b.sendAndWaitCommit('b2', draft(1, 153, []));
+    await sleep(1500);
+    const t2 = now();
+    ra = await a.sendAndWaitCommit('a2', draft(1, 153, [
+      { kind: 'set_stored_order', factories: [factory.id], order: { kind: 'attack_move', destination: enemyMiner.tile } },
+      { kind: 'edit_production', factories: [factory.id], edit: { kind: 'append', items: ['grunt', 'grunt'] } },
+      { kind: 'set_queue_loop', factories: [factory.id], enabled: true },
+    ]));
+    assert(ra.kind === 'commit_accepted' && rb.kind === 'commit_accepted', `round 2 ${ra.message ?? ''} ${rb.message ?? ''}`);
+    // A retry with the same request id is answered from the recorded turn, not appended.
+    const retry = await a.sendAndWaitCommit('a2', draft(1, 153, []));
+    assert(retry.kind === 'commit_accepted', 'idempotent retry');
+    const rev2 = await a.wait('revision_published', m => m.revision === 2);
+    const publishMs = Math.round(now() - t2);
+    assert(rev2.outcome.kind === 'win', `expected a win, got ${rev2.outcome.kind}`);
+    const winner = rev2.score.entries.find(e => e.side_id.player_id === 0);
+    assert(winner.raw_delta === 1 && winner.adjusted_delta > 0 && winner.adjusted_delta < 1, `penalty applied: ${JSON.stringify(winner)}`);
+    assert(rev2.score.match_winners.length === 0, 'match continues toward 5 points');
+    const ratios = rev2.time_ratios;
+    await a.wait('planning_opened', m => m.round === 3);
+    // Manual stop from the first occupied slot.
+    const stopFromB = await b.request({ kind: 'stop_and_archive', request_id: 'stop-b', based_on_revision: 2, slot_token: b.token }, 'commit_rejected', m => m.request_id === 'stop-b').catch(() => null);
+    a.send({ kind: 'stop_and_archive', request_id: 'stop-a', based_on_revision: 2, slot_token: a.token });
+    const [archivedA, archivedB, archivedS] = await Promise.all([a.wait('match_archived'), b.wait('match_archived'), s.wait('match_archived')]);
+    assert(archivedA.archive.status === 'unfinished' && archivedA.archive.reason === 'manual_stop' && archivedA.archive.actor === 0, 'archive record');
+    const lateCommit = await b.sendAndWaitCommit('b3', draft(2, 200, []));
+    assert(lateCommit.kind === 'commit_rejected', 'no commits after stop');
+    const commands = await a.request({ kind: 'get_commands', revision: 2, from_tick: 0, to_tick: 20000 }, 'commands', m => m.revision === 2);
+    const replays = `${work}/${name}/replays`;
+    const matchId = (await import('node:fs')).readdirSync(replays)[0];
+    const rounds = (await import('node:fs')).readdirSync(`${replays}/${matchId}/rounds`).sort();
+    assert(rounds.length === 3 && existsSync(`${replays}/${matchId}/archive.json`), `rounds ${rounds} and archive.json`);
+    for (const c of [a, b, s]) c.close();
+    server.child.kill('SIGTERM'); await server.exited;
+    server = await startServer(name, ['--resume', matchId]);
+    const again = new Client('A2', server.url); await again.open();
+    const welcome = await again.hello(a.token);
+    const rev = await again.wait('revision_published', m => m.revision === 2);
+    const commandsAgain = await again.request({ kind: 'get_commands', revision: 2, from_tick: 0, to_tick: 20000 }, 'commands', m => m.revision === 2);
+    assert(welcome.phase === 'archived', `resumed phase ${welcome.phase}`);
+    assert(JSON.stringify(commandsAgain.turns) === JSON.stringify(commands.turns), 'same accepted moves after resume');
+    again.close(); server.child.kill('SIGTERM'); await server.exited;
+    results[name] = { round2_commit_to_publish_ms: publishMs, terminal: rev2.outcome.terminal_state_tick, score: rev2.score.entries.map(e => ({ side: e.side_id, raw: e.raw_total, adjusted: e.adjusted_total })), time_ratios: ratios, stop_from_second_slot: stopFromB ? stopFromB.message : 'no rejection message', archive: archivedS.archive, resumed_phase: welcome.phase, resumed_revision: rev.revision, turns: commands.turns.length, snapshot_interval: cfg.snapshot_interval };
+  },
+};
+
+await buildServer();
+await mkdir(work, { recursive: true });
+let failed = false;
+for (const [name, run] of Object.entries(scenarios)) {
+  if (only && name !== only) continue;
+  const started = now();
+  try { await run(); console.log(`ok   ${name} (${Math.round(now() - started)} ms)`); }
+  catch (e) { failed = true; console.log(`FAIL ${name}: ${e.stack ?? e}`); results[name] = { error: String(e) }; }
+}
+await writeFile(`${root}target/match-check-summary.json`, JSON.stringify(results, null, 2));
+console.log(JSON.stringify(results, null, 2));
+if (failed) process.exit(1);
