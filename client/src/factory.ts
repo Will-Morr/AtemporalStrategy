@@ -1,3 +1,4 @@
+import {siloPlan} from './silo';
 import type { Game, EntityView } from './game';
 import type { DraftItemRef2, Order, Priority } from './contracts.generated';
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
@@ -27,7 +28,7 @@ export function factoryPlan(g: Game, v: EntityView) {
   }
   const saved=group ? g.experience.groups().find(x=>same(x.id,group))?.latest_order?.order : null;
   const order:Order=saved ?? g.effectiveOrder(v) ?? {kind:'idle'};
-  return {pending,active,loop,priority,order,group};
+  return {pending,active,loop,priority,order,group,silo:siloPlan(g,v),inventory:(v.silo??p?.silo)?.inventory};
 }
 export function orderLabel(order: Order): string {
   switch(order.kind){case 'attack_move':return `Attack move → ${order.destination.x}, ${order.destination.y}`;case 'construct':return 'Construct in assigned area';case 'mine':return 'Mine in assigned area';case 'support':return 'Support assigned ally';default:return 'Idle';}

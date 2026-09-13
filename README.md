@@ -38,7 +38,7 @@ Stop the server with **Ctrl+C**. To use another port:
 
 You start with a miner, a constructor, and a turret. At tick 0:
 
-1. Select the **miner**, press **M**, and drag a rectangle over nearby cyan ore.
+1. Select the **miner**, press **M**, and drag a rectangle over nearby yellow ore.
 2. Select the **constructor**, press **B**, choose a factory, and place it on clear ground. **R** rotates its output direction.
 3. With the constructor selected, press **C** and drag over the factory blueprint to assign construction.
 4. Select the factory blueprint, press **Q**, and queue a unit. Press **F**, then click a destination to give its newborn units an attack-move order. You can configure a factory before it is built.
@@ -46,7 +46,9 @@ You start with a miner, a constructor, and a turret. At tick 0:
 
 Scrub back to an earlier tick to change your plan. Orders in a turn share one timestamp; you can undo them until you commit. Passing without adding orders is also a valid turn.
 
-Open **How to play** from the lobby, or visit `/guide/` on your server, for survival rules, factory queues, control groups, and unit stats.
+Open **How to play** from the lobby, or visit `/guide/` on your server, for survival rules, factory queues, missile silos, control groups, and unit stats.
+
+Missile silos can stockpile satellites, cluster missiles and tactical nukes. Build one with a constructor, then select it to build missiles or queue targets—even before construction finishes. Targeting previews show the affected area and flight time. Manual launches can reach anywhere on the map; explosions also hit allies.
 
 ## Useful controls
 

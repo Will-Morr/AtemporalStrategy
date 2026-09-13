@@ -94,6 +94,39 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
     {
         return Err("duplicate world identity".into());
     }
+    state.missiles.sort_by(|a, b| {
+        (a.launch_tick, &a.silo_id, a.sequence).cmp(&(b.launch_tick, &b.silo_id, b.sequence))
+    });
+    let mut flight_ids = BTreeSet::new();
+    let inside = |t: Tile| t.x < state.terrain.width && t.y < state.terrain.height;
+    for f in &state.missiles {
+        if !flight_ids.insert((&f.silo_id, f.sequence))
+            || !inside(f.origin)
+            || !inside(f.target)
+            || usize::from(f.owner) >= state.players.len()
+            || f.launch_tick > state.tick
+            || f.impact_tick < state.tick
+            || f.impact_tick <= f.launch_tick
+            || f.impact_tick - f.launch_tick > 30
+        {
+            return Err("invalid or duplicate missile flight".into());
+        }
+    }
+    state.recon.sort_by(|a, b| {
+        (a.expires_at, a.owner, a.center)
+            .cmp(&(b.expires_at, b.owner, b.center))
+            .then(a.radius.total_cmp(&b.radius))
+    });
+    if state.recon.iter().any(|r| {
+        !inside(r.center)
+            || r.starts_at > state.tick
+            || r.starts_at >= r.expires_at
+            || usize::from(r.owner) >= state.players.len()
+            || !r.radius.is_finite()
+            || r.radius <= 0.0
+    }) {
+        return Err("invalid reconnaissance zone".into());
+    }
     for p in &mut state.players {
         let c = &p.counters;
         if [
@@ -120,6 +153,17 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
     for e in &mut state.entities {
         crate::locks::canonicalize(&mut e.order_locks, state.tick)?;
         if let Some(production) = &mut e.production {
+            if let Some(silo) = &mut production.silo {
+                silo.inventory.sort_by(|a, b| a.type_key.cmp(&b.type_key));
+                if silo
+                    .inventory
+                    .windows(2)
+                    .any(|a| a[0].type_key == a[1].type_key)
+                {
+                    return Err("duplicate missile stock type".into());
+                }
+            }
+
             production
                 .occurrence_counters
                 .sort_by(|a, b| a.item_id.cmp(&b.item_id));

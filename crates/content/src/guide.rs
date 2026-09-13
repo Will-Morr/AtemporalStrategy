@@ -69,11 +69,16 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
         } else {
             healing
         };
+        let missile = t.missile.as_ref().map_or_else(||t.silo.as_ref().map_or_else(||"—".into(),|s|format!("Auto target {} tiles; manual unlimited; launch cooldown {} ticks",s.auto_range,s.launch_cooldown)),|m|format!("{:?}: radius {}; damage {}; speed {} tiles/tick; flight ≤ {} ticks; destination reveal {} ticks",m.effect,m.radius,if m.effect==MissileEffect::TacNuke {"annihilation".into()} else {m.damage.to_string()},m.speed,m.max_flight_ticks,m.reveal_ticks));
         let values = vec![
             t.key.clone(),
             format!("{:?}", t.kind),
             t.matter_cost.to_string(),
-            t.max_hp.to_string(),
+            if t.missile.is_some() {
+                "— (inventory)".into()
+            } else {
+                t.max_hp.to_string()
+            },
             t.vision.to_string(),
             movement,
             weapon,
@@ -81,6 +86,7 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
             work(&t.construction),
             production,
             healing,
+            missile,
             format!("{} / {}", t.counts_for_survival, t.provides_build_ability),
         ];
         rows.push_str("<tr>");
@@ -95,7 +101,7 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal Strategy — How to play</title>
 <style>body{{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}}a{{color:#79d7ff}}.table-scroll{{overflow:auto}}table{{border-collapse:collapse;font-size:.85rem}}th,td{{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}}th{{background:#333}}code{{overflow-wrap:anywhere}}</style></head>
 <body><a href="/">Back to lobby</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
-<div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Survival flags</th></tr></thead><tbody>{rows}</tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Missiles</th><th>Survival flags</th></tr></thead><tbody>{rows}</tbody></table></div>
 <footer><p>Content: <code>{hash}</code></p></footer></body></html>
 "#
     ))

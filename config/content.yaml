@@ -241,6 +241,105 @@
       "construction": null,
       "production": null,
       "healing": null
+    },
+    {
+      "key": "silo",
+      "kind": "structure",
+      "shape": "rectangle",
+      "matter_cost": 150,
+      "max_hp": 300,
+      "counts_for_survival": true,
+      "provides_build_ability": false,
+      "movement": null,
+      "vision": 6,
+      "weapon": null,
+      "mining": null,
+      "construction": null,
+      "production": {
+        "rate": 2,
+        "recipes": [
+          "satellite",
+          "cluster",
+          "tac_nuke"
+        ]
+      },
+      "healing": null,
+      "silo": {
+        "auto_range": 36,
+        "launch_cooldown": 3
+      }
+    },
+    {
+      "key": "satellite",
+      "kind": "missile",
+      "shape": "rectangle",
+      "matter_cost": 30,
+      "max_hp": 1,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": null,
+      "vision": 0,
+      "weapon": null,
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null,
+      "missile": {
+        "effect": "satellite",
+        "radius": 9,
+        "damage": 0,
+        "speed": 3,
+        "max_flight_ticks": 30,
+        "reveal_ticks": 100
+      }
+    },
+    {
+      "key": "cluster",
+      "kind": "missile",
+      "shape": "rectangle",
+      "matter_cost": 75,
+      "max_hp": 1,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": null,
+      "vision": 0,
+      "weapon": null,
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null,
+      "missile": {
+        "effect": "cluster",
+        "radius": 7,
+        "damage": 100,
+        "speed": 3,
+        "max_flight_ticks": 30,
+        "reveal_ticks": 0
+      }
+    },
+    {
+      "key": "tac_nuke",
+      "kind": "missile",
+      "shape": "rectangle",
+      "matter_cost": 200,
+      "max_hp": 1,
+      "counts_for_survival": false,
+      "provides_build_ability": false,
+      "movement": null,
+      "vision": 0,
+      "weapon": null,
+      "mining": null,
+      "construction": null,
+      "production": null,
+      "healing": null,
+      "missile": {
+        "effect": "tac_nuke",
+        "radius": 4,
+        "damage": 0,
+        "speed": 3,
+        "max_flight_ticks": 30,
+        "reveal_ticks": 0
+      }
     }
   ],
   "starting_roster": [

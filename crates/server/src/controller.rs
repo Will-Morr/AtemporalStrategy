@@ -1102,7 +1102,7 @@ impl Controller {
                             Order::Mine { .. } => d.mining.is_some(),
                             Order::Construct { .. } => d.construction.is_some(),
                         };
-                        if !ok && d.production.is_none() {
+                        if d.silo.is_some() || (!ok && d.production.is_none()) {
                             return Err(format!("{} cannot perform that order", e.type_key));
                         }
                     }
@@ -1199,6 +1199,9 @@ impl Controller {
                             })
                             .ok_or("blueprint is not yours or does not exist")?;
                         let d = def(key).ok_or("unknown structure")?;
+                        if let Some(plan) = &settings.silo_plan {
+                            validate_silo_plan(d, plan, state.terrain.width, state.terrain.height)?;
+                        }
                         if !settings.queue.is_empty()
                             && d.production.as_ref().is_none_or(|p| {
                                 settings.queue.iter().any(|k| !p.recipes.contains(k))
@@ -1230,8 +1233,31 @@ impl Controller {
                         }
                     }
                 }
-                Command::EditProduction { factories, .. }
-                | Command::SetQueueLoop { factories, .. }
+                Command::SetSiloPlan { silos, plan } => {
+                    if silos.is_empty() {
+                        return Err("launch plan needs a silo".into());
+                    }
+                    for id in silos {
+                        let e = owned(id)?;
+                        let d = def(&e.type_key).ok_or("unknown silo type")?;
+                        validate_silo_plan(d, plan, state.terrain.width, state.terrain.height)?;
+                    }
+                }
+                Command::EditProduction { factories, edit } => {
+                    for id in factories {
+                        let e = owned(id)?;
+                        let recipes = def(&e.type_key)
+                            .and_then(|d| d.production.as_ref())
+                            .ok_or("target cannot produce")?;
+                        if let ProductionEdit::Append { items }
+                        | ProductionEdit::ReplacePending { items } = edit
+                            && items.iter().any(|key| !recipes.recipes.contains(key))
+                        {
+                            return Err("recipe is not supported by the selected producer".into());
+                        }
+                    }
+                }
+                Command::SetQueueLoop { factories, .. }
                 | Command::SetStoredOrder { factories, .. } => {
                     for id in factories {
                         let e = owned(id)?;
@@ -2199,7 +2225,9 @@ impl RevisionData {
                     !effects_only
                         || matches!(
                             e.event,
-                            PresentationEvent::Attack { .. }
+                            PresentationEvent::MissileLaunch { .. }
+                                | PresentationEvent::MissileImpact { .. }
+                                | PresentationEvent::Attack { .. }
                                 | PresentationEvent::Impact { .. }
                                 | PresentationEvent::Destroyed { .. }
                         )
@@ -3026,6 +3054,7 @@ pub(crate) mod tests {
         let configure = Command::ConfigureBlueprints {
             blueprint_ids: vec![id.clone()],
             settings: BlueprintSettings {
+                silo_plan: None,
                 queue_loop_flags: vec![],
                 queue: vec![],
                 order: Order::Idle {},

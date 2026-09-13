@@ -250,6 +250,10 @@ pub fn resolve_local_references(
                 factories: factories.clone(),
                 enabled: *enabled,
             },
+            Command::SetSiloPlan { silos, plan } => Command::SetSiloPlan {
+                silos: silos.clone(),
+                plan: plan.clone(),
+            },
             Command::SetStoredOrder { factories, order } => Command::SetStoredOrder {
                 factories: factories.clone(),
                 order: order.clone(),

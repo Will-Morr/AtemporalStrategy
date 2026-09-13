@@ -50,6 +50,12 @@ pub fn normalize_content(mut content: Content) -> Result<Content> {
         .filter(|t| t.kind == TypeKind::Unit)
         .map(|t| t.key.clone())
         .collect();
+    let missile_keys: BTreeSet<_> = content
+        .types
+        .iter()
+        .filter(|t| t.kind == TypeKind::Missile)
+        .map(|t| t.key.clone())
+        .collect();
     for t in &mut content.types {
         if !key_valid(&t.key) {
             return Err(format!("invalid type key {}", t.key));
@@ -74,15 +80,48 @@ pub fn normalize_content(mut content: Content) -> Result<Content> {
         }
         if let Some(p) = &mut t.production {
             nonnegative(p.rate, "production rate")?;
-            if p.recipes.is_empty() || p.recipes.iter().any(|key| !unit_keys.contains(key)) {
+            if p.recipes.is_empty()
+                || p.recipes.iter().any(|key| {
+                    !(if t.silo.is_some() {
+                        &missile_keys
+                    } else {
+                        &unit_keys
+                    })
+                    .contains(key)
+                })
+            {
                 return Err(format!(
-                    "{} has empty or non-unit production recipes",
+                    "{} has empty or incompatible production recipes",
                     t.key
                 ));
             }
             p.recipes.sort();
             if p.recipes.windows(2).any(|p| p[0] == p[1]) {
                 return Err("duplicate recipe".into());
+            }
+        }
+        if (t.kind == TypeKind::Missile) != t.missile.is_some() {
+            return Err("missile types require a missile capability".into());
+        }
+        if let Some(m) = &t.missile {
+            positive(m.radius, "missile radius")?;
+            nonnegative(m.damage, "missile damage")?;
+            positive(m.speed, "missile speed")?;
+            cooldown(m.max_flight_ticks)?;
+            if m.max_flight_ticks > 30
+                || t.movement.is_some()
+                || t.production.is_some()
+                || t.counts_for_survival
+                || t.provides_build_ability
+            {
+                return Err("invalid missile capabilities or flight cap".into());
+            }
+        }
+        if let Some(silo) = &t.silo {
+            positive(silo.auto_range, "silo automatic range")?;
+            cooldown(silo.launch_cooldown)?;
+            if t.kind != TypeKind::Structure || t.production.is_none() {
+                return Err("silos require structure production".into());
             }
         }
         if let Some(h) = &t.self_repair {
@@ -100,7 +139,7 @@ pub fn normalize_content(mut content: Content) -> Result<Content> {
         || content
             .starting_roster
             .iter()
-            .any(|key| !keys.contains(key))
+            .any(|key| !keys.contains(key) || missile_keys.contains(key))
     {
         return Err("starting roster references missing content".into());
     }

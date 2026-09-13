@@ -11,7 +11,7 @@
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "e498164407c1b0145c18148eb5271fe0d7dffa5f8e6de2e12d16a293fed6928a",
-      "content_hash": "cff67569a231da2179f1c48ce5b7502310626b9fe21d4d9a68ffda9fa69653b0"
+      "content_hash": "d8b2d75e1308d1a8b6b60ca4b2304f08c6ef3a38bbf3e1e048333bb29859cb65"
     },
     "config": {
       "schema_version": 2,
@@ -71,6 +71,30 @@
           "construction": null,
           "production": null,
           "healing": null
+        },
+        {
+          "key": "cluster",
+          "kind": "missile",
+          "shape": "rectangle",
+          "matter_cost": 75.0,
+          "max_hp": 1.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": null,
+          "vision": 0.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null,
+          "missile": {
+            "effect": "cluster",
+            "radius": 7.0,
+            "damage": 100.0,
+            "speed": 3.0,
+            "max_flight_ticks": 30,
+            "reveal_ticks": 0
+          }
         },
         {
           "key": "constructor",
@@ -185,6 +209,30 @@
           "healing": null
         },
         {
+          "key": "satellite",
+          "kind": "missile",
+          "shape": "rectangle",
+          "matter_cost": 30.0,
+          "max_hp": 1.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": null,
+          "vision": 0.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null,
+          "missile": {
+            "effect": "satellite",
+            "radius": 9.0,
+            "damage": 0.0,
+            "speed": 3.0,
+            "max_flight_ticks": 30,
+            "reveal_ticks": 100
+          }
+        },
+        {
           "key": "scout",
           "kind": "unit",
           "shape": "circle",
@@ -202,6 +250,57 @@
           "construction": null,
           "production": null,
           "healing": null
+        },
+        {
+          "key": "silo",
+          "kind": "structure",
+          "shape": "rectangle",
+          "matter_cost": 150.0,
+          "max_hp": 300.0,
+          "counts_for_survival": true,
+          "provides_build_ability": false,
+          "movement": null,
+          "vision": 6.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": {
+            "rate": 2.0,
+            "recipes": [
+              "cluster",
+              "satellite",
+              "tac_nuke"
+            ]
+          },
+          "healing": null,
+          "silo": {
+            "auto_range": 36.0,
+            "launch_cooldown": 3
+          }
+        },
+        {
+          "key": "tac_nuke",
+          "kind": "missile",
+          "shape": "rectangle",
+          "matter_cost": 200.0,
+          "max_hp": 1.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": null,
+          "vision": 0.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null,
+          "missile": {
+            "effect": "tac_nuke",
+            "radius": 4.0,
+            "damage": 0.0,
+            "speed": 3.0,
+            "max_flight_ticks": 30,
+            "reveal_ticks": 0
+          }
         },
         {
           "key": "tank",

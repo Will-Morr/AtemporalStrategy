@@ -153,3 +153,7 @@ A persistent header scoreboard shows each player's completed timeline wins in th
 Ore deposits remain yellow through fog and depleted deposits stay gray on both map and minimap. Hover a deposit to read remaining matter at the viewed tick; interpolated replay values are labeled sampled. Enemy entities and combat effects retain vision filtering.
 
 Selection offers All army (all owned completed mobile combat units at the viewed tick, including offscreen units) and All units (owned units, structures and plans). Each type chip keeps only that owner/type when clicked; its × drops that type. Filtering clears recalled-group routing, so subsequent orders affect exactly the retained entities. These helpers do not stage orders.
+
+### Missile silos and targeting
+
+Silos have inventory counts and target buttons in the selection panel, with a labeled expandable Build missiles section for production, looping and queue removal. Both planned and complete silos support launch plans. Q lists only recipes supported by selected producers; mixed producer selections only receive compatible additions. Satellite vision, flights and landing zones follow the current replay state. Placement previews show turret weapon reach and silo automatic acquisition, and manual targeting previews show impact radius and flight ticks. See [missiles](missiles.md) for the current timing and targeting defaults.

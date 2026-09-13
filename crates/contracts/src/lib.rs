@@ -3,6 +3,8 @@ pub mod draft;
 pub mod golden;
 pub mod identity;
 pub mod locks;
+pub mod missiles;
+pub use missiles::validate_silo_plan;
 pub mod scoring;
 pub mod timed;
 mod types;

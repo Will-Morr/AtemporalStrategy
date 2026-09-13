@@ -1,3 +1,4 @@
+import {flightPosition, missileName, setSiloPlan, siloPlan} from './silo';
 import { unitIcon } from './icons';
 import { factoryPlan, orderLabel } from './factory';
 import type {
@@ -41,12 +42,14 @@ export interface EntityView {
   engaged: number | null;
   blueprint?: DraftItemRef;
   settings?: BlueprintSettings;
+  silo?: import('./contracts.generated').SiloState | null;
   exact?: WorldState['entities'][number];
 }
 
 type Mode =
   | { kind: 'none' }
   | { kind: 'attack' }
+  | { kind: 'launch'; type_key: string; silos: EntityId[] }
   | { kind: 'support' }
   | { kind: 'area'; order: 'mine' | 'construct' }
   | { kind: 'build' }
@@ -383,6 +386,7 @@ export class Game {
         activity: e.action.kind === 'mine' ? 'mining' : e.action.kind === 'construct' ? 'construction' : e.engaged_target ? 'combat' : e.action.kind === 'idle' ? 'idle' : 'movement',
         engaged: e.engaged_target ? (dictionary.get(idKey(e.engaged_target)) ?? null) : null,
         exact: e,
+        silo: e.production?.silo,
       }));
     }
     const interval = this.config.snapshot_interval;
@@ -408,6 +412,7 @@ export class Game {
         lifecycle: e.lifecycle,
         activity: e.activity,
         engaged: e.engaged ?? null,
+        silo: e.silo,
       };
     });
   }
@@ -432,6 +437,24 @@ export class Game {
     return views;
   }
 
+  private missileEventCache: {source: WorldEvent[]; events: WorldEvent[]} | null=null;
+  missileEvents(): WorldEvent[] {
+    const source=this.rev()?.events;if(!source)return [];
+    if(this.missileEventCache?.source!==source)this.missileEventCache={source,events:source.filter(e=>e.event.kind==='missile_launch'||e.event.kind==='missile_impact')};
+    return this.missileEventCache.events;
+  }
+  missileState() {
+    if(this.exact?.revision===this.current && this.exact.tick===Math.floor(this.playhead) && (this.playhead===Math.floor(this.playhead)||!this.playing))return {missiles:this.exact.state.missiles??[],recon:this.exact.state.recon??[]};
+    const interval=this.config.snapshot_interval;
+    const samples=[this.sampleAt(this.playhead),this.sampleAt(this.playhead+interval)];
+    const events=this.missileEvents();
+    const shortFlights=events.flatMap(e=>e.event.kind==='missile_launch'?[e.event.flight]:[]);
+    const flights=new Map(samples.flatMap(s=>(s?.missiles??[]).map(f=>[`${idKey(f.silo_id)}:${f.sequence}`,f] as const)));
+    for(const f of shortFlights)flights.set(`${idKey(f.silo_id)}:${f.sequence}`,f);
+    const zones=new Map(samples.flatMap(s=>(s?.recon??[]).map(r=>[JSON.stringify(r),r] as const)));
+    return {missiles:[...flights.values()].filter(f=>f.launch_tick<this.playhead && f.impact_tick>=this.playhead),recon:[...zones.values()].filter(r=>r.starts_at<=this.playhead && r.expires_at>this.playhead)};
+  }
+
   private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; tiles: Set<string> } | null = null;
   visibility(all?: EntityView[]): Set<string> {
     const sample = this.rev()?.samples.get(Math.floor(this.playhead / this.config.snapshot_interval) * this.config.snapshot_interval);
@@ -449,6 +472,14 @@ export class Game {
         for (let x=Math.max(0,Math.ceil(e.x-radius));x<=Math.min(this.terrain.width-1,Math.floor(e.x+radius));x++)
           if ((x-e.x)**2+(y-e.y)**2<=radius**2) visible.add(`${x},${y}`);
     }
+    const allied=(owner:number)=>owner===this.player || (!!team && this.profiles[owner]?.profile?.team_id===team);
+    const reveal=(center:Tile,radius:number)=>{
+      for(let y=Math.max(0,Math.ceil(center.y-radius));y<=Math.min(this.terrain!.height-1,Math.floor(center.y+radius));y++)
+        for(let x=Math.max(0,Math.ceil(center.x-radius));x<=Math.min(this.terrain!.width-1,Math.floor(center.x+radius));x++)if((x-center.x)**2+(y-center.y)**2<=radius**2)visible.add(`${x},${y}`);
+    };
+    const state=this.missileState();
+    for(const flight of state.missiles){const m=this.types.get(flight.type_key)?.missile;if(allied(flight.owner)&&m?.effect==='satellite')reveal(flightPosition(flight,this.playhead),m.radius);}
+    for(const zone of state.recon)if(allied(zone.owner)&&zone.starts_at<=this.playhead&&zone.expires_at>this.playhead)reveal(zone.center,zone.radius);
     return visible;
   }
 
@@ -664,13 +695,13 @@ export class Game {
   }
 
   assign(order: Order, filter: (t: TypeDefinition) => boolean): void {
-    const ghosts = this.configureGhosts(s => { s.order = order; });
+    const ghosts = this.configureGhosts(s => { s.order = order; },v=>!this.types.get(v.type_key)?.silo);
     this.stored = false;
     if (this.recalledGroup !== null && this.player !== null) {
       this.stage({ kind: 'assign_group_order', group: { owner: this.player, slot: this.recalledGroup }, order }, this.draft.policy);
       return;
     }
-    const entities = this.selectedIds(t => !!t.production || filter(t));
+    const entities = this.selectedIds(t => !t.silo && (!!t.production || filter(t)));
     if (!entities.length) {
       if (ghosts) return;
       this.toast('No selected unit can take that order.');
@@ -761,6 +792,13 @@ export class Game {
       if (e.button !== 0) return;
       map.focus();
       const tile = this.renderer.tileAt(e.clientX, e.clientY);
+      if (this.mode.kind === 'launch') {
+        const mode=this.mode;
+        for(const v of this.entities().filter(v=>this.ownSelectable(v)&&this.types.get(v.type_key)?.silo&&mode.silos.some(id=>idKey(id)===idKey(v.id)))) {
+          const plan=siloPlan(this,v);plan.launches.push({type_key:mode.type_key,target:tile});setSiloPlan(this,v,plan);
+        }
+        this.mode={kind:'none'};this.updateMode();return;
+      }
       if (this.mode.kind === 'attack' || this.mode.kind === 'stored-target') {
         this.applyTileMode(tile);
         return;
@@ -903,8 +941,8 @@ export class Game {
     const type_key = this.mode.type_key;
     const def = this.types.get(type_key);
     const tiles = this.placementTiles(tile, end);
-    if (tiles.some(t => !this.validPlacement(t, !!def?.production))) { this.toast('Placement blocked: choose clear floor and an open factory output.'); return; }
-    const command: Command = { kind: 'place_blueprints', type_key, tiles, priority: 'medium', output_directions: def?.production ? tiles.map(() => this.renderer.outputDirection) : null };
+    if (tiles.some(t => !this.validPlacement(t, !!def?.production && !def.silo))) { this.toast('Placement blocked: choose clear floor and an open factory output.'); return; }
+    const command: Command = { kind: 'place_blueprints', type_key, tiles, priority: 'medium', output_directions: def?.production && !def.silo ? tiles.map(() => this.renderer.outputDirection) : null };
     this.stage(command);
     this.mode = { kind: 'none' };
     this.updateMode();
@@ -949,7 +987,7 @@ export class Game {
   }
 
   producible(): string[] {
-    return [...this.types.values()].filter(t => t.kind === 'unit').map(t => t.key).sort();
+    return [...new Set(this.selectedViews().filter(v=>this.ownSelectable(v)).flatMap(v=>this.types.get(v.type_key)?.production?.recipes??[]))].sort();
   }
   structures(): string[] {
     return ['factory', 'turret', 'wall'].filter(k => this.types.has(k)).concat([...this.types.values()].filter(t => t.kind === 'structure' && !['factory', 'turret', 'wall'].includes(t.key)).map(t => t.key));
@@ -1077,7 +1115,7 @@ export class Game {
       else this.mode = { kind: 'none' };
     } else if (mode.kind === 'recipe') {
       const key = this.producible()[n - 1];
-      const factories = this.selectedIds(t => !!t.production);
+      const factories = key ? this.selectedIds(t => !!t.production?.recipes.includes(key)) : [];
       const ghosts = key ? this.configureGhosts(s => { s.queue_loop_flags ??= s.queue.map(()=>false);s.queue.push(...Array(five?5:1).fill(key));s.queue_loop_flags.push(...Array(five?5:1).fill(s.loop_enabled)); }, v=>!!this.types.get(v.type_key)?.production?.recipes.includes(key)) : false;
       if (key && factories.length) this.stage({ kind: 'edit_production', factories, edit: { kind: 'append', items: Array(five?5:1).fill(key) } });
       else if (!ghosts) this.toast(key ? 'Select a factory first.' : 'No such recipe.');
@@ -1110,11 +1148,12 @@ export class Game {
     const text = (() => {
       switch (this.mode.kind) {
         case 'none': return '';
+        case 'launch': return `Target ${missileName(this.mode.type_key)}: click the map · unlimited range · Esc cancels`;
         case 'attack': return 'Attack-move: click a destination tile (Esc cancels)';
         case 'support': return 'Support: click one of your units';
         case 'area': return `${this.mode.order === 'mine' ? 'Mine' : 'Construct'}: drag a rectangle`;
         case 'build': return `Build: ${this.structures().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
-        case 'place': return `Place ${this.mode.type_key}: click a floor tile${this.types.get(this.mode.type_key)?.production ? ` (output ${this.renderer.outputDirection.toUpperCase()}, R rotates)` : ''}`;
+        case 'place': return `Place ${this.mode.type_key}: click a floor tile${this.types.get(this.mode.type_key)?.production && !this.types.get(this.mode.type_key)?.silo ? ` (output ${this.renderer.outputDirection.toUpperCase()}, R rotates)` : ''}`;
         case 'recipe': return `Queue: ${this.producible().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
         case 'priority': return 'Priority: 1=high 2=medium 3=low 4=off';
         case 'membership': return `${this.mode.add ? 'Add selection to' : 'Clear'} group: 0–9`;
@@ -1190,6 +1229,7 @@ export class Game {
     // Selection panel.
     const body = $('selection-body');
     const views = this.selectedViews();
+    $('selection').classList.toggle('silo-selected', views.length===1 && !!this.types.get(views[0].type_key)?.silo);
     $('selection').classList.toggle('factory-selected', views.length === 1 && !!this.types.get(views[0].type_key)?.production);
 
     if (!views.length) {
@@ -1216,6 +1256,7 @@ export class Game {
         if(t.weapon)values.push(['Damage',`${t.weapon.damage} / ${t.weapon.cooldown} ticks`],['Range',`${t.weapon.range} tiles`]);
         if(t.movement)values.push(['Move',`1 tile / ${t.movement.cooldown} ticks`]);
         if(t.mining)values.push(['Mining',`${t.mining.rate} / ${t.mining.cooldown} ticks`]);
+        if(t.silo)values.push(['Auto range',`${t.silo.auto_range} tiles`],['Launch range','Unlimited']);
         if(t.self_repair)values.push(['Repair',`${t.self_repair.rate*t.self_repair.hp_per_matter} HP / tick · ${t.self_repair.hp_per_matter} HP / matter`]);
         if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
         for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}if(t.production){const details=document.createElement('details');details.innerHTML='<summary>Unit stats</summary>';details.append(stats);body.append(details);}else { body.append(stats); const order=document.createElement('div');order.className='unit-order';order.textContent=`Order: ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order); }
@@ -1317,6 +1358,7 @@ function describe(c: DraftCommand): string {
     case 'place_blueprints': return `place ${cmd.type_key} at ${cmd.tiles.map(t => `${t.x},${t.y}`).join(' ')}`;
     case 'edit_production': return `queue ${cmd.edit.kind}${'items' in cmd.edit ? ` ${cmd.edit.items.join(',')}` : ''} × ${cmd.factories.length}`;
     case 'set_queue_loop': return `loop ${cmd.enabled ? 'on' : 'off'} × ${cmd.factories.length}`;
+    case 'set_silo_plan': return `Silo launches: ${cmd.plan.launches.length} queued · automatic ${cmd.plan.automatic?'on':'off'}`;
     case 'set_stored_order': return `stored ${cmd.order.kind} × ${cmd.factories.length}`;
     case 'configure_blueprints': return `Blueprint settings: ${cmd.settings.queue.length} queued · ${cmd.settings.priority} · loop ${cmd.settings.loop_enabled?'on':'off'} · ${cmd.settings.order.kind.replace('_',' ')}`;
     case 'set_priority': return `priority ${cmd.priority} × ${cmd.entities.length}`;

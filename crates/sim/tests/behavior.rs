@@ -1196,6 +1196,7 @@ fn configured_ghost_starts_production_and_inherited_order_on_completion() {
             Command::ConfigureBlueprints {
                 blueprint_ids: vec![factory.clone()],
                 settings: BlueprintSettings {
+                    silo_plan: None,
                     queue_loop_flags: vec![],
                     queue: vec!["grunt".into()],
                     order: order.clone(),

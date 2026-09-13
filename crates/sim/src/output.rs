@@ -123,6 +123,7 @@ impl Sim {
             .entities
             .iter()
             .map(|e| SampleEntity {
+                silo: e.production.as_ref().and_then(|p| p.silo.clone()),
                 index: self.dictionary[&e.id],
                 tile: e.tile,
                 hp: e.hp,
@@ -136,6 +137,8 @@ impl Sim {
             })
             .collect();
         Sample {
+            missiles: self.state.missiles.clone(),
+            recon: self.state.recon.clone(),
             tick: self.state.tick,
             players: self
                 .state
@@ -188,6 +191,19 @@ impl Sim {
                             s.living_army_value += def.matter_cost;
                         } else {
                             s.living_infrastructure_value += def.matter_cost;
+                            if let Some(silo) = e.production.as_ref().and_then(|p| p.silo.as_ref())
+                            {
+                                s.living_infrastructure_value += silo
+                                    .inventory
+                                    .iter()
+                                    .map(|stock| {
+                                        self.content.types
+                                            [self.type_index(&stock.type_key).unwrap()]
+                                        .matter_cost
+                                            * f64::from(stock.count)
+                                    })
+                                    .sum::<f64>();
+                            }
                         }
                     }
                     if matches!(e.action, Order::Mine { .. } | Order::Construct { .. }) {

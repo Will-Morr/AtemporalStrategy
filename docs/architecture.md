@@ -141,3 +141,7 @@ After actions/motion update `last_progress_tick`, then test the configured quiet
 ## Ore and default horizon
 
 Proposed default max_tick is 20,000. Size total accessible ore per starting allocation to approximately 10,000–20,000 ticks of one dedicated miner's continuous full throughput; use a lower initial target (about 12,000 mining ticks) so travel/quiet timeout fit beneath the cap in the ordinary mine-and-loop fixture. More miners deplete it sooner; constructor-only mining is half rate and may reach the cap. YAML can tune ore and horizon independently. Lobby shows `ore allocation / dedicated miner matter per tick` as an estimate assuming uninterrupted mining, alongside the hard cap; it is not a guaranteed battle duration. Typical peaceful loops should stop after ore exhaustion and inactivity rather than routinely hitting the cap. Measure both the ordinary opening and the full configured cap with exports enabled.
+
+## Missile inventories and delayed effects
+
+Silo recipes store missiles rather than producing map entities. After allocation, inventory completion and canonical launching run before simultaneous combat/impact resolution. Flights and temporary satellite coverage are world state, not presentation-only events; checkpoint and compact replay samples preserve them. Automatic targets use existing allied vision plus satellite coverage, while manual flight range is unlimited. In-flight effects delay early termination. See [missile architecture and defaults](missiles.md).

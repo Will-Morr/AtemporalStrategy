@@ -246,7 +246,11 @@ record!(Fingerprint {
     config_hash: String,
     content_hash: String
 });
-choices!(TypeKind { Unit, Structure });
+choices!(TypeKind {
+    Unit,
+    Structure,
+    Missile
+});
 choices!(Shape { Circle, Rectangle });
 choices!(Neighbors { Four, Eight });
 choices!(VisualStyle {
@@ -280,9 +284,67 @@ record!(SelfRepair {
     hp_per_matter: f64,
     rate: f64
 });
+choices!(MissileEffect {
+    Satellite,
+    Cluster,
+    TacNuke
+});
+record!(MissileCapability {
+    effect: MissileEffect,
+    radius: f64,
+    damage: f64,
+    speed: f64,
+    max_flight_ticks: Tick,
+    reveal_ticks: Tick
+});
+record!(SiloCapability {
+    auto_range: f64,
+    launch_cooldown: Tick
+});
+record!(MissileLaunch {
+    type_key: TypeKey,
+    target: Tile
+});
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SiloPlan {
+    pub automatic: bool,
+    pub launches: Vec<MissileLaunch>,
+}
+record!(MissileStock {
+    type_key: TypeKey,
+    count: u32
+});
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SiloState {
+    pub inventory: Vec<MissileStock>,
+    pub plan: SiloPlan,
+    pub next_launch_tick: Tick,
+    pub sequence: u32,
+}
+record!(MissileFlight {
+    silo_id: EntityId,
+    sequence: u32,
+    owner: PlayerId,
+    type_key: TypeKey,
+    origin: Tile,
+    target: Tile,
+    launch_tick: Tick,
+    impact_tick: Tick
+});
+record!(ReconZone {
+    starts_at: Tick,
+    owner: PlayerId,
+    center: Tile,
+    radius: f64,
+    expires_at: Tick
+});
 record!(TypeDefinition { key: TypeKey, kind: TypeKind, shape: Shape, matter_cost: f64, max_hp: f64,
     counts_for_survival: bool, provides_build_ability: bool, movement: Option<Movement>, vision: f64,
-    weapon: Option<Weapon>, mining: Option<WorkRate>, construction: Option<WorkRate>, production: Option<ProductionCapability>, healing: Option<Healing>, #[serde(default, skip_serializing_if = "Option::is_none")] self_repair: Option<SelfRepair> });
+    weapon: Option<Weapon>, mining: Option<WorkRate>, construction: Option<WorkRate>, production: Option<ProductionCapability>, healing: Option<Healing>, #[serde(default, skip_serializing_if = "Option::is_none")] self_repair: Option<SelfRepair>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] missile: Option<MissileCapability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] silo: Option<SiloCapability> });
 record!(Content { schema_version: Version, types: Vec<TypeDefinition>, starting_roster: Vec<TypeKey> });
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -372,6 +434,10 @@ pub enum Command<BlueprintReference = BlueprintId, QueueReference = QueueItemId>
         factories: Vec<EntityId>,
         order: Order,
     },
+    SetSiloPlan {
+        silos: Vec<EntityId>,
+        plan: SiloPlan,
+    },
 }
 record!(DraftCommand {
     local_id: String,
@@ -443,12 +509,12 @@ record!(OccurrenceCounter {
     next_occurrence: u32
 });
 record!(Production { pending_items: Vec<QueueItem>, active_item: Option<ActiveItem>, loop_enabled: bool, stored_order: Order,
-    output_tile: Tile, occurrence_counters: Vec<OccurrenceCounter>, spawn_group: Option<ControlGroupId>, output_direction: CardinalDirection });
+    output_tile: Tile, occurrence_counters: Vec<OccurrenceCounter>, spawn_group: Option<ControlGroupId>, output_direction: CardinalDirection, #[serde(default, skip_serializing_if = "Option::is_none")] silo: Option<SiloState> });
 record!(EntityState { id: EntityId, owner: PlayerId, type_key: TypeKey, tile: Tile, last_move_direction: Direction,
     hp: f64, paid_matter: f64, lifecycle: Lifecycle, blueprint_id: Option<BlueprintId>, action: Order, priority: Priority,
     next_action_tick: Tick, next_move_tick: Tick, production: Option<Production>, support_target: Option<EntityId>,
     engaged_target: Option<EntityId>, resolved_destination: Option<Tile>, failed_move_attempts: u8, blocked_step: Option<Tile>, born_at_tick: Option<Tick>, order_locks: Vec<OrderLock>, goal_settled: bool, local_detour: Vec<Tile> });
-record!(BlueprintSettings { queue: Vec<TypeKey>, #[serde(default)] queue_loop_flags: Vec<bool>, order: Order, priority: Priority, loop_enabled: bool });
+record!(BlueprintSettings { queue: Vec<TypeKey>, #[serde(default)] queue_loop_flags: Vec<bool>, order: Order, priority: Priority, loop_enabled: bool, #[serde(default, skip_serializing_if = "Option::is_none")] silo_plan: Option<SiloPlan> });
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Blueprint {
@@ -490,7 +556,9 @@ choices!(TerrainCell { Floor, Wall });
 record!(Terrain { width: u16, height: u16, cells: Vec<TerrainCell> });
 record!(WorldState { schema_version: Version, tick: Tick, last_progress_tick: Tick, inactivity_deadline: Tick,
     terrain: Terrain, ore: Vec<f64>, players: Vec<PlayerState>, entities: Vec<EntityState>, blueprints: Vec<Blueprint>,
-    control_groups: Vec<ControlGroupState>, survival_transitions: Vec<SurvivalTransition>, rng_state: String });
+    control_groups: Vec<ControlGroupState>, survival_transitions: Vec<SurvivalTransition>, rng_state: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")] missiles: Vec<MissileFlight>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")] recon: Vec<ReconZone> });
 choices!(OutcomeKind {
     Stalemate,
     Win,
@@ -541,7 +609,7 @@ record!(EntityRef {
     owner: PlayerId,
     type_key: TypeKey
 });
-record!(SampleEntity { index: u32, tile: Tile, hp: f64, facing: Direction, lifecycle: Lifecycle, activity: Activity, engaged: Option<u32> });
+record!(SampleEntity { index: u32, tile: Tile, hp: f64, facing: Direction, lifecycle: Lifecycle, activity: Activity, engaged: Option<u32>, #[serde(default, skip_serializing_if = "Option::is_none")] silo: Option<SiloState> });
 record!(SamplePlayer {
     player_id: PlayerId,
     bank: f64,
@@ -551,7 +619,9 @@ record!(OreCell {
     index: u32,
     remaining: f64
 });
-record!(Sample { tick: Tick, players: Vec<SamplePlayer>, entities: Vec<SampleEntity>, ore: Vec<OreCell> });
+record!(Sample { tick: Tick, players: Vec<SamplePlayer>, entities: Vec<SampleEntity>, ore: Vec<OreCell>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")] missiles: Vec<MissileFlight>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")] recon: Vec<ReconZone> });
 choices!(Activity {
     Combat,
     Construction,
@@ -570,6 +640,15 @@ record!(TimelineBucket {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PresentationEvent {
+    MissileLaunch {
+        flight: MissileFlight,
+    },
+    MissileImpact {
+        owner: PlayerId,
+        type_key: TypeKey,
+        target: Tile,
+        radius: f64,
+    },
     Displacement {
         mover_id: EntityId,
         blocker_id: EntityId,

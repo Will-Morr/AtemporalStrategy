@@ -5,11 +5,16 @@ export function unitIcon(type: string, color: string): SVGSVGElement {
   const shape=(tag:string,attrs:Record<string,string>)=>{const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);svg.append(e);};
   svg.style.color=color;
   const base={fill:'currentColor',stroke:'#071019','stroke-width':'2'};
-  if(['factory','turret','wall'].includes(type)) {
+  if(['factory','turret','wall','silo'].includes(type)) {
     shape('rect',{...base,x:'3',y:'3',width:'26',height:'26',rx:'2'});
     if(type==='factory'){for(const x of ['8','20'])shape('rect',{x,y:'8',width:'4',height:'9',fill:'#e5f5ff'});shape('rect',{x:'11',y:'22',width:'10',height:'7',fill:'#071019'});}
+    else if(type==='silo'){for(const cx of ['10','22'])shape('circle',{...base,cx,cy:'16',r:'6',fill:'#dceaf3'});shape('path',{d:'M10 10V22M22 10V22',stroke:'#34485c','stroke-width':'2'});}
     else if(type==='turret'){shape('circle',{...base,cx:'16',cy:'16',r:'8',fill:'#e5f5ff'});shape('rect',{...base,x:'14',y:'1',width:'4',height:'15'});}
     else shape('path',{d:'M4 16H28',stroke:'#e5f5ff','stroke-width':'3'});
+  } else if(['satellite','cluster','tac_nuke'].includes(type)) {
+    shape('path',{...base,d:'M16 2L22 11V24L27 29L16 26L5 29L10 24V11Z',fill:type==='tac_nuke'?'#ff8b77':type==='cluster'?'#ffda69':'#a7f3ec'});
+    if(type==='satellite')for(const x of ['1','24'])shape('rect',{...base,x,y:'11',width:'7',height:'10'});
+    else shape('circle',{cx:'16',cy:'16',r:'3',fill:'#293341'});
   } else if(['tank','artillery'].includes(type)) {
     for(const x of ['3','23'])shape('rect',{...base,x,y:'7',width:'6',height:'22'});
     shape('rect',{...base,x:'8',y:'7',width:'16',height:'19'});shape('circle',{...base,cx:'16',cy:'16',r:'5',fill:'#e5f5ff'});shape('rect',{...base,x:'14',y:'1',width:'4',height:'15'});

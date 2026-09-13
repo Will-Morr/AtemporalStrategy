@@ -57,6 +57,41 @@ impl Sim {
         let content = normalize_content(request.content.clone())?;
         atemporal_content::validate_config(&request.config)?;
         let state = identity::canonical_world(&request.checkpoint)?;
+        for e in &state.entities {
+            let def = content
+                .types
+                .iter()
+                .find(|d| d.key == e.type_key)
+                .ok_or("unknown checkpoint entity type")?;
+            if def.kind == TypeKind::Missile {
+                return Err("missiles must be stored or in flight, not world entities".into());
+            }
+            let silo = e.production.as_ref().and_then(|p| p.silo.as_ref());
+            if def.silo.is_some() != silo.is_some() {
+                return Err("checkpoint silo inventory disagrees with content".into());
+            }
+            if let Some(silo) = silo {
+                validate_silo_plan(def, &silo.plan, state.terrain.width, state.terrain.height)?;
+                if silo.inventory.iter().any(|s| {
+                    !def.production
+                        .as_ref()
+                        .unwrap()
+                        .recipes
+                        .contains(&s.type_key)
+                }) {
+                    return Err("unsupported inventory missile".into());
+                }
+            }
+        }
+        if state.missiles.iter().any(|f| {
+            content
+                .types
+                .iter()
+                .find(|d| d.key == f.type_key)
+                .is_none_or(|d| d.missile.is_none())
+        }) {
+            return Err("unknown missile in checkpoint".into());
+        }
         let players = usize::from(request.config.player_count);
         if state.players.len() != players {
             return Err("checkpoint player count disagrees with configuration".into());

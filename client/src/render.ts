@@ -1,3 +1,4 @@
+import {drawMissileOverlays} from './missile-render';
 import type { CardinalDirection, Tile } from './contracts.generated';
 import { idKey, type EntityView, type Game } from './game';
 
@@ -238,13 +239,14 @@ export class Renderer {
         ctx.strokeRect(rx, ry, (a.area.max.x - a.area.min.x + 1) * s, (a.area.max.y - a.area.min.y + 1) * s);
       }
     }
+    drawMissileOverlays(this.game,this,ctx);
     // Placement preview with output arrow.
     if (this.game.mode.kind === 'place' && this.game.hover) {
       const h = this.game.hover;
       const [px, py] = this.screen(h.x, h.y);
-      ctx.strokeStyle = this.game.validPlacement(h,!!this.game.types.get(this.game.mode.type_key)?.production) ? '#ffffff' : '#ff5252';
+      ctx.strokeStyle = this.game.validPlacement(h,!!this.game.types.get(this.game.mode.type_key)?.production && !this.game.types.get(this.game.mode.type_key)?.silo) ? '#ffffff' : '#ff5252';
       ctx.strokeRect(px + 1, py + 1, s - 2, s - 2);
-      if (this.game.types.get(this.game.mode.type_key)?.production) {
+      if (this.game.types.get(this.game.mode.type_key)?.production && !this.game.types.get(this.game.mode.type_key)?.silo) {
         const [dx, dy] = OFFSET[this.outputDirection];
         const [qx, qy] = this.screen(h.x + dx, h.y + dy);
         ctx.strokeStyle = this.game.validPlacement(h,true) ? '#81c784' : '#ff5252';
@@ -287,6 +289,7 @@ export class Renderer {
       box(-.4,-.4,.8,.8);
       ctx.fillStyle='#d7efff';
       if(v.type_key==='turret'){circle(0,0,.25);box(-.06,-.43,.12,.43);}
+      else if(v.type_key==='silo'){circle(-.18,0,.15);circle(.18,0,.15);ctx.strokeStyle='#34485c';ctx.beginPath();ctx.moveTo(-.18,-.15);ctx.lineTo(-.18,.15);ctx.moveTo(.18,-.15);ctx.lineTo(.18,.15);ctx.stroke();}
       else if(v.type_key==='factory'){box(-.25,-.23,.15,.3);box(.1,-.23,.15,.3);ctx.fillStyle='#071019';box(-.19,.17,.38,.23);}
       else {ctx.fillStyle='#ffffff55';box(-.36,-.04,.72,.08);}
     } else if(v.type_key==='scout') {triangle(.29,.4);ctx.fillStyle='#d7efff';triangle(.1,.2);}

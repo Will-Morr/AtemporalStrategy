@@ -68,6 +68,9 @@ impl Sim {
 
     fn order_compatible(&self, i: usize, order: &Order) -> bool {
         let def = self.def(i);
+        if def.silo.is_some() {
+            return false;
+        }
         if def.production.is_some() {
             return true;
         }
@@ -304,7 +307,7 @@ impl Sim {
                         .push(self.skip(None, SkipReason::Incompatible));
                     return Ok(outcome);
                 }
-                let produces = def.production.is_some();
+                let produces = def.production.is_some() && def.silo.is_none();
                 let rank = self
                     .precedence
                     .iter()
@@ -394,8 +397,12 @@ impl Sim {
                     };
                     let ty = self.type_index(&self.state.blueprints[b].type_key)?;
                     let def = &self.content.types[ty];
-                    if (!settings.queue_loop_flags.is_empty()
-                        && settings.queue_loop_flags.len() != settings.queue.len())
+                    if settings
+                        .silo_plan
+                        .as_ref()
+                        .is_some_and(|p| !self.silo_plan_valid(&def.key, p))
+                        || (!settings.queue_loop_flags.is_empty()
+                            && settings.queue_loop_flags.len() != settings.queue.len())
                         || !settings.queue.is_empty()
                             && def.production.as_ref().is_none_or(|p| {
                                 settings.queue.iter().any(|k| !p.recipes.contains(k))
@@ -548,6 +555,33 @@ impl Sim {
                                 .skipped
                                 .push(self.skip(Some(id.clone()), SkipReason::Incompatible)),
                         },
+                    }
+                }
+            }
+            Command::SetSiloPlan { silos, plan } => {
+                let mut ids = silos.clone();
+                ids.sort();
+                ids.dedup();
+                for id in ids {
+                    match self.target_check(&id, player, round, true) {
+                        Ok(i) if self.silo_plan_valid(&self.state.entities[i].type_key, plan) => {
+                            if let Some(silo) = self.state.entities[i]
+                                .production
+                                .as_mut()
+                                .and_then(|p| p.silo.as_mut())
+                            {
+                                silo.plan = plan.clone();
+                                outcome.applied_entities.push(id);
+                            } else {
+                                outcome
+                                    .skipped
+                                    .push(self.skip(Some(id), SkipReason::Incompatible));
+                            }
+                        }
+                        Ok(_) => outcome
+                            .skipped
+                            .push(self.skip(Some(id), SkipReason::Incompatible)),
+                        Err(reason) => outcome.skipped.push(self.skip(Some(id), reason)),
                     }
                 }
             }

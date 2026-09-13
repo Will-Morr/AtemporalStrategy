@@ -16,7 +16,7 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
   for(const type of content.types) {
     const row=rows.filter({has:page.getByRole('cell',{name:type.key,exact:true})});
     await expect(row.locator('td').nth(2)).toHaveText(String(type.matter_cost));
-    await expect(row.locator('td').nth(3)).toHaveText(String(type.max_hp));
+    await expect(row.locator('td').nth(3)).toHaveText(type.kind==='missile'?'— (inventory)':String(type.max_hp));
   }
   // Tables may scroll internally; the page itself must fit a narrow viewport.
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);

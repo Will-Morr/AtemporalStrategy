@@ -28,7 +28,7 @@ impl Drop for Temp {
 #[test]
 fn normalized_content_has_full_roster_and_half_constructor_throughput() {
     let mut content = load_content(CONTENT).unwrap();
-    assert_eq!(content.types.len(), 10);
+    assert_eq!(content.types.len(), 14);
     let miner = content
         .types
         .iter()

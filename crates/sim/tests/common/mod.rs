@@ -131,6 +131,8 @@ impl World {
             })
             .collect();
         let state = WorldState {
+            missiles: vec![],
+            recon: vec![],
             schema_version: Version::default(),
             tick: 0,
             last_progress_tick: 0,
@@ -191,6 +193,7 @@ impl World {
         let id = identity::genesis(player, slot).unwrap();
         let def = self.def(key).clone();
         let production = def.production.as_ref().map(|_| Production {
+            silo: def.silo.as_ref().map(|_| SiloState::default()),
             pending_items: vec![],
             active_item: None,
             loop_enabled: false,

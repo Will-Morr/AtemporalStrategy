@@ -80,6 +80,8 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
         })
         .collect();
     let checkpoint = WorldState {
+        missiles: vec![],
+        recon: vec![],
         schema_version: Version::default(),
         tick: 0,
         last_progress_tick: 0,
@@ -464,6 +466,7 @@ pub fn generate() -> Result<()> {
     factory.blueprint_id = Some(bp.clone());
     factory.action = Order::Idle {};
     factory.production = Some(Production {
+        silo: None,
         pending_items: vec![],
         active_item: None,
         loop_enabled: false,
@@ -593,6 +596,7 @@ pub fn generate() -> Result<()> {
     factory.hp = 400.;
     factory.action = Order::Idle {};
     factory.production = Some(Production {
+        silo: None,
         pending_items: vec![],
         active_item: Some(ActiveItem {
             loop_enabled: false,

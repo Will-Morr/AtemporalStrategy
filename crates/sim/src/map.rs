@@ -932,7 +932,20 @@ pub fn generate(config: &MatchConfig, content: &Content) -> Result<WorldState> {
                 priority: Priority::Medium,
                 next_action_tick: 0,
                 next_move_tick: 0,
-                production: None,
+                production: def.production.as_ref().map(|_| Production {
+                    pending_items: vec![],
+                    active_item: None,
+                    loop_enabled: false,
+                    stored_order: Order::Idle {},
+                    output_tile: Tile {
+                        x: tile.x + 1,
+                        y: tile.y,
+                    },
+                    occurrence_counters: vec![],
+                    spawn_group: None,
+                    output_direction: CardinalDirection::E,
+                    silo: def.silo.as_ref().map(|_| SiloState::default()),
+                }),
                 support_target: None,
                 engaged_target: None,
                 resolved_destination: None,
@@ -977,6 +990,8 @@ pub fn generate(config: &MatchConfig, content: &Content) -> Result<WorldState> {
         })
         .collect();
     identity::canonical_world(&WorldState {
+        missiles: vec![],
+        recon: vec![],
         schema_version: Version::default(),
         tick: 0,
         last_progress_tick: 0,

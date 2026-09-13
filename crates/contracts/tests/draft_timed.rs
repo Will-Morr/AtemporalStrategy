@@ -243,6 +243,7 @@ fn blueprint_loop_flags_require_one_flag_per_recipe_or_an_empty_default() {
             item_index: 0,
         }],
         settings: BlueprintSettings {
+            silo_plan: None,
             queue: vec!["grunt".into(), "scout".into()],
             queue_loop_flags: vec![true],
             order: Order::Idle {},

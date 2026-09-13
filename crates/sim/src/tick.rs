@@ -55,8 +55,11 @@ impl Sim {
         self.mining(&intents);
         let consumers = self.consumers(&intents);
         let (growth, healing) = self.allocate(consumers)?;
-        let damage = self.combat(&intents);
-        self.resolve(&growth, &healing, &damage, &mut intents)?;
+        self.stock_missiles()?;
+        self.launch_missiles()?;
+        let mut damage = self.combat(&intents);
+        let annihilated = self.missile_impacts(&mut damage)?;
+        self.resolve(&growth, &healing, &damage, &annihilated, &mut intents)?;
         self.clear_factory_outputs(&mut intents);
         self.motion(&intents)?;
         self.births()?;
@@ -805,6 +808,7 @@ impl Sim {
         growth: &[f64],
         healing: &[f64],
         damage: &[f64],
+        annihilated: &[bool],
         intents: &mut Vec<Intent>,
     ) -> Result<()> {
         let n = self.state.entities.len();
@@ -820,7 +824,11 @@ impl Sim {
             };
             let g = growth[i] + healing[i];
             let d = damage[i];
-            e.hp = (e.hp + g - d).min(new_max);
+            e.hp = if annihilated[i] {
+                0.0
+            } else {
+                (e.hp + g - d).min(new_max)
+            };
             if e.lifecycle == Lifecycle::Site && e.paid_matter >= def.matter_cost - EPS {
                 e.paid_matter = def.matter_cost;
                 e.lifecycle = Lifecycle::Complete;
@@ -842,7 +850,22 @@ impl Sim {
             self.occupancy_changed_tick = self.state.tick;
             let def = self.content.types[self.ty[i]].clone();
             let owner = usize::from(e.owner);
-            self.state.players[owner].counters.lost_invested_matter += e.paid_matter;
+            let stored = e
+                .production
+                .as_ref()
+                .and_then(|p| p.silo.as_ref().map(|s| (p, s)))
+                .map_or(0.0, |(p, s)| {
+                    s.inventory
+                        .iter()
+                        .map(|stock| {
+                            self.content.types[self.type_index(&stock.type_key).unwrap()]
+                                .matter_cost
+                                * f64::from(stock.count)
+                        })
+                        .sum::<f64>()
+                        + p.active_item.as_ref().map_or(0.0, |a| a.paid_matter)
+                });
+            self.state.players[owner].counters.lost_invested_matter += e.paid_matter + stored;
             self.state.players[owner]
                 .counters
                 .destroyed_replacement_value += def.matter_cost;
@@ -1338,26 +1361,7 @@ impl Sim {
                 goal_settled: false,
                 local_detour: vec![],
             });
-            let prod = self.state.entities[f].production.as_mut().unwrap();
-            let active = prod.active_item.take().unwrap();
-            match prod
-                .occurrence_counters
-                .iter_mut()
-                .find(|c| c.item_id == active.item_id)
-            {
-                Some(c) => c.next_occurrence = active.occurrence + 1,
-                None => prod.occurrence_counters.push(OccurrenceCounter {
-                    item_id: active.item_id.clone(),
-                    next_occurrence: active.occurrence + 1,
-                }),
-            }
-            if active.loop_enabled {
-                prod.pending_items.push(QueueItem {
-                    item_id: active.item_id,
-                    type_key: active.type_key,
-                    loop_enabled: true,
-                });
-            }
+            self.finish_production(f);
             self.set_occ(out, RESERVED);
             self.progress = true;
             self.note(owner, Activity::Construction);
@@ -1405,6 +1409,14 @@ impl Sim {
                 let direction = bp.output_direction.unwrap_or(CardinalDirection::E);
                 let (dx, dy) = cardinal_offset(direction);
                 Production {
+                    silo: def.silo.as_ref().map(|_| SiloState {
+                        plan: bp
+                            .settings
+                            .as_ref()
+                            .and_then(|s| s.silo_plan.clone())
+                            .unwrap_or_default(),
+                        ..SiloState::default()
+                    }),
                     pending_items: bp
                         .settings
                         .as_ref()
@@ -1525,6 +1537,9 @@ impl Sim {
     /// Decided cutoff: at most one side can still act. A side is finished when every member has
     /// no entities, or is eliminated with only idle entities and no future commands.
     pub fn decided(&self) -> bool {
+        if !self.state.missiles.is_empty() {
+            return false;
+        }
         let now = self.state.tick;
         let sides =
             scoring::sides(self.config.player_count, &self.config.multiplayer).unwrap_or_default();
@@ -1549,6 +1564,9 @@ impl Sim {
 
     /// Inactivity cutoff: quiet through the deadline, no future command and no cooldown-only action.
     pub fn inactive(&self) -> bool {
+        if !self.state.missiles.is_empty() {
+            return false;
+        }
         let now = self.state.tick;
         if now < self.state.inactivity_deadline {
             return false;

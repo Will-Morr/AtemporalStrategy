@@ -178,6 +178,11 @@ export type Command =
       factories: EntityId[];
       kind: "set_stored_order";
       order: Order;
+    }
+  | {
+      kind: "set_silo_plan";
+      plan: SiloPlan;
+      silos: EntityId[];
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -424,7 +429,12 @@ export type Transport = "authoritative" | "inputs_only";
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "TypeKind".
  */
-export type TypeKind = "unit" | "structure";
+export type TypeKind = "unit" | "structure" | "missile";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MissileEffect".
+ */
+export type MissileEffect = "satellite" | "cluster" | "tac_nuke";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "Neighbors".
@@ -500,6 +510,11 @@ export type Command2 =
       factories: EntityId[];
       kind: "set_stored_order";
       order: Order;
+    }
+  | {
+      kind: "set_silo_plan";
+      plan: SiloPlan;
+      silos: EntityId[];
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -704,6 +719,17 @@ export type ServerMessage =
  * via the `definition` "PresentationEvent".
  */
 export type PresentationEvent =
+  | {
+      flight: MissileFlight;
+      kind: "missile_launch";
+    }
+  | {
+      kind: "missile_impact";
+      owner: number;
+      radius: number;
+      target: Tile;
+      type_key: string;
+    }
   | {
       blocker_from: Tile;
       blocker_id: EntityId;
@@ -913,6 +939,23 @@ export interface BlueprintSettings {
   priority: Priority;
   queue: string[];
   queue_loop_flags?: boolean[];
+  silo_plan?: SiloPlan | null;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SiloPlan".
+ */
+export interface SiloPlan {
+  automatic: boolean;
+  launches: MissileLaunch[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MissileLaunch".
+ */
+export interface MissileLaunch {
+  target: Tile;
+  type_key: string;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -1072,8 +1115,10 @@ export interface WorldState {
   entities: EntityState[];
   inactivity_deadline: number;
   last_progress_tick: number;
+  missiles?: MissileFlight[];
   ore: number[];
   players: PlayerState[];
+  recon?: ReconZone[];
   rng_state: string;
   schema_version: Version;
   survival_transitions: SurvivalTransition[];
@@ -1147,6 +1192,7 @@ export interface Production {
   output_direction: CardinalDirection;
   output_tile: Tile;
   pending_items: QueueItem[];
+  silo?: SiloState | null;
   spawn_group?: ControlGroupId | null;
   stored_order: Order;
 }
@@ -1181,6 +1227,38 @@ export interface QueueItem {
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SiloState".
+ */
+export interface SiloState {
+  inventory: MissileStock[];
+  next_launch_tick: number;
+  plan: SiloPlan;
+  sequence: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MissileStock".
+ */
+export interface MissileStock {
+  count: number;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MissileFlight".
+ */
+export interface MissileFlight {
+  impact_tick: number;
+  launch_tick: number;
+  origin: Tile;
+  owner: number;
+  sequence: number;
+  silo_id: EntityId;
+  target: Tile;
+  type_key: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "PlayerState".
  */
 export interface PlayerState {
@@ -1203,6 +1281,17 @@ export interface SpendCounters {
   structure_spend: number;
   total_spend: number;
   unit_spend: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ReconZone".
+ */
+export interface ReconZone {
+  center: Tile;
+  expires_at: number;
+  owner: number;
+  radius: number;
+  starts_at: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -1286,11 +1375,13 @@ export interface TypeDefinition {
   matter_cost: number;
   max_hp: number;
   mining?: WorkRate | null;
+  missile?: MissileCapability | null;
   movement?: Movement | null;
   production?: ProductionCapability | null;
   provides_build_ability: boolean;
   self_repair?: SelfRepair | null;
   shape: Shape;
+  silo?: SiloCapability | null;
   vision: number;
   weapon?: Weapon | null;
 }
@@ -1311,6 +1402,18 @@ export interface Healing {
   demand: number;
   hp_per_matter: number;
   range: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MissileCapability".
+ */
+export interface MissileCapability {
+  damage: number;
+  effect: MissileEffect;
+  max_flight_ticks: number;
+  radius: number;
+  reveal_ticks: number;
+  speed: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -1335,6 +1438,14 @@ export interface ProductionCapability {
 export interface SelfRepair {
   hp_per_matter: number;
   rate: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SiloCapability".
+ */
+export interface SiloCapability {
+  auto_range: number;
+  launch_cooldown: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -1466,8 +1577,10 @@ export interface WorldEvent {
  */
 export interface Sample {
   entities: SampleEntity[];
+  missiles?: MissileFlight[];
   ore: OreCell[];
   players: SamplePlayer[];
+  recon?: ReconZone[];
   tick: number;
 }
 /**
@@ -1481,6 +1594,7 @@ export interface SampleEntity {
   hp: number;
   index: number;
   lifecycle: Lifecycle;
+  silo?: SiloState | null;
   tile: Tile;
 }
 /**

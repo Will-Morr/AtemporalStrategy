@@ -294,6 +294,16 @@
             "type": "boolean"
           },
           "type": "array"
+        },
+        "silo_plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiloPlan"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1153,6 +1163,30 @@
             "order"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "set_silo_plan",
+              "type": "string"
+            },
+            "plan": {
+              "$ref": "#/$defs/SiloPlan"
+            },
+            "silos": {
+              "items": {
+                "$ref": "#/$defs/EntityId"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "silos",
+            "plan"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1428,6 +1462,30 @@
             "kind",
             "factories",
             "order"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "set_silo_plan",
+              "type": "string"
+            },
+            "plan": {
+              "$ref": "#/$defs/SiloPlan"
+            },
+            "silos": {
+              "items": {
+                "$ref": "#/$defs/EntityId"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "silos",
+            "plan"
           ],
           "type": "object"
         }
@@ -2503,6 +2561,142 @@
         }
       ]
     },
+    "MissileCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "damage": {
+          "format": "double",
+          "type": "number"
+        },
+        "effect": {
+          "$ref": "#/$defs/MissileEffect"
+        },
+        "max_flight_ticks": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "radius": {
+          "format": "double",
+          "type": "number"
+        },
+        "reveal_ticks": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "speed": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "effect",
+        "radius",
+        "damage",
+        "speed",
+        "max_flight_ticks",
+        "reveal_ticks"
+      ],
+      "type": "object"
+    },
+    "MissileEffect": {
+      "enum": [
+        "satellite",
+        "cluster",
+        "tac_nuke"
+      ],
+      "type": "string"
+    },
+    "MissileFlight": {
+      "additionalProperties": false,
+      "properties": {
+        "impact_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "launch_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "origin": {
+          "$ref": "#/$defs/Tile"
+        },
+        "owner": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sequence": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silo_id": {
+          "$ref": "#/$defs/EntityId"
+        },
+        "target": {
+          "$ref": "#/$defs/Tile"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "silo_id",
+        "sequence",
+        "owner",
+        "type_key",
+        "origin",
+        "target",
+        "launch_tick",
+        "impact_tick"
+      ],
+      "type": "object"
+    },
+    "MissileLaunch": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/Tile"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type_key",
+        "target"
+      ],
+      "type": "object"
+    },
+    "MissileStock": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type_key",
+        "count"
+      ],
+      "type": "object"
+    },
     "Movement": {
       "additionalProperties": false,
       "properties": {
@@ -3029,6 +3223,56 @@
         {
           "additionalProperties": false,
           "properties": {
+            "flight": {
+              "$ref": "#/$defs/MissileFlight"
+            },
+            "kind": {
+              "const": "missile_launch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "flight"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "missile_impact",
+              "type": "string"
+            },
+            "owner": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "radius": {
+              "format": "double",
+              "type": "number"
+            },
+            "target": {
+              "$ref": "#/$defs/Tile"
+            },
+            "type_key": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "owner",
+            "type_key",
+            "target",
+            "radius"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "blocker_from": {
               "$ref": "#/$defs/Tile"
             },
@@ -3232,6 +3476,16 @@
             "$ref": "#/$defs/QueueItem"
           },
           "type": "array"
+        },
+        "silo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiloState"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "spawn_group": {
           "anyOf": [
@@ -3525,6 +3779,44 @@
       ],
       "type": "string"
     },
+    "ReconZone": {
+      "additionalProperties": false,
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/Tile"
+        },
+        "expires_at": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "owner": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "radius": {
+          "format": "double",
+          "type": "number"
+        },
+        "starts_at": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "starts_at",
+        "owner",
+        "center",
+        "radius",
+        "expires_at"
+      ],
+      "type": "object"
+    },
     "Rect": {
       "additionalProperties": false,
       "properties": {
@@ -3646,6 +3938,12 @@
           },
           "type": "array"
         },
+        "missiles": {
+          "items": {
+            "$ref": "#/$defs/MissileFlight"
+          },
+          "type": "array"
+        },
         "ore": {
           "items": {
             "$ref": "#/$defs/OreCell"
@@ -3655,6 +3953,12 @@
         "players": {
           "items": {
             "$ref": "#/$defs/SamplePlayer"
+          },
+          "type": "array"
+        },
+        "recon": {
+          "items": {
+            "$ref": "#/$defs/ReconZone"
           },
           "type": "array"
         },
@@ -3703,6 +4007,16 @@
         },
         "lifecycle": {
           "$ref": "#/$defs/Lifecycle"
+        },
+        "silo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiloState"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tile": {
           "$ref": "#/$defs/Tile"
@@ -4838,6 +5152,78 @@
         }
       ]
     },
+    "SiloCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "auto_range": {
+          "format": "double",
+          "type": "number"
+        },
+        "launch_cooldown": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "auto_range",
+        "launch_cooldown"
+      ],
+      "type": "object"
+    },
+    "SiloPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "automatic": {
+          "type": "boolean"
+        },
+        "launches": {
+          "items": {
+            "$ref": "#/$defs/MissileLaunch"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "automatic",
+        "launches"
+      ],
+      "type": "object"
+    },
+    "SiloState": {
+      "additionalProperties": false,
+      "properties": {
+        "inventory": {
+          "items": {
+            "$ref": "#/$defs/MissileStock"
+          },
+          "type": "array"
+        },
+        "next_launch_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plan": {
+          "$ref": "#/$defs/SiloPlan"
+        },
+        "sequence": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "inventory",
+        "plan",
+        "next_launch_tick",
+        "sequence"
+      ],
+      "type": "object"
+    },
     "SimRequest": {
       "additionalProperties": false,
       "properties": {
@@ -5368,6 +5754,16 @@
             }
           ]
         },
+        "missile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MissileCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "movement": {
           "anyOf": [
             {
@@ -5404,6 +5800,16 @@
         "shape": {
           "$ref": "#/$defs/Shape"
         },
+        "silo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiloCapability"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "vision": {
           "format": "double",
           "type": "number"
@@ -5434,7 +5840,8 @@
     "TypeKind": {
       "enum": [
         "unit",
-        "structure"
+        "structure",
+        "missile"
       ],
       "type": "string"
     },
@@ -5802,6 +6209,12 @@
           "minimum": 0,
           "type": "integer"
         },
+        "missiles": {
+          "items": {
+            "$ref": "#/$defs/MissileFlight"
+          },
+          "type": "array"
+        },
         "ore": {
           "items": {
             "format": "double",
@@ -5812,6 +6225,12 @@
         "players": {
           "items": {
             "$ref": "#/$defs/PlayerState"
+          },
+          "type": "array"
+        },
+        "recon": {
+          "items": {
+            "$ref": "#/$defs/ReconZone"
           },
           "type": "array"
         },
