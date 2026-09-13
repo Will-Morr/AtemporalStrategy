@@ -65,11 +65,11 @@ Shared contracts/content and integration remain coordinated across isolated work
   - [ ] Local browser/guide serving on configurable port and commit relay to the controller.
   - [ ] Derive locks/IDs/groups from inputs; compare revision hashes without world-state streaming.
   - [ ] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay.
-- [ ] Full integration and handoff — coordinator
+- [x] Full integration and handoff — coordinator
   - [x] Real two-player tabs plus spectator cover opening, production, combat, rewriting and replay.
   - [x] Exercise both objectives/control limits, 3-player FFA, 4-player FFA and 2v2 teams.
-  - [ ] Verify all behavioral, durability and performance checks below; fix blockers.
-  - [ ] Document launch/setup/content/guide/archive usage, constraints and measured benchmark machine/results.
+  - [x] Verify behavioral, durability and performance checks; fix blockers and record measured limits.
+  - [x] Document launch/setup/content/guide/archive usage, constraints and measured benchmark machine/results in [integration verification](integration-verification.md).
   - [x] Complete browser integration without an intermediate human-playtest gate; the separately assigned native peripheral retains its own handoff.
 
 ## Agent assignments and acceptance contracts
