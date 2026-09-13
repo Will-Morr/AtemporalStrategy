@@ -81,7 +81,7 @@ Add real scenarios to `client/tests/ui/*.spec.mjs` as their controls land; norma
 | Independent browser identities | Separate storage across reloads and context evidence | Real lobby storage isolation; gameplay scenarios claim slots |
 | Lobby and spectator | Claim actual slots, update username/color/team and observe all clients; spectator restrictions | Real 2–4-player lobbies, profiles and team labels |
 | Timeline and drafts | Pause at exact tick, enter actual orders, undo/replace future orders, capture selection and timeline | Slice and playtest scenarios |
-| Simultaneous commit | First commit waits, final commit publishes the same revision to both players and spectator | Slice and all objective/control variants |
+| Simultaneous commit and uncommit | First commit waits; withdrawal restores editable moves; final commit publishes the same revision to all clients | Slice, shared-browser refresh, three-player partial-round restart, and objective/control variants |
 | Groups and production | Keyboard groups, factory output membership and inherited order visible in replay | Slice, configurable ghosts and single-order variants |
 | Restore | Restart real server at same port, refresh clients and compare persisted revision/orders | Same-port resume, partial-round resume and forced cache regeneration |
 
@@ -122,3 +122,5 @@ The desktop app's built-in `@Browser` remains an optional separate connection. N
 ## Final browser handoff
 
 See [integration verification](integration-verification.md) for the tested variants, performance workload, manually inspected full-frame evidence and actual limits. `playtest.spec.mjs`, `variants.spec.mjs` and the real-lobby guide tests supplement `slice.spec.mjs`; the narrow gameplay cases exercise a scrolling command deck. Historical round metadata loads without eagerly regenerating old replay bodies; selecting a round or opening its detailed comparison loads those data on demand.
+
+The playtest-polish scenarios additionally cover shared-browser player identities, explicit rejoin, uncommit with restored undo/redo, factory loop and queue editing during construction, hidden enemy blueprints at visible tiles, hybrid history advancement/recovery, and exact per-player latest-write markers. See the current pass in [integration verification](integration-verification.md); retain earlier failed runs as diagnosis evidence.

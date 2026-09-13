@@ -1,5 +1,30 @@
 # Browser integration verification — 2026-09-13
 
+## Current player-facing polish pass
+
+Implemented in `agent/playtest-polish`, including main's map changes through `65dbfa4`. This pass adds the shorter command deck, selection stats/icons, explicit factory plans and removal controls, independent tab identities/rejoin, uncommit, player action rows and latest-write labels, 16× replay speed, hybrid mode, constructor output clearance and attack-move retaliation. Progressive replay remains queued; it is not implemented by this pass.
+
+Verification:
+
+- `scripts/check.sh` passed: workspace tests, serial simulation tests, strict Clippy, client build, Rust/JavaScript shared fixtures and generated-file drift.
+- All **30 desktop/narrow Chromium scenarios passed**, including real peripheral play, shared-browser refresh/uncommit/undo/redo, three-player partial-round restart and withdrawal, hybrid history/score restoration, multiplayer, fog, recovery and game-end replay. Full run: `artifacts/ui/2026-09-13T17-45-50.225Z-728296` in the implementation worktree.
+- The final timeline-label refinement passed **6 focused desktop/narrow scenarios** covering factory play, seeking/zoom/pan, earlier-tick rewrites and four-player lanes. Run: `artifacts/ui/2026-09-13T17-52-05.924Z-738588`. Its client build/type check passed.
+- Release thread/checkpoint/cache equivalence, Gate 2, match rules/restart, all seven Gate 5 fault cases and the inputs-only peripheral checks passed. The fault harness pins its seed and includes the extra editable-draft writes when positioning its disk-full injection.
+- A generated-map regression reproduced a one-bit JSON parse change in fractional ore. Enabling `serde_json/float_roundtrip` fixes it. The previously failing archive subsequently reproduced all three original hashes without modifying that archive.
+
+Full rendered frames were manually reviewed for construction/loop/queue state in both layouts, visible-area enemy-blueprint hiding, restored drafts/rejoin, rewritten timeline markers, four-player lanes, and colored game-end results. The uncommit trace was inspected for the claim/reload/withdraw/resubmit/rejoin sequence and recorded frames. The timeline labels now occupy a separate area so early action markers do not obscure the latest written tick. Narrow panels use scrolling for secondary controls. Selection/factory inspection checks use paused exact ticks.
+
+Representative reviewed evidence (git-ignored, retained locally):
+
+- [Factory under construction](../artifacts/review/2026-09-13-playtest-polish/factory-desktop.png), [narrow factory](../artifacts/review/2026-09-13-playtest-polish/factory-narrow.png)
+- [Restored uncommitted plan](../artifacts/review/2026-09-13-playtest-polish/uncommit-desktop.png), [explicit player rejoin](../artifacts/review/2026-09-13-playtest-polish/rejoin-desktop.png)
+- [Latest rewrite tick](../artifacts/review/2026-09-13-playtest-polish/rewritten-timeline.png), [four-player lanes](../artifacts/review/2026-09-13-playtest-polish/four-player-timeline.png)
+- [Desktop loss](../artifacts/review/2026-09-13-playtest-polish/loss-desktop.png), [narrow win](../artifacts/review/2026-09-13-playtest-polish/win-narrow.png)
+
+Core logs and the inspected uncommit trace are retained beside those frames. Full reports/videos and earlier failure evidence remain in the implementation worktree. The 2,000-live-entity controller/browser/peripheral stress matrix is still open; performance figures below are earlier measurements, not a new stress measurement for this pass. Older partial-round archives without an original `.draft` can be withdrawn but cannot restore an editable draft; the UI states that limitation.
+
+## Earlier integration baseline
+
 Implementation: `agent/ui-final`, rebased onto `agent/peripheral` (`2f125b4`) while retaining main's simulation fixes. This record covers the browser, controller/archive and native inputs-only peripheral integration.
 
 ## Reproducible checks

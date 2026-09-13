@@ -110,10 +110,12 @@ export class Renderer {
     const r = this.minimap.getBoundingClientRect();
     return { x: Math.floor(((px - r.left) / r.width) * t.width), y: Math.floor(((py - r.top) / r.height) * t.height) };
   }
+  timelineGutter(): number { return Math.min(110, this.timeline.clientWidth * .28); }
+  timelinePlotWidth(): number { return Math.max(1, this.timeline.clientWidth - this.timelineGutter()); }
   timelineTick(px: number): number {
     const r = this.timeline.getBoundingClientRect();
     const { t0, t1 } = this.game.view;
-    return t0 + ((px - r.left) / r.width) * (t1 - t0);
+    return t0 + Math.max(0, Math.min(1, (px - r.left - this.timelineGutter()) / this.timelinePlotWidth())) * (t1 - t0);
   }
 
   private terrainImage(): HTMLCanvasElement | null {
@@ -347,7 +349,8 @@ export class Renderer {
     const rev = this.game.rev();
     if (!rev) return;
     const { t0, t1 } = this.game.view;
-    const x = (tick: number) => ((tick - t0) / (t1 - t0)) * width;
+    const gutter = this.timelineGutter();
+    const x = (tick: number) => gutter + ((tick - t0) / (t1 - t0)) * (width - gutter);
     const players = this.game.config.player_count;
     const rowH = (height - 14) / players;
 
@@ -370,7 +373,7 @@ export class Renderer {
       g.fillStyle=this.game.color(p);g.fillRect(0,p*rowH,3,rowH-1);
       for(const tick of actionTicks[p])g.fillRect(x(tick)-1,p*rowH+2,2,rowH-4);
       if(recent){g.fillStyle=this.game.color(p);g.fillRect(x(recent.tick)-3,p*rowH,6,rowH-1);g.strokeStyle='#ffffff';g.strokeRect(x(recent.tick)-4,p*rowH+.5,8,rowH-2);}
-      g.font='9px system-ui';g.fillStyle='#e5f2ff';g.fillText(`P${p}`,7,p*rowH+10);
+
     }
     this.timeline.dataset.actionTicks=JSON.stringify(actionTicks);this.timeline.dataset.latestTicks=JSON.stringify(latest);
     // Ruler labels.
@@ -402,5 +405,13 @@ export class Renderer {
       g.fillStyle = '#79d7ff';
       g.fillRect(0, height - 2, (this.game.progress.tick / Math.max(1, this.game.progress.end)) * width, 2);
     }
+    // Keep player/latest-tick labels separate from dense early action markers.
+    g.fillStyle='#152331';g.fillRect(0,0,gutter-2,height);
+    g.font='9px system-ui';
+    for(let p=0;p<players;p++) {
+      g.fillStyle=this.game.color(p);g.fillRect(0,p*rowH,3,rowH-1);
+      g.fillStyle='#e5f2ff';g.fillText(`P${p} · ${latest[p] === undefined ? '—' : `tick ${latest[p]}`}`,7,p*rowH+10);
+    }
+    g.fillStyle='#9aafc1';g.font='9px system-ui';g.fillText('Latest write',7,height-3);
   }
 }

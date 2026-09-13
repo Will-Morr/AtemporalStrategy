@@ -126,12 +126,21 @@ The integrated engine supports bounded parallel intents, 2–4-player maps, alli
 
 The coordinator retains shared content/contracts and merges changes sequentially. Compact transport, exact-state reconstruction and real lock application should be settled in the slice before separate owners depend on them. These assignments do not authorize an early user playtest.
 
+## Player-facing polish
+
+- [x] Shorter command deck, readable selection stats/icons, contextual action columns and explicit factory queue, loop, priority and cancellation controls for planned, building and completed factories.
+- [x] Independent per-tab player identities, explicit saved-player rejoin, and uncommit while waiting with editable draft recovery and undo/redo; the last commitment still starts the turn immediately.
+- [x] Exact action ticks in player rows, latest-write labels, selected-unit delivery highlights, touchpad panning and visible replay speed presets through 16×.
+- [x] Hybrid scoreboard/fixed-history mode, constructor output clearance, attack-move retaliation and hidden enemy blueprints during seeks.
+- [x] Exact floating-point JSON recovery for fractional matter, with archive/peripheral hash checks and a generated-map regression.
+- [x] Integrate current main, pass the 30-scenario browser suite plus six final timeline scenarios, manually inspect full game frames and record actual verification limits.
+
 ## Queued feature work
 
 - [ ] Progressive replay: publish a viewable, completed prefix while simulation continues, and clearly show the available tick range and advancing simulation frontier. Proposed implementation constraints: keep provisional replay separate from the last fully published revision, keep planning closed until final publication, and handle worker retries/reconnects without mixing generations. These are engineering proposals to validate when implementing the feature.
 
 ## Remaining review coverage
 
-- [ ] Measure an actual 2,000-live-entity controller/browser workload at non-sample ticks, including peripheral replication, cold seeks and peak memory. The authored simulation benchmark reaches 2,000; the current end-to-end congestion scenario reaches 1,264, so it does not close this scale-specific review item.
+- [ ] Measure an actual 2,000-live-entity controller/browser workload at non-sample ticks, including peripheral replication, cold seeks and peak memory. The authored simulation benchmark reaches 2,000; the previously recorded end-to-end congestion scenario reached 1,264, so it does not close this scale-specific review item.
 
 The browser feature, multiplayer/single-order/recovery, and peripheral implementation checklists are complete. Gate 3 evidence combines the release engine one/four-thread and cold/warm/evicted-flow-cache test with real peripheral checkpoint replay, restart and revision-body eviction/regeneration. A full high-population peripheral matrix is part of the scale check above. Firefox/WebKit, touchscreen-only input and WAN conditions remain optional coverage extensions, not verified capabilities. See [integration verification](integration-verification.md) for actual checks and limits.

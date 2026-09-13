@@ -3,8 +3,8 @@
 Read these three documents for the user's requirements:
 
 1. [Original prompt](core_prompt.md) — the full initial game concept and architecture-pass request, preserved unchanged.
-2. [Gameplay and match rules](gameplay.md) — opening units, constructor mining, elimination, simultaneous turns, simulation stopping, timed mode, scoring, teams, and server launch.
-3. [Orders and visual design](controls_and_visuals.md) — future-order replacement, persistent control groups, factory inheritance, presentation, the player guide, and lobby identity.
+2. [Gameplay and match rules](gameplay.md) — opening units, constructor mining, elimination, simultaneous turns and uncommit, simulation stopping, timed/hybrid modes, scoring, teams, and server launch.
+3. [Orders and visual design](controls_and_visuals.md) — future-order replacement, persistent control groups, factory inheritance, presentation, replay viewing, the player guide, and lobby identity.
 
 The thematic documents consolidate later user input and supersede conflicting parts of the original prompt. Repeated confirmations are combined. They contain user requirements, not automatic approval of the assistant's implementation proposals in `../docs/`.
 

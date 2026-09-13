@@ -2,7 +2,7 @@
 
 > Status: a revisable assistant proposal unless explicitly attributed to the user. See [user specifications](../user_spec/README.md). Imperative wording describes the current candidate design, not a locked requirement.
 
-Use a canvas map and ordinary HTML controls around it. User visual direction: simple grayscale floor/wall terrain, with units and other gameplay objects standing out in contrast; minimalist movement, attack, projectile and explosion animations; unit health bars and facing based on last movement. Proposed art stays geometric: circles/rectangles with directional marks, small type glyphs, player colors plus owner numbers, completion bars and selection outlines. The map consumes most of the screen; bottom left shows selection, bottom center timeline, bottom right minimap. A compact top strip shows phase, selected tick, bank, readiness, score/time ratio, and simulation duration.
+Use a canvas map and ordinary HTML controls around it. User visual direction: simple grayscale floor/wall terrain, with units and other gameplay objects standing out in contrast; minimalist movement, attack, projectile and explosion animations; health bars only below full health and facing based on last movement. Proposed art stays geometric: circles/rectangles with directional marks, small type glyphs, player colors plus owner numbers, completion bars and selection outlines. The map consumes most of the screen; bottom left shows selection, bottom center timeline, bottom right minimap. A compact top strip shows phase, selected tick, bank, readiness, score/time ratio, and simulation duration.
 
 ## Planning flow
 
@@ -41,7 +41,7 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | `Q`, then roster number `1`–`7` | Append unit recipe to selected factories |
 | `L` | Toggle selected factories' loop state (mixed becomes on) |
 | Action key and map target with a factory selected | Set newborn starting orders exactly like unit orders |
-| `Delete` | Remove selected draft command or selected blueprint/queue item, depending on panel focus |
+| `Delete` | Remove selected draft command or cancel selected blueprint/construction site |
 | `Ctrl+Z` / `Ctrl+U` | Draft undo / redo |
 | `Escape` | Cancel gesture/action mode; then clear selection |
 | `Enter` | Commit/pass turn |
@@ -56,9 +56,9 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | `V` | Statistics overlay |
 | `?` | Hotkey/help overlay |
 
-Queue panel supports arrow-key navigation, Delete removal, and explicit Cancel active / Replace pending controls with keyboard shortcuts displayed in context. Number keys recall groups in the default map mode; explicit building, recipe, priority and factory-binding prompts temporarily consume digits and display the pending choice. Escape returns to default group recall. H then digit adds members; Clear group then digit empties a group; plain group recall never consumes a turn. Minimap click selects camera center and drag pans. Area/line previews show valid and blocked tiles before finalizing. Placement enumerates tiles in deterministic coordinate order; no diagonal wall gaps unless explicitly selected.
+The factory panel shows ordered unit icons and counts, active progress, loop status, priority, and the newborn order. Remove-one buttons edit waiting batches; Clear waiting queue and Cancel active have distinct actions. Tab and Enter operate these controls. Number keys recall groups in the default map mode; explicit building, recipe, priority and factory-binding prompts temporarily consume digits and display the pending choice. Escape returns to default group recall. H then digit adds members; Clear group then digit empties a group; plain group recall never consumes a turn. Minimap click selects camera center and drag pans. Area/line previews show valid and blocked tiles before finalizing. Placement enumerates tiles in deterministic coordinate order; no diagonal wall gaps unless explicitly selected.
 
-Timeline supports click-to-seek, wheel zoom, drag-to-pan on a dedicated ruler or middle button, playback speed presets 0.25×/0.5×/1×/2×/4×/8× and direct tick entry. Use a separate playhead and draft marker; hatch immutable history. Event colors also have labels/tooltips. Timeline navigation does not consume a turn. Exact-state loading at an unsampled tick shows a brief indicator and disables dependent command staging until complete.
+Timeline supports click-to-seek, wheel zoom, drag-to-pan on a dedicated ruler or middle button, playback speed presets 0.25×/0.5×/1×/2×/4×/8×/16× and direct tick entry. Use a separate playhead and draft marker; hatch immutable history. One bar has a horizontal row per player, with exact accepted action ticks and a white outline on each player’s most recently written tick; purple highlights applied orders to the current selection. Hover shows player, tick, round and order count. Timeline navigation does not consume a turn. Exact-state loading at an unsampled tick shows a brief indicator and disables dependent command staging until complete.
 
 Selection panel displays mixed capabilities honestly: each action reports which selected entities can execute it. Groups can include buildings and mobile units without issuing invalid commands to the incompatible subset. Camera controls must remain usable while simulation runs. Do not capture browser shortcuts globally.
 
@@ -86,7 +86,7 @@ Factory binding and selection membership are separate controls. Binding output t
 
 [The user’s visual requirements](../user_spec/controls_and_visuals.md#visual-design) is the visual baseline. Floor and cave walls use clearly distinct gray values with restrained detail. Proposed palette: medium-dark floor, darker rock, subtle room edges; reserve bright color/contrast for units, structures, ore, orders, selection, and combat effects. Exact colors are tuning proposals. Keep health/selection/order indicators legible over both terrain shades and distinguish teams without relying only on hue.
 
-Every unit displays current health versus maximum health, exposing missing health as an unfilled/dim segment. Proposed building health bars use the same convention; partially constructed sites retain a separate completion indicator so investment is not mistaken for damage. Selected/hovered units can show exact values, with no need for floating damage numbers.
+Damaged units and buildings display current health versus maximum health, exposing missing health as an unfilled/dim segment. Full-health bars are hidden; partially constructed sites retain a separate completion indicator so investment is not mistaken for damage. Selected/hovered units can show exact values, with no need for floating damage numbers.
 
 Units rotate toward their last successful movement direction. Interpret “last turn” as the most recent simulation movement step, so replay/scrubbing shows the orientation at the inspected tick; this is an explicit assistant interpretation of turn terminology. Retain facing while stationary, after blocked movement, and while attacking in another direction. Use a small forward notch/barrel/chevron on rotationally symmetric circles so facing is visible. Proposed initial facing points toward map center. Movement is a short linear tile-to-tile transition with minimal rotation easing, not a walking animation. Never interpolate through a wall or hide a collision; accurate tile state remains authoritative.
 
@@ -125,3 +125,5 @@ Matter is emphasized at the inspected tick, with sampled values labeled during p
 Fog currently uses Euclidean vision radius from completed friendly units/buildings and shares vision with configured teammates. This is an implementation interpretation of the vision requirement; terrain remains dimly inspectable and spectators see all. Hidden enemies cannot be selected or drawn; combat effects require visible involved tiles. Timeline and statistical inspection remain available by design.
 
 Players can uncommit while waiting for other players. The commit button becomes “Uncommit · edit my moves”; successful withdrawal restores the submitted draft, including local blueprint and queue references. The final commit closes the turn immediately. Each browser tab stores its own player token; a saved-player chooser supports explicit rejoin and switching without overwriting another tab’s identity.
+
+The command deck is approximately 30% shorter. A single selection shows unit stats and selection icons; factory output takes priority over detailed stats. Factory blueprints and construction sites expose the same queue/loop/priority controls, with explicit cancellation. Enemy unfunded blueprints stay hidden during seeks. Narrow panels retain scrolling for secondary controls.

@@ -691,20 +691,20 @@ export class Game {
     window.addEventListener('mouseup', () => { timelineDrag = null; });
     window.addEventListener('mousemove', e => {
       if (timelineDrag) {
-        const delta = (timelineDrag.x - e.clientX) / timeline.clientWidth * (timelineDrag.t1 - timelineDrag.t0);
+        const delta = (timelineDrag.x - e.clientX) / this.renderer.timelinePlotWidth() * (timelineDrag.t1 - timelineDrag.t0);
         this.view = { t0: timelineDrag.t0, t1: timelineDrag.t1 };
         this.panTimeline(delta);
       }
     });
     timeline.addEventListener('mousemove', e => {
       this.timelineCursor = this.renderer.timelineTick(e.clientX);
-      const tolerance = 4 / timeline.clientWidth * (this.view.t1 - this.view.t0);
+      const tolerance = 4 / this.renderer.timelinePlotWidth() * (this.view.t1 - this.view.t0);
       const turns = (this.experience.turns.get(this.current) ?? []).filter(t => t.commands.length && Math.abs(t.tick - this.timelineCursor) <= tolerance);
       timeline.title = `Tick ${Math.floor(this.timelineCursor)} · ${turns.map(t => `${this.name(t.player)}: ${t.commands.length} orders at tick ${t.tick} (round ${t.round})`).join(' · ')} · White outline: latest write · Purple: selected units · Shift + scroll or Drag bottom ruler to pan`;
     });
     timeline.addEventListener('wheel', e => {
       e.preventDefault();
-      if (e.shiftKey) this.panTimeline((e.deltaX || e.deltaY) / timeline.clientWidth * (this.view.t1-this.view.t0));
+      if (e.shiftKey) this.panTimeline((e.deltaX || e.deltaY) / this.renderer.timelinePlotWidth() * (this.view.t1-this.view.t0));
       else this.zoomTimeline(Math.exp(e.deltaY * .002), this.renderer.timelineTick(e.clientX));
     }, { passive: false });
     $('play').onclick = () => this.togglePlay();
