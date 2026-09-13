@@ -1,5 +1,7 @@
 # Complete browser experience handoff
 
+This document retains historical handoffs. The latest verification section and [integration record](../docs/integration-verification.md) supersede earlier coverage limits.
+
 Worktree: `../atemporal-client`, branch `agent/client`, based on main `6d760bd`.
 
 The client exposes the input map in `docs/client.md` through the keyboard and visible controls. Existing slice tests were extended in place. No simulation mechanics were changed.

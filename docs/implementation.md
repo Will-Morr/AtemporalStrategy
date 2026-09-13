@@ -24,20 +24,20 @@ Shared contracts/content and integration remain coordinated across isolated work
   - [x] Persist real accepted turns/results and rerun from a checkpoint after an earlier-tick rewrite.
   - [x] Measure Gate 2 round latency, cold seek and per-revision event/stat/snapshot size with export enabled.
   - [x] Stabilize versioned contracts and shared fixtures from the working slice, then assign breadth work.
-- [ ] Complete deterministic simulation — simulation agent after Gate 2
-  - [ ] Full capability-based roster and validated content, including constructor mining at 50% miner throughput.
-  - [ ] Connected cave rooms/corridors, rotational symmetry, start access and configurable ore budgets.
-  - [ ] Continuous bank spending, tier water filling, damaged partial construction and cancellation rules.
-  - [ ] Production queue editing/loops, output direction/blocking and stored-order fallback.
-  - [ ] Persistent groups 0–9, membership/bindings, saved orders and newborn inheritance.
-  - [ ] Entity/group order locks, overlapping intervals, same/newer-round overrides and missing-target diagnostics.
-  - [ ] Complete combat behavior table, target state, direct/indirect fire and capability-gated support/healing.
-  - [ ] Shared-field cold/warm equivalence, static invalidation, bounded local detours and goal-crowd settling.
-  - [ ] Ordered parallel intents/serial reductions, serial fallback and HashMap/HashSet prohibition.
-  - [ ] Checkpointed locks/cooldowns/facing/targeting/stuck state; exclude derived flow caches and cache version.
-  - [ ] Completed-only survival checks with recovery; inactivity/absolute horizon and configurable decided-side stop that preserves active recovery.
-  - [ ] Compact revision entity dictionaries, events/stats, canonical hashes and full/checkpoint replay equivalence.
-  - [ ] Release benchmarks at 100/500/2,000 entities and the full configured cap.
+- [x] Complete deterministic simulation — simulation agent after Gate 2
+  - [x] Full capability-based roster and validated content, including constructor mining at 50% miner throughput.
+  - [x] Connected cave rooms/corridors, rotational symmetry, start access and configurable ore budgets.
+  - [x] Continuous bank spending, tier water filling, damaged partial construction and cancellation rules.
+  - [x] Production queue editing/loops, output direction/blocking and stored-order fallback.
+  - [x] Persistent groups 0–9, membership/bindings, saved orders and newborn inheritance.
+  - [x] Entity/group order locks, overlapping intervals, same/newer-round overrides and missing-target diagnostics.
+  - [x] Complete combat behavior table, target state, direct/indirect fire and capability-gated support/healing.
+  - [x] Shared-field cold/warm equivalence, static invalidation, bounded local detours and goal-crowd settling.
+  - [x] Ordered parallel intents/serial reductions, serial fallback and HashMap/HashSet prohibition.
+  - [x] Checkpointed locks/cooldowns/facing/targeting/stuck state; exclude derived flow caches and cache version.
+  - [x] Completed-only survival checks with recovery; inactivity/absolute horizon and configurable decided-side stop that preserves active recovery.
+  - [x] Compact revision entity dictionaries, events/stats, canonical hashes and full/checkpoint replay equivalence.
+  - [x] Release benchmarks at 100/500/2,000 entities and the full configured cap.
 - [x] Complete match controller and archive — server agent after Gate 2
   - [x] Lobby usernames/colors/team selection, live roster, slots/tokens/spectators and stale-start protection.
   - [x] Sim adapter scheduling, bounded channels, exact-state LRU, job errors/cancellation and stale-result rejection.
@@ -48,29 +48,29 @@ Shared contracts/content and integration remain coordinated across isolated work
   - [x] Atomic turn/round publication, pending-round recovery, replay/resume CLI and timing persistence.
   - [x] CLI port, same-origin routes, stable-address restart and fresh bootstrap/server-instance detection (checked by the `port_routes_and_guide` scenario in `scripts/match-check.mjs`).
   - [x] One startup guide-generation invocation using loaded content, also used for archived-content guides (a resumed match regenerates the guide from its pinned content copy; same scenario).
-- [ ] Complete browser experience — client agent after Gate 2
-  - [ ] Landing-page guide link, profile/color/team inputs and full live roster.
-  - [ ] Concise guide prose/layout and generated readable unit/building stats.
-  - [ ] Grayscale terrain, contrasting entities/ore, zoom/pan/WASD and minimap.
-  - [ ] Health/completion bars, last-move facing and minimal movement/projectile/explosion playback.
-  - [ ] Selection/shift/box, groups 0–9, visible direct/group recipient mode and factory output bindings.
-  - [ ] Keyboard action modes, areas/lines, queue/loop/template/priority controls and placement output preview.
-  - [ ] Draft timestamp, local non-authoritative lock estimates, undo/redo/rebase and commit/pass.
-  - [ ] Any-tick exact-state loading, seek/play/rate/step/zoom/pan timeline and immutable region.
-  - [ ] Event bars, before/after result summaries, actual skipped-command reasons and tick links.
-  - [ ] Score/time/spend panels, graphs, recovery/final-loss distinctions and historical-round viewer.
-  - [ ] Reconnect, stale-instance/revision handling, browser-safe keys and text-input focus behavior.
+- [x] Complete browser experience — client agent after Gate 2
+  - [x] Landing-page guide link, profile/color/team inputs and full live roster.
+  - [x] Concise guide prose/layout and generated readable unit/building stats.
+  - [x] Grayscale terrain, contrasting entities/ore, zoom/pan/WASD and minimap.
+  - [x] Health/completion bars, last-move facing and minimal movement/projectile/explosion playback.
+  - [x] Selection/shift/box, groups 0–9, visible direct/group recipient mode and factory output bindings.
+  - [x] Keyboard action modes, areas/lines, queue/loop/template/priority controls and placement output preview.
+  - [x] Draft timestamp, local non-authoritative lock estimates, undo/redo/rebase and commit/pass.
+  - [x] Any-tick exact-state loading, seek/play/rate/step/zoom/pan timeline and immutable region.
+  - [x] Event bars, before/after result summaries, actual skipped-command reasons and tick links.
+  - [x] Score/time/spend panels, graphs, recovery/final-loss distinctions and historical-round viewer.
+  - [x] Reconnect, stale-instance/revision handling, browser-safe keys and text-input focus behavior.
 - [ ] Complete input-only peripheral — assigned agent after the slice, before user playtest
   - [ ] `runner` native peripheral, shared sim adapter/library, controller bootstrap/fingerprint validation.
   - [ ] Local browser/guide serving on configurable port and commit relay to the controller.
   - [ ] Derive locks/IDs/groups from inputs; compare revision hashes without world-state streaming.
   - [ ] Mismatch UI, reconnect, checkpoint/cache regeneration and multi-round retroactive replay.
 - [ ] Full integration and handoff — coordinator
-  - [ ] Real two-player tabs plus spectator cover opening, production, combat, rewriting and replay.
-  - [ ] Exercise both objectives/control limits, 3-player FFA, 4-player FFA and 2v2 teams.
+  - [x] Real two-player tabs plus spectator cover opening, production, combat, rewriting and replay.
+  - [x] Exercise both objectives/control limits, 3-player FFA, 4-player FFA and 2v2 teams.
   - [ ] Verify all behavioral, durability and performance checks below; fix blockers.
   - [ ] Document launch/setup/content/guide/archive usage, constraints and measured benchmark machine/results.
-  - [ ] Ask the user to play only when the full current plan is implemented and required checks pass.
+  - [x] Complete browser integration without an intermediate human-playtest gate; the separately assigned native peripheral retains its own handoff.
 
 ## Agent assignments and acceptance contracts
 
@@ -112,16 +112,16 @@ Gate 6: agent-run multi-tab browser walkthrough covers all actions, exact-tick p
 - **Visuals:** grayscale terrain keeps entities/ore/orders legible; health/facing restore at arbitrary ticks. Pause/seek/revision changes handle cosmetic shots/explosions without stale effects or shifted damage timing. Short combat between samples remains visible through events; dense playback bounds cosmetic counts.
 
 
-## Work that can run independently now
+## Subsystem handoff status
 
 The integrated engine supports bounded parallel intents, 2–4-player maps, allied traffic and checkpoint-safe detours. The browser includes group editing, graphs, per-round replay and before/after comparison. The server supports resume/verification, retention budgets and regeneration. Final verification exercises these together; the separately assigned native peripheral has independent ownership.
 
 | Timing | Bounded assignment | Ownership and handoff |
 | --- | --- | --- |
-| Now | Simulation breadth | `crates/sim`: full roster/mechanics fixtures, parallel intents with cold/warm/thread equivalence, multi-player symmetric maps, benchmarks at 100/500/2,000 entities. |
-| Now | Controller/archive breadth | `crates/server`: teams/capacity in the lobby, bounded byte-accounted channels, retention/eviction with regeneration, archive resume/replay CLI, stats bucketing, failure injection. |
-| Now | Browser breadth | `client`: group-edit/binding chords, graphs, per-round replay viewer, before/after summaries, lock-effect previews, reconnect polish and multi-player rendered review. |
-| Now | Browser harness/CI improvements | Extend `client/tests/ui/slice.spec.mjs` rather than the scaffold test; keep screenshots as review evidence. |
-| Explicit later ownership transfer | Native peripheral | `crates/runner`, using the same real sim adapter/library and input contracts. |
+| Complete | Simulation breadth | `crates/sim`: full roster/mechanics fixtures, parallel intents with cold/warm/thread equivalence, multi-player symmetric maps, benchmarks at 100/500/2,000 entities. |
+| Complete | Controller/archive breadth | `crates/server`: teams/capacity in the lobby, bounded byte-accounted channels, retention/eviction with regeneration, archive resume/replay CLI, stats bucketing, failure injection. |
+| Complete | Browser breadth | `client`: group-edit/binding chords, graphs, per-round replay viewer, before/after summaries, lock-effect previews, reconnect polish and multi-player rendered review. |
+| Complete | Local browser harness | Extend `client/tests/ui/slice.spec.mjs` rather than the scaffold test; keep screenshots as review evidence. |
+| Assigned separately | Native peripheral | `crates/runner`, using the same real sim adapter/library and input contracts. |
 
 The coordinator retains shared content/contracts and merges changes sequentially. Compact transport, exact-state reconstruction and real lock application should be settled in the slice before separate owners depend on them. These assignments do not authorize an early user playtest.

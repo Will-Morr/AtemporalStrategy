@@ -336,16 +336,22 @@ export class Game {
     return views;
   }
 
-  visibility(all = this.rawEntities()): Set<string> {
+  private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; tiles: Set<string> } | null = null;
+  visibility(all?: EntityView[]): Set<string> {
+    const sample = this.rev()?.samples.get(Math.floor(this.playhead / this.config.snapshot_interval) * this.config.snapshot_interval);
+    const nextSample = this.rev()?.samples.get((Math.floor(this.playhead / this.config.snapshot_interval) + 1) * this.config.snapshot_interval);
+    const cached = this.visionCache;
+    if (cached && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample) return cached.tiles;
     const visible = new Set<string>();
+    this.visionCache = { revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, tiles: visible };
     if (this.spectator || !this.terrain) return visible;
     const team = this.profiles[this.player!]?.profile?.team_id;
-    for (const e of all) {
+    for (const e of all ?? this.rawEntities()) {
       if (e.lifecycle !== 'complete' || (e.owner !== this.player && (!team || this.profiles[e.owner]?.profile?.team_id !== team))) continue;
       const radius = this.types.get(e.type_key)?.vision ?? 0;
       for (let y=Math.max(0,Math.ceil(e.y-radius));y<=Math.min(this.terrain.height-1,Math.floor(e.y+radius));y++)
         for (let x=Math.max(0,Math.ceil(e.x-radius));x<=Math.min(this.terrain.width-1,Math.floor(e.x+radius));x++)
-          if (Math.hypot(x-e.x,y-e.y)<=radius) visible.add(`${x},${y}`);
+          if ((x-e.x)**2+(y-e.y)**2<=radius**2) visible.add(`${x},${y}`);
     }
     return visible;
   }
@@ -964,7 +970,7 @@ export class Game {
     const body = $('selection-body');
     const views = this.selectedViews();
     if (!views.length) {
-      body.innerHTML = '<span class="muted">Nothing selected. Click or drag on the map. Press ? for hotkeys.</span>';
+      body.innerHTML = this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : '<span class="muted">Click or drag to select units.</span><p style="color:#ffe1a0"><b>Build your first units</b></p><p>Select a constructor → <b>B Build structure</b> → factory. Give the constructor <b>C Construct</b> over the blueprint.</p><p>Select the factory, even before it is built → <b>Q Build units</b>. Order a miner with <b>M Mine</b> over cyan ore to fund production.</p><a href="/guide/" target="_blank">How to play & unit reference ↗</a>';
     } else {
       const rows = views.slice(0, 12).map(v => {
         const t = this.types.get(v.type_key);

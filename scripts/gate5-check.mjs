@@ -201,11 +201,12 @@ const scenarios = {
     let server = await startServer(name, [], { ATEMPORAL_DISK_FULL_AFTER: '29' });
     const { a, b, s, round2 } = await opening(server);
     const tokens = [a.token, b.token];
+    // Discard the earlier planning announcement before sending commits; a fast failed
+    // publication may reopen the round before the final commit acknowledgement arrives.
+    s.unconsumed = s.unconsumed.filter(m => m.kind !== 'planning_opened');
     const ra = await a.sendAndWaitCommit('a2', round2.a);
     const rb = await b.sendAndWaitCommit('b2', round2.b);
     assert(ra.kind === 'commit_accepted' && rb.kind === 'commit_accepted', 'both turns durable before the disk fills');
-    // Only a planning_opened broadcast after both commits counts as the reopened round.
-    s.unconsumed = s.unconsumed.filter(m => m.kind !== 'planning_opened');
     const reopened = await s.wait('planning_opened', m => m.round === 2 && m.committed_players.length === 0);
     assert(reopened.revision === 1, 'last published revision retained');
     const matchId = matchIdOf(name);

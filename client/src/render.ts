@@ -60,12 +60,10 @@ export class Renderer {
     if (!t) return false;
     if (!this.game.spectator) {this.camera.scale=26;const e=this.game.rawEntities().find(e=>e.owner===this.game.player);if(e)this.centerOn(e.x,e.y);return true;}
     const usable = this.map.height - 84;
-    this.camera.scale = Math.max(8, Math.min(32, Math.floor(Math.min(usable / t.height, (this.map.width - 40) / t.width))));
+    this.camera.scale = Math.max(1, Math.min(32, Math.floor(Math.min(usable / t.height, (this.map.width - 40) / t.width))));
     const fits = t.height * this.camera.scale <= usable && t.width * this.camera.scale <= this.map.width;
-    if (fits) {
-      this.camera.x = t.width / 2;
-      this.camera.y = t.height / 2;
-    }
+    this.camera.x = t.width / 2;
+    this.camera.y = t.height / 2;
     return fits;
   }
   pan(dt: number): void {
@@ -83,7 +81,7 @@ export class Renderer {
   }
   zoomAt(px: number, py: number, factor: number): void {
     const before = this.worldAt(px, py);
-    this.camera.scale = Math.max(4, Math.min(64, this.camera.scale * factor));
+    this.camera.scale = Math.max(1, Math.min(64, this.camera.scale * factor));
     const after = this.worldAt(px, py);
     this.camera.x += before.x - after.x;
     this.camera.y += before.y - after.y;
@@ -170,7 +168,8 @@ export class Renderer {
     }
     const visible = this.game.visibility();
     const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
-    if (!this.game.spectator) for (let y=0;y<t.height;y++) for(let x=0;x<t.width;x++) if(!sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#080b10ed';ctx.fillRect(px,py,s+.5,s+.5); }
+    const cornerA=this.worldAt(0,64),cornerB=this.worldAt(width,height);
+    if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(!sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#080b10ed';ctx.fillRect(px,py,s+.5,s+.5); }
     const views = this.game.entities();
     const byIndex = new Map(views.map(v => [v.index, v]));
     // Combat effects from events near the playhead (presentation only).
@@ -203,7 +202,11 @@ export class Renderer {
       }
     }
     // Entities.
-    for (const v of views) this.drawEntity(ctx, v, s, byIndex);
+    for (const v of views) {
+      const [px,py]=this.screen(v.x,v.y);
+      if(px+s<0 || py+s<64 || px>width || py>height) continue;
+      this.drawEntity(ctx, v, s, byIndex);
+    }
     // Selection highlight and orders.
     for (const v of views) {
       if (!v.id || !this.game.selection.has(idKey(v.id))) continue;
