@@ -10,7 +10,7 @@
       "schema_version": 2,
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
-      "config_hash": "03b287442c23aa35dac30a775280826b193af8385c0b2c03baeb4eea83363ddd",
+      "config_hash": "e498164407c1b0145c18148eb5271fe0d7dffa5f8e6de2e12d16a293fed6928a",
       "content_hash": "f5e4aa7c7526dd54c76721c124932876726f37132fe02482638a62bb77300312"
     },
     "config": {
@@ -40,6 +40,7 @@
       },
       "max_tick": 12,
       "stall_ticks": 3,
+      "stop_when_decided": true,
       "ticks_per_second": 10,
       "starting_matter": 0.0,
       "ore_matter_per_start": 24000.0,

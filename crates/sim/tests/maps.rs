@@ -81,6 +81,15 @@ fn assert_connected_and_accessible(w: &WorldState, config: &MatchConfig) {
         (total - budget).abs() < 1e-6,
         "ore budget {total} vs {budget}"
     );
+    let sizes = clusters(w);
+    assert!(!sizes.is_empty(), "no ore clusters");
+    assert!(
+        sizes.iter().all(|s| (1..=9).contains(s)),
+        "cluster sizes {sizes:?}"
+    );
+    for e in &w.entities {
+        assert!(w.ore[idx(w, e.tile)] == 0.0, "ore under a start entity");
+    }
     // The slice walkthroughs place a factory two east and one north of each constructor.
     for player in 0..config.player_count {
         let constructor = w
@@ -88,26 +97,6 @@ fn assert_connected_and_accessible(w: &WorldState, config: &MatchConfig) {
             .iter()
             .find(|e| e.owner == player && e.type_key == "constructor")
             .unwrap();
-        let miner = w
-            .entities
-            .iter()
-            .find(|e| e.owner == player && e.type_key == "miner")
-            .unwrap();
-        let own_ore = w.ore.iter().enumerate().filter(|(i, v)| {
-            let t = Tile {
-                x: (*i % usize::from(w.terrain.width)) as u16,
-                y: (*i / usize::from(w.terrain.width)) as u16,
-            };
-            **v > 0.0
-                && ((f64::from(t.x) - f64::from(miner.tile.x)).powi(2)
-                    + (f64::from(t.y) - f64::from(miner.tile.y)).powi(2))
-                .sqrt()
-                    < 12.0
-        });
-        assert!(
-            own_ore.count() >= 9,
-            "player {player} has its own nine ore tiles"
-        );
         if player == 0 {
             let site = Tile {
                 x: constructor.tile.x + 2,
@@ -123,6 +112,38 @@ fn assert_connected_and_accessible(w: &WorldState, config: &MatchConfig) {
             );
         }
     }
+}
+
+/// Sizes of four-connected ore clusters.
+fn clusters(w: &WorldState) -> Vec<usize> {
+    let n = usize::from(w.terrain.width);
+    let mut seen = vec![false; n * n];
+    let mut sizes = vec![];
+    for start in 0..n * n {
+        if w.ore[start] <= 0.0 || seen[start] {
+            continue;
+        }
+        seen[start] = true;
+        let mut queue = VecDeque::from([start]);
+        let mut size = 0;
+        while let Some(i) = queue.pop_front() {
+            size += 1;
+            let (x, y) = ((i % n) as i32, (i / n) as i32);
+            for (dx, dy) in [(0i32, -1i32), (1, 0), (0, 1), (-1, 0)] {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx < 0 || ny < 0 || nx >= n as i32 || ny >= n as i32 {
+                    continue;
+                }
+                let j = ny as usize * n + nx as usize;
+                if w.ore[j] > 0.0 && !seen[j] {
+                    seen[j] = true;
+                    queue.push_back(j);
+                }
+            }
+        }
+        sizes.push(size);
+    }
+    sizes
 }
 
 fn assert_symmetric(w: &WorldState, quarters: u8) {
@@ -200,7 +221,24 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
         Tile { x: 4, y: 7 },
         "slice start layout retained"
     );
-    assert!(w.ore[idx(&w, Tile { x: 3, y: 10 })] > 0.0);
+    let sizes = clusters(&w);
+    assert!(sizes.len() >= 16, "scattered clusters: {sizes:?}");
+    let small = sizes.iter().filter(|s| **s <= 3).count();
+    assert!(small * 2 > sizes.len(), "weighted toward small: {sizes:?}");
+    assert!(
+        sizes.iter().any(|s| *s >= 5),
+        "some larger deposits: {sizes:?}"
+    );
+    for (i, ore) in w.ore.iter().enumerate() {
+        let (x, y) = ((i % 48) as i32, (i / 48) as i32);
+        let near_start = [(4, 4), (43, 43)]
+            .iter()
+            .any(|(ax, ay)| (x - ax).abs() <= 5 && (y - ay).abs() <= 5);
+        assert!(
+            *ore == 0.0 || !near_start,
+            "ore at ({x},{y}) is next to a start"
+        );
+    }
     let walls = w
         .terrain
         .cells

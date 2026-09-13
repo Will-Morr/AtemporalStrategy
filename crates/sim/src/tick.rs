@@ -126,6 +126,7 @@ impl Sim {
     /// in ordered slots by a bounded scoped pool (or serially below the threshold).
     fn intents(&mut self) -> Result<Vec<Intent>> {
         let n = self.state.entities.len();
+        self.index_claims();
         let mut prep: Vec<Prep> = Vec::with_capacity(n);
         for i in 0..n {
             let e = &self.state.entities[i];
@@ -266,11 +267,10 @@ impl Sim {
         if !intent.hold && intent.goal.is_none() {
             match &e.action {
                 Order::Mine { area } if def.mining.is_some() => {
-                    let here = self.idx(e.tile);
-                    if in_rect(e.tile, area) && self.state.ore[here] > 0.0 {
+                    if self.mines_here(i) {
                         intent.hold = true;
                         intent.mine = ready;
-                    } else if let Some(goal) = self.nearest_ore(e.tile, area) {
+                    } else if let Some(goal) = self.ore_target(i, area) {
                         intent.goal = Some((goal, false));
                     }
                 }
@@ -304,12 +304,73 @@ impl Sim {
         (intent, engaged)
     }
 
-    fn nearest_ore(&self, from: Tile, area: &Rect) -> Option<Tile> {
+    /// Each mining unit claims the ore tile it is heading for, or the one it stands on; the
+    /// lowest entity index wins a contested tile, so later miners target elsewhere.
+    fn index_claims(&mut self) {
+        self.claims.clear();
+        self.claims.resize(self.cells(), NONE);
+        for i in 0..self.state.entities.len() {
+            let e = &self.state.entities[i];
+            let Order::Mine { area } = &e.action else {
+                continue;
+            };
+            if e.lifecycle != Lifecycle::Complete || self.def(i).mining.is_none() {
+                continue;
+            }
+            let ore_in = |t: Tile| in_rect(t, area) && self.state.ore[self.idx(t)] > 0.0;
+            let target = e
+                .resolved_destination
+                .filter(|d| ore_in(*d))
+                .or_else(|| ore_in(e.tile).then_some(e.tile));
+            if let Some(t) = target {
+                let at = self.idx(t);
+                if self.claims[at] == NONE {
+                    self.claims[at] = i as u32;
+                }
+            }
+        }
+    }
+
+    fn claimed_by_other(&self, t: Tile, i: usize) -> bool {
+        let c = self.claims[self.idx(t)];
+        c != NONE && c != i as u32
+    }
+
+    /// Standing on unclaimed ore inside the mine area.
+    fn mines_here(&self, i: usize) -> bool {
+        let e = &self.state.entities[i];
+        let Order::Mine { area } = &e.action else {
+            return false;
+        };
+        self.def(i).mining.is_some()
+            && in_rect(e.tile, area)
+            && self.state.ore[self.idx(e.tile)] > 0.0
+            && !self.claimed_by_other(e.tile, i)
+    }
+
+    /// Keep the committed ore tile while it stays valid; otherwise the nearest unclaimed one.
+    fn ore_target(&self, i: usize, area: &Rect) -> Option<Tile> {
+        let e = &self.state.entities[i];
+        e.resolved_destination
+            .filter(|d| {
+                in_rect(*d, area)
+                    && self.state.ore[self.idx(*d)] > 0.0
+                    && self.traversable(*d)
+                    && !self.claimed_by_other(*d, i)
+            })
+            .or_else(|| self.nearest_ore(i, area))
+    }
+
+    fn nearest_ore(&self, i: usize, area: &Rect) -> Option<Tile> {
+        let from = self.state.entities[i].tile;
         let mut best: Option<(f64, Tile)> = None;
         for y in area.min.y..=area.max.y.min(self.state.terrain.height - 1) {
             for x in area.min.x..=area.max.x.min(self.state.terrain.width - 1) {
                 let t = Tile { x, y };
-                if self.state.ore[self.idx(t)] <= 0.0 || !self.traversable(t) {
+                if self.state.ore[self.idx(t)] <= 0.0
+                    || !self.traversable(t)
+                    || self.claimed_by_other(t, i)
+                {
                     continue;
                 }
                 let d = Self::dist2(from, t);
@@ -845,6 +906,7 @@ impl Sim {
             let o = o as usize;
             let blocker = &self.state.entities[o];
             let mover = &self.state.entities[i];
+            let mining_here = intents[o].hold && matches!(blocker.action, Order::Mine { .. });
             let can_yield = blocker.lifecycle == Lifecycle::Complete
                 && self.def(o).movement.is_some()
                 && !self.hostile(mover.owner, blocker.owner)
@@ -860,9 +922,10 @@ impl Sim {
                 self.state.entities[i].local_detour.clear();
                 continue;
             }
-            if blocker.goal_settled && !self.transits(i, to) {
-                // A settled ally yields only to traffic passing through, never to a mover that
-                // would rest on its cell; otherwise two goals contend for one cell forever.
+            if (blocker.goal_settled || mining_here) && !self.transits(i, to) {
+                // A settled ally or a miner holding its claimed ore tile yields only to traffic
+                // passing through, never to a mover that would rest on its cell; otherwise two
+                // goals contend for one cell forever.
                 self.fail_move(i, to);
                 continue;
             }
@@ -1263,6 +1326,31 @@ impl Sim {
         }
     }
 
+    /// Decided cutoff: at most one side can still act. A side is finished when every member has
+    /// no entities, or is eliminated with only idle entities and no future commands.
+    pub fn decided(&self) -> bool {
+        let now = self.state.tick;
+        let sides =
+            scoring::sides(self.config.player_count, &self.config.multiplayer).unwrap_or_default();
+        let can_act = |p: PlayerId| {
+            let mut own = self.state.entities.iter().filter(|e| e.owner == p);
+            if own.clone().next().is_none() {
+                return false;
+            }
+            !self.state.players[usize::from(p)].currently_eliminated
+                || own.any(|e| !matches!(e.action, Order::Idle {}))
+                || self
+                    .events
+                    .iter()
+                    .any(|t| t.player == p && t.tick >= now && !t.commands.is_empty())
+        };
+        let live = sides
+            .values()
+            .filter(|ps| ps.iter().any(|p| can_act(*p)))
+            .count();
+        live <= 1
+    }
+
     /// Inactivity cutoff: quiet through the deadline, no future command and no cooldown-only action.
     pub fn inactive(&self) -> bool {
         let now = self.state.tick;
@@ -1292,10 +1380,7 @@ impl Sim {
             {
                 return true;
             }
-            if let (Order::Mine { area }, Some(_)) = (&e.action, &def.mining)
-                && in_rect(e.tile, area)
-                && self.state.ore[self.idx(e.tile)] > 0.0
-            {
+            if self.mines_here(i) {
                 return true;
             }
             if let (Order::Support { target }, Some(h)) = (&e.action, &def.healing)

@@ -1,13 +1,18 @@
-//! Deterministic cave map and genesis world: seeded cellular-automaton rooms, start clearings
-//! with ore patches, corridors carved to the center, pocket removal and start access validation.
+//! Deterministic cave map and genesis world: seeded cellular-automaton rooms, start clearings,
+//! corridors carved to the center, pocket removal, start access validation and scattered ore
+//! clusters of one to nine tiles weighted toward small deposits.
 //! Symmetric maps are invariant under 180° rotation (2 players) or 90° rotation (4 players);
 //! asymmetric mode keeps the same start layout with unmirrored rock.
+use crate::tick::chebyshev;
 use crate::*;
 use std::collections::VecDeque;
 
 const FILL_PERCENT: u64 = 50;
 const SMOOTHING_PASSES: usize = 4;
 const START_CLEARING: i32 = 8;
+/// Map cells per ore cluster; the seed stream retries placement until this many are placed.
+const CELLS_PER_CLUSTER: usize = 96;
+const MAX_CLUSTER: usize = 9;
 
 fn mix(seed: u64, x: u64, y: u64) -> u64 {
     let mut h = seed ^ 0x9E37_79B9_7F4A_7C15;
@@ -22,7 +27,6 @@ fn mix(seed: u64, x: u64, y: u64) -> u64 {
 pub struct Start {
     pub anchor: Tile,
     pub entities: Vec<(TypeKey, Tile, Direction)>,
-    pub ore: Vec<Tile>,
 }
 
 /// Quarter turns clockwise about the square's center.
@@ -89,9 +93,6 @@ pub fn starts(size: u16, players: u8, content: &Content) -> Result<Vec<Start>> {
             .ok_or("starting roster exceeds start slots")?;
         entities.push((key.clone(), tile, Direction::Se));
     }
-    let ore: Vec<Tile> = (2..5)
-        .flat_map(|x| (9..12).map(move |y| Tile { x, y }))
-        .collect();
     Ok(start_turns(players)
         .into_iter()
         .map(|q| Start {
@@ -100,7 +101,6 @@ pub fn starts(size: u16, players: u8, content: &Content) -> Result<Vec<Start>> {
                 .iter()
                 .map(|(k, t, d)| (k.clone(), rotate(*t, size, q), rotate_direction(*d, q)))
                 .collect(),
-            ore: ore.iter().map(|t| rotate(*t, size, q)).collect(),
         })
         .collect())
 }
@@ -332,7 +332,7 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
         }
     }
     for s in starts {
-        let start_cells = s.ore.iter().chain(s.entities.iter().map(|(_, t, _)| t));
+        let start_cells = s.entities.iter().map(|(_, t, _)| t);
         for t in std::iter::once(&s.anchor).chain(start_cells) {
             if !main[grid.idx(*t)] {
                 return Err(format!(
@@ -349,6 +349,105 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
     })
 }
 
+/// Ore tiles: clusters grown from hashed seed cells on floor away from starts, each placed with
+/// its rotations, never touching another cluster. Sizes 1..=9 are weighted toward one.
+pub fn ore_tiles(config: &MatchConfig, terrain: &Terrain, starts: &[Start]) -> Vec<Tile> {
+    let size = config.map_size;
+    let n = usize::from(size);
+    let turns = symmetry_turns(config);
+    let grid = Grid {
+        size,
+        cells: terrain.cells.clone(),
+    };
+    let seed = config.seed.get() ^ 0x5DEE_CE66_D1B4_2F0D;
+    let keep_out = (i32::from(size) / 8).clamp(2, 5);
+    let allowed = |t: Tile| {
+        grid.cells[grid.idx(t)] == TerrainCell::Floor
+            && starts.iter().all(|s| {
+                chebyshev(s.anchor, t) > keep_out && s.entities.iter().all(|(_, e, _)| *e != t)
+            })
+    };
+    let mut ore = vec![false; n * n];
+    let touching = |ore: &[bool], t: Tile| {
+        (-1..=1).any(|dy| {
+            (-1..=1).any(|dx| {
+                grid.tile(i32::from(t.x) + dx, i32::from(t.y) + dy)
+                    .is_some_and(|o| ore[grid.idx(o)])
+            })
+        })
+    };
+    let target = (n * n / CELLS_PER_CLUSTER).max(turns.len());
+    let mut placed = 0;
+    let mut tiles = vec![];
+    let mut draw = 0u64;
+    let mut next = |salt: u64| {
+        draw += 1;
+        mix(seed, draw, salt)
+    };
+    for _ in 0..target * 40 {
+        if placed >= target {
+            break;
+        }
+        let head = Tile {
+            x: (next(1) % u64::from(size)) as u16,
+            y: (next(2) % u64::from(size)) as u16,
+        };
+        if !allowed(head) || touching(&ore, head) {
+            continue;
+        }
+        // Weights 9..=1 for sizes 1..=9.
+        let mut roll = (next(3) % 45) as usize;
+        let mut want = 1;
+        while roll >= MAX_CLUSTER - (want - 1) {
+            roll -= MAX_CLUSTER - (want - 1);
+            want += 1;
+        }
+        let mut cluster = vec![head];
+        while cluster.len() < want {
+            let mut frontier: Vec<Tile> = vec![];
+            for c in &cluster {
+                for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                    let Some(t) = grid.tile(i32::from(c.x) + dx, i32::from(c.y) + dy) else {
+                        continue;
+                    };
+                    if allowed(t)
+                        && !touching(&ore, t)
+                        && !cluster.contains(&t)
+                        && !frontier.contains(&t)
+                    {
+                        frontier.push(t);
+                    }
+                }
+            }
+            if frontier.is_empty() {
+                break;
+            }
+            let pick = (next(4) % frontier.len() as u64) as usize;
+            cluster.push(frontier[pick]);
+        }
+        let copies: Vec<Vec<Tile>> = turns
+            .iter()
+            .map(|q| cluster.iter().map(|t| rotate(*t, size, *q)).collect())
+            .collect();
+        let separate = copies.iter().enumerate().all(|(i, a)| {
+            copies[..i]
+                .iter()
+                .all(|b| a.iter().all(|x| b.iter().all(|y| chebyshev(*x, *y) > 1)))
+        });
+        if !separate {
+            continue;
+        }
+        for copy in copies {
+            for t in copy {
+                ore[grid.idx(t)] = true;
+                tiles.push(t);
+            }
+            placed += 1;
+        }
+    }
+    tiles
+}
+
 pub fn generate(config: &MatchConfig, content: &Content) -> Result<WorldState> {
     let content = normalize_content(content.clone())?;
     atemporal_content::validate_config(config)?;
@@ -358,11 +457,13 @@ pub fn generate(config: &MatchConfig, content: &Content) -> Result<WorldState> {
     let starts = starts(size, config.player_count, &content)?;
     let terrain = terrain(config, &starts)?;
     let mut ore = vec![0.0; n * n];
-    for s in &starts {
-        let per_tile = config.ore_matter_per_start / s.ore.len() as f64;
-        for t in &s.ore {
-            ore[idx(*t)] = per_tile;
-        }
+    let tiles = ore_tiles(config, &terrain, &starts);
+    if tiles.is_empty() {
+        return Err("no room for ore clusters".into());
+    }
+    let budget = config.ore_matter_per_start * f64::from(config.player_count);
+    for t in &tiles {
+        ore[idx(*t)] = budget / tiles.len() as f64;
     }
     let mut entities = vec![];
     for (player, s) in starts.iter().enumerate() {

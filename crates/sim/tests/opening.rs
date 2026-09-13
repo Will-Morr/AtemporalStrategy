@@ -73,6 +73,40 @@ fn run_collect(request: &SimRequest) -> (RunResult, Vec<WorldEvent>, Vec<WorldSt
     (result, events, checkpoints)
 }
 
+/// Three-by-three area around the ore tile nearest `from`.
+fn mine_area(world: &WorldState, from: Tile) -> Rect {
+    let n = usize::from(world.terrain.width);
+    let (i, _) = world
+        .ore
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| **v > 0.0)
+        .min_by_key(|(i, _)| {
+            let (x, y) = ((i % n) as i32, (i / n) as i32);
+            (x - i32::from(from.x)).pow(2) + (y - i32::from(from.y)).pow(2)
+        })
+        .unwrap();
+    let (x, y) = ((i % n) as u16, (i / n) as u16);
+    Rect {
+        min: Tile { x: x - 1, y: y - 1 },
+        max: Tile { x: x + 1, y: y + 1 },
+    }
+}
+
+fn ore_in(world: &WorldState, area: &Rect) -> f64 {
+    let n = usize::from(world.terrain.width);
+    world
+        .ore
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| {
+            let (x, y) = ((i % n) as u16, (i / n) as u16);
+            x >= area.min.x && x <= area.max.x && y >= area.min.y && y <= area.max.y
+        })
+        .map(|(_, v)| v)
+        .sum()
+}
+
 #[test]
 fn miner_factory_grunt_attack_opening() {
     let (config, content) = setup();
@@ -96,10 +130,7 @@ fn miner_factory_grunt_attack_opening() {
             Command::AssignOrder {
                 entities: vec![miner.clone()],
                 order: Order::Mine {
-                    area: Rect {
-                        min: Tile { x: 2, y: 9 },
-                        max: Tile { x: 4, y: 11 },
-                    },
+                    area: mine_area(&world, Tile { x: 4, y: 7 }),
                 },
             },
             Command::PlaceBlueprints {
@@ -232,6 +263,8 @@ fn peaceful_mining_reaches_inactivity_after_ore_exhaustion() {
     config.ore_matter_per_start = 600.0;
     let world = map::generate(&config, &content).unwrap();
     let miner = identity::genesis(0, 0).unwrap();
+    let area = mine_area(&world, Tile { x: 4, y: 7 });
+    let expected = ore_in(&world, &area);
     let events = vec![
         turn(
             1,
@@ -239,12 +272,7 @@ fn peaceful_mining_reaches_inactivity_after_ore_exhaustion() {
             0,
             vec![Command::AssignOrder {
                 entities: vec![miner],
-                order: Order::Mine {
-                    area: Rect {
-                        min: Tile { x: 2, y: 9 },
-                        max: Tile { x: 4, y: 11 },
-                    },
-                },
+                order: Order::Mine { area },
             }],
         ),
         turn(1, 1, 0, vec![]),
@@ -259,7 +287,10 @@ fn peaceful_mining_reaches_inactivity_after_ore_exhaustion() {
         start.elapsed()
     );
     assert_eq!(result.outcome.stop_reason, StopReason::Inactivity);
-    assert_eq!(result.final_state.players[0].counters.mined, 600.0);
+    assert!(
+        (result.final_state.players[0].counters.mined - expected).abs() < 1e-6,
+        "mined the whole area: {expected}"
+    );
     assert_eq!(
         result.outcome.terminal_state_tick,
         result.outcome.last_progress_tick + 1 + config.stall_ticks

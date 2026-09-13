@@ -8,6 +8,10 @@ Each player starts with a miner, constructor, and turret.
 
 Constructors can mine at 50% of the rate of a dedicated miner. The purpose is to preserve a constructor's ability to recover the player's economy and rebuild.
 
+Ore is scattered around the map in clusters of 1 to 9 tiles, weighted toward the smaller sizes, so the map allows back-and-forth play. There does not need to be a large guaranteed deposit next to the starting position (playtest decision, 2026-09-13; this supersedes the earlier fixed start patch).
+
+A miner claims the tile it is mining. Other miners sent to the same area path through or around claimed tiles instead of all converging on the closest one, so a group fills out a fillable area rather than clustering on its entry corner (playtest decision, 2026-09-13).
+
 ## Elimination and simulation outcomes
 
 A player loses if they have **no active building OR no ability to build**. Active buildings currently mean turrets and factories. No ability to build means having no constructors or factories.
@@ -37,6 +41,8 @@ Timed adjudication considers only the constructor/factory end state: the game is
 Use a configurable inactivity duration to stop dynamically based on lack of order progress or unit destruction, with an ambitious absolute tick limit as a backup.
 
 Remove the elimination-based early-stop shortcut. Continuing after elimination permits both recovery and draws when persisting units eliminate the remaining players. Do not stop just because zero or one side currently satisfies the survival checks.
+
+Playtest amendment (2026-09-13): the simulation must not keep running long after a 1v1 is effectively over. At the very least, stop when one side has literally no units remaining, or is in a losing (eliminated) state with no active or queued orders. An eliminated side that still has a unit carrying an order, or a command scheduled at a later tick, keeps the run going so recovery and mutual elimination remain possible. Applying this per side in team and FFA play is an implementation interpretation; the stop is a configurable match rule (`stop_when_decided`), on by default.
 
 The user's precise wording and reasoning were:
 

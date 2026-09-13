@@ -45,6 +45,7 @@
     },
     "max_tick": 20000,
     "stall_ticks": 300,
+    "stop_when_decided": true,
     "ticks_per_second": 10,
     "starting_matter": 200.0,
     "simulation_threads": 4,

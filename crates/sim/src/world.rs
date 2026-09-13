@@ -36,6 +36,8 @@ pub struct Sim {
     pub(crate) pending_events: Vec<WorldEvent>,
     pub(crate) activity: Vec<[u32; 5]>,
     pub(crate) acted: Vec<bool>,
+    /// Derived per tick: ore tile → lowest-index miner targeting or holding it.
+    pub(crate) claims: Vec<u32>,
     pub(crate) pending_sites: Vec<(EntityId, f64)>,
     pub(crate) progress: bool,
     pub(crate) bucket_acc: Vec<[u32; 5]>,
@@ -96,6 +98,7 @@ impl Sim {
             pending_events: vec![],
             activity: vec![[0; 5]; players],
             acted: vec![],
+            claims: vec![],
             pending_sites: vec![],
             progress: false,
             bucket_acc: vec![[0; 5]; players],
