@@ -9,10 +9,16 @@ export class Net {
   private ws!: WebSocket;
   private handlers = new Map<Kind, ((m: ServerMessage) => void)[]>();
   private waiters: Waiter[] = [];
+  private ranges = new Map<Kind, Promise<unknown>>();
   instance: string | null = null;
   bytes = 0;
+  connected = false;
+  onInstanceChange: () => void = () => {};
   onClose: () => void = () => {};
 
+  constructor() {
+    window.addEventListener('offline', () => { this.connected = false; this.ws?.close(); this.onClose(); });
+  }
   connect(): Promise<void> {
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
     this.ws = new WebSocket(url);
@@ -21,7 +27,9 @@ export class Net {
       this.bytes += text.length;
       const envelope: ServerEnvelope = JSON.parse(text);
       if (this.instance && envelope.server_instance_id !== this.instance) {
-        this.onClose();
+        this.connected = false;
+        this.onInstanceChange();
+        this.ws.close();
         return;
       }
       this.instance = envelope.server_instance_id;
@@ -34,12 +42,13 @@ export class Net {
       for (const handler of this.handlers.get(message.kind) ?? []) handler(message);
     };
     this.ws.onclose = () => {
+      this.connected = false;
       for (const w of this.waiters) w.reject(new Error('connection closed'));
       this.waiters = [];
       this.onClose();
     };
     return new Promise((resolve, reject) => {
-      this.ws.onopen = () => resolve();
+      this.ws.onopen = () => { this.connected = true; resolve(); };
       this.ws.onerror = () => reject(new Error('cannot connect'));
     });
   }
@@ -49,9 +58,19 @@ export class Net {
     this.handlers.set(kind, list);
   }
   send(message: ClientMessage): void {
+    if (!this.connected) return;
     this.ws.send(JSON.stringify({ schema_version: 2, message }));
   }
   request<K extends Kind>(message: ClientMessage, kind: K, test: (m: Of<K>) => boolean = () => true, timeoutMs = 60000): Promise<Of<K>> {
+    // These replies have no range/request ID: serialize them so responses cannot be
+    // mistaken for a different chunk requested concurrently by playback or inspection.
+    if (!['events','stats_range','commands','snapshot_range'].includes(kind)) return this.performRequest(message,kind,test,timeoutMs);
+    const pending = (this.ranges.get(kind) ?? Promise.resolve()).catch(() => {}).then(() => this.performRequest(message,kind,test,timeoutMs));
+    this.ranges.set(kind,pending);
+    return pending;
+  }
+  private performRequest<K extends Kind>(message: ClientMessage, kind: K, test: (m: Of<K>) => boolean = () => true, timeoutMs = 60000): Promise<Of<K>> {
+    if (!this.connected) return Promise.reject(new Error('Disconnected'));
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
         test: m => (m.kind === kind && test(m as Of<K>)) || m.kind === 'commit_rejected',
@@ -60,7 +79,7 @@ export class Net {
           if (m.kind === kind) resolve(m as Of<K>);
           else reject(new Error((m as Of<'commit_rejected'>).message));
         },
-        reject,
+        reject: error => { clearTimeout(timer); reject(error); },
       };
       const timer = setTimeout(() => {
         this.waiters.splice(this.waiters.indexOf(waiter), 1);

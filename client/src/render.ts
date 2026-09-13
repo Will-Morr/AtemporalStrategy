@@ -88,7 +88,10 @@ export class Renderer {
     this.clamp();
   }
   cycleOutput(): void {
-    this.outputDirection = OUTPUTS[(OUTPUTS.indexOf(this.outputDirection) + 1) % OUTPUTS.length];
+    for (let i=0;i<4;i++) {
+      this.outputDirection = OUTPUTS[(OUTPUTS.indexOf(this.outputDirection) + 1) % OUTPUTS.length];
+      if (!this.game.hover || this.game.validPlacement(this.game.hover,true)) break;
+    }
   }
   worldAt(px: number, py: number): { x: number; y: number } {
     return { x: (px - this.map.width / 2) / this.camera.scale + this.camera.x, y: (py - this.map.height / 2) / this.camera.scale + this.camera.y };
@@ -255,17 +258,21 @@ export class Renderer {
     if (this.game.mode.kind === 'place' && this.game.hover) {
       const h = this.game.hover;
       const [px, py] = this.screen(h.x, h.y);
-      ctx.strokeStyle = t.cells[h.y * t.width + h.x] === 'floor' ? '#ffffff' : '#ff5252';
+      ctx.strokeStyle = this.game.validPlacement(h,!!this.game.types.get(this.game.mode.type_key)?.production) ? '#ffffff' : '#ff5252';
       ctx.strokeRect(px + 1, py + 1, s - 2, s - 2);
       if (this.game.types.get(this.game.mode.type_key)?.production) {
         const [dx, dy] = OFFSET[this.outputDirection];
         const [qx, qy] = this.screen(h.x + dx, h.y + dy);
-        ctx.strokeStyle = '#81c784';
+        ctx.strokeStyle = this.game.validPlacement(h,true) ? '#81c784' : '#ff5252';
         ctx.strokeRect(qx + 3, qy + 3, s - 6, s - 6);
+        ctx.beginPath();ctx.moveTo(px+s/2,py+s/2);ctx.lineTo(qx+s/2,qy+s/2);ctx.stroke();
       }
     }
     // Drag rectangle.
     const d = this.game.drag;
+    if (d && this.game.mode.kind === 'place') {
+      for (const tile of this.game.placementTiles(this.tileAt(d.x0,d.y0),this.tileAt(d.x1,d.y1))) { const [x,y]=this.screen(tile.x,tile.y); ctx.strokeStyle=this.game.validPlacement(tile,false)?'#ffca28':'#ff5252';ctx.strokeRect(x+1,y+1,s-2,s-2); }
+    }
     if (d) {
       ctx.strokeStyle = this.game.mode.kind === 'area' ? '#ffca28' : '#ffffff';
       ctx.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0));
@@ -278,6 +285,8 @@ export class Renderer {
     const def = this.game.types.get(v.type_key);
     const [px, py] = this.screen(v.x, v.y);
     const color = this.game.color(v.owner);
+    const team = this.game.profiles[v.owner]?.profile?.team_id;
+    if (team) { ctx.strokeStyle=color;ctx.strokeRect(px-2,py-2,s+4,s+4); } 
     ctx.fillStyle = color;
     ctx.globalAlpha = v.lifecycle === 'site' ? 0.45 : 1;
     if (def?.kind === 'structure') {
@@ -303,12 +312,16 @@ export class Renderer {
       ctx.fillText(v.type_key[0], px + s * 0.38, py + s * 0.62);
     }
     ctx.globalAlpha = 1;
+    if (s >= 16) {ctx.fillStyle='#fff';ctx.font='8px system-ui';ctx.fillText(String(v.owner),px+s-6,py+s-1);}
     // Health bar: filled versus dim segment; sites show completion instead.
     const frac = Math.max(0, Math.min(1, v.hp / v.maxHp));
     ctx.fillStyle = '#0008';
     ctx.fillRect(px + 1, py - 3, s - 2, 3);
     ctx.fillStyle = v.lifecycle === 'site' ? '#ffca28' : frac > 0.5 ? '#66bb6a' : frac > 0.25 ? '#ffa726' : '#ef5350';
     ctx.fillRect(px + 1, py - 3, (s - 2) * (v.lifecycle === 'site' ? Math.min(1, v.maxHp / (def?.max_hp ?? 1)) : frac), 3);
+    if (v.lifecycle === 'site') {
+      ctx.fillStyle='#0008';ctx.fillRect(px+1,py-7,s-2,3);ctx.fillStyle=frac>.5?'#66bb6a':'#ef5350';ctx.fillRect(px+1,py-7,(s-2)*frac,3);
+    }
     if (v.engaged !== null && byIndex.has(v.engaged) && s >= 10) {
       const target = byIndex.get(v.engaged)!;
       const [tx, ty] = this.screen(target.x + 0.5, target.y + 0.5);
@@ -359,7 +372,10 @@ export class Renderer {
     // Immutable history hatch.
     if (this.game.editableFrom > 0) {
       g.fillStyle = '#ffffff12';
-      g.fillRect(0, 0, x(this.game.editableFrom), height);
+      const edge = Math.max(0,Math.min(width,x(this.game.editableFrom)));
+      g.fillRect(0, 0, edge, height);
+      g.save();g.beginPath();g.rect(0,0,edge,height);g.clip();g.strokeStyle='#aaa5';
+      for(let hx=-height;hx<edge;hx+=10){g.beginPath();g.moveTo(hx,0);g.lineTo(hx+height,height);g.stroke();}g.restore();
     }
     for (const b of rev.timeline) {
       const bx = x(b.from_tick), bw = Math.max(1, x(b.to_tick_exclusive) - bx);
@@ -381,7 +397,8 @@ export class Renderer {
     // Draft marker and playhead.
     if (this.game.draft.tick !== null) {
       g.fillStyle = '#ffca28';
-      g.fillRect(x(this.game.draft.tick) - 1, 0, 2, height);
+      g.fillRect(x(this.game.draft.tick) - 3, 0, 6, 7);
+      g.save();g.setLineDash([3,3]);g.strokeStyle='#ffca28';g.beginPath();g.moveTo(x(this.game.draft.tick),0);g.lineTo(x(this.game.draft.tick),height);g.stroke();g.restore();
     }
     g.fillStyle = '#ffffff';
     g.fillRect(x(this.game.playhead) - 1, 0, 2, height);

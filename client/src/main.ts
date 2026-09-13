@@ -4,14 +4,34 @@ import { Game } from './game';
 
 const status = document.getElementById('status') as HTMLParagraphElement;
 const net = new Net();
-net.onClose = () => {
-  status.textContent = 'Disconnected. Refresh to reconnect to the current server.';
-  const toast = document.getElementById('toast');
-  if (toast) {
-    toast.textContent = 'Connection lost. Refresh the page to reconnect.';
-    toast.classList.add('active');
-  }
+let game: Game | null = null;
+let stale = false;
+let reconnecting = false;
+const connection = document.createElement('div'); connection.id = 'connection'; document.body.append(connection);
+const showConnection = (message: string) => {
+  connection.replaceChildren(document.createTextNode(message));
+  const reload = document.createElement('button'); reload.textContent = 'Reload current server'; reload.onclick = () => location.reload(); connection.append(reload);
+  connection.hidden = false;
 };
+net.onInstanceChange = () => { stale = true; showConnection('Server restarted. Reload to obtain its current match and guide. '); };
+net.onClose = () => {
+  game?.updatePanels();
+  if (stale || reconnecting) return;
+  showConnection('Disconnected. Reconnecting; your view and draft are retained. ');
+  reconnecting = true;
+  window.setTimeout(async () => {
+    try {
+      if (!navigator.onLine) return;
+      await net.connect();
+      const w = await net.request({kind:'hello',protocol_version:2,last_revision:game?.latest ?? null,slot_token:localStorage.getItem('atemporal-slot-token')},'welcome');
+      status.textContent = `Connected · ${w.phase}`;
+      if (!stale) connection.hidden = true;
+      game?.updatePanels();
+    } catch { /* Retry while the same server is unavailable. */ }
+    finally { reconnecting = false; if (!net.connected && !stale) net.onClose(); }
+  }, 1000);
+};
+connection.hidden = true;
 
 async function boot(): Promise<void> {
   try {
@@ -35,7 +55,7 @@ async function boot(): Promise<void> {
   }
   status.textContent = `Connected · ${w.config.player_count} players · ${w.phase}`;
   const { session: settled, lobby } = await runLobby(net, w.config, w.lobby, w.phase, session);
-  const game = new Game(net, w.config, settled, lobby);
+  game = new Game(net, w.config, settled, lobby);
   // Debug/test hook: agent-run browser checks read state through it; never used by gameplay code.
   (window as unknown as { atemporal: Game }).atemporal = game;
   await game.start();
@@ -43,4 +63,4 @@ async function boot(): Promise<void> {
   net.send({ kind: 'hello', protocol_version: 2, last_revision: null, slot_token: settled.token });
 }
 
-void boot();
+void boot().catch(e => showConnection(`Connection setup failed: ${(e as Error).message} `));

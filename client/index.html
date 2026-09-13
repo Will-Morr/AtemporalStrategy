@@ -43,10 +43,16 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #toast{position:absolute;left:50%;bottom:15.5rem;pointer-events:none;transform:translateX(-50%);background:#402a12;border:1px solid #a5682a;padding:.4rem .8rem;border-radius:4px;font-size:.85rem;display:none;max-width:40rem}
 #toast.active{display:block}
 .muted{color:var(--dim)}
+#actions{display:flex;flex-wrap:wrap;gap:3px}#actions button{font-size:11px;padding:2px 5px}
+#recipient{color:#ffda70;font-weight:600;margin-bottom:5px}#group-list,#queue{display:grid;gap:3px}#group-list button,#queue button{text-align:left;font-size:11px;padding:3px}
+#lock-preview{color:#b8bbc8;font-size:11px;margin-top:8px}#replay{position:absolute;top:5rem;right:.5rem;max-width:25rem;max-height:55vh;overflow:auto;background:#1e1e24f5;border:1px solid var(--edge);border-radius:6px;padding:8px;font-size:12px}#replay[open]{z-index:4}#replay button{font-size:11px}#accepted-inputs>div{padding:5px 0;border-top:1px solid var(--edge)}#rewrite-summary{color:#ffda70;margin:8px 0}
+.overlay{display:none;position:absolute;z-index:8;left:10%;top:10%;width:80%;max-height:75vh;overflow:auto;background:#202027;border:1px solid #666;padding:20px;border-radius:8px}.overlay.active{display:block}#graph{width:100%;height:auto}#statistics h2{margin:5px 0}#statistics p{font-size:12px}#close-stats{float:right}#stop-archive{position:absolute;right:.5rem;bottom:16rem;font-size:10px}#result{max-height:3rem;overflow:hidden}#result:hover{max-height:14rem;overflow:auto;pointer-events:auto}#top{height:auto;min-height:2.1rem;flex-wrap:wrap;gap:3px 12px;padding:4px 10px}#panels{grid-template-columns:20rem 1fr 18rem}#panels>div{height:17rem}#toast{bottom:18rem}#stop-archive{bottom:18rem}#mode{top:3rem;z-index:5}#help{z-index:9;width:30rem}#transport{gap:3px}#transport button{font-size:11px}#timeline-wrap{min-width:0}#timeline{flex-shrink:0}
+@media(max-width:800px){#panels{grid-template-columns:1fr 1fr}#panels>div{height:12rem}#timeline-wrap{grid-column:1 / -1;grid-row:1}#panels{gap:3px;padding:3px}#selection{min-width:0}#result{display:none}#top{font-size:10px}#replay{top:4rem;max-width:65vw}#mode{max-width:90%;font-size:11px}#help{width:90vw}#stop-archive{bottom:25rem}#toast{bottom:25rem}.overlay{left:2%;width:96%;top:5%}}
+#connection{position:fixed;z-index:20;top:0;left:0;right:0;padding:12px;background:#503518;color:#fff}#connection button{margin-left:10px}
 </style></head><body>
 <section id="lobby">
   <h1>Atemporal Strategy</h1>
-  <p><a href="/guide/" id="guide-link">How to play / Unit reference</a></p>
+  <p><a href="/guide/" id="guide-link" target="_blank">How to play / Unit reference</a></p>
   <p id="rules"></p>
   <div class="row">
     <label>Username <input id="username" maxlength="24" placeholder="your name"></label>
@@ -63,7 +69,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
   <p id="status" class="muted">Connecting…</p>
 </section>
 <section id="game">
-  <canvas id="map"></canvas>
+  <canvas id="map" tabindex="0" aria-label="Battlefield"></canvas>
   <div id="top"><span id="top-phase"></span><span id="top-tick"></span><span id="top-bank"></span><span id="top-score"></span><span id="top-sim"></span><span id="top-exact"></span></div>
   <div id="mode"></div>
   <div id="result"></div>

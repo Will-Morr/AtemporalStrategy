@@ -65,12 +65,21 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
     release.style.display = session.slot !== null ? '' : 'none';
     status.textContent = session.slot !== null ? `You hold slot ${session.slot}.` : phase === 'lobby' ? 'Claim a slot to play or spectate.' : 'Match in progress — spectate or refresh with your slot token.';
   };
+  const updateProfile = () => {
+    if (!session.token) return;
+    error.textContent = 'Updating profile…';
+    localStorage.setItem('atemporal-username', username.value);
+    localStorage.setItem('atemporal-color', color.value);
+    net.send({ kind:'update_lobby_profile',request_id:`profile-${Date.now()}`,slot_token:session.token,username:username.value,color:color.value,team_id:lobby.available_teams.length ? team.value : null });
+  };
+  username.onchange = updateProfile; color.onchange = updateProfile; team.onchange = updateProfile;
   render();
   const objective = config.objective.kind === 'scoreboard' ? 'Scoreboard' : 'Timed';
   document.title = `Atemporal Strategy — ${objective}`;
   return new Promise(resolve => {
     net.on('lobby_updated', m => {
       lobby = m.lobby;
+      error.textContent = '';
       render();
     });
     net.on('lobby_update_rejected', m => {
