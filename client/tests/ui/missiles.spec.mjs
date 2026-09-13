@@ -15,14 +15,15 @@ test('silo blueprint production, launch previews, satellite replay and stockpili
   await a.keyboard.press('q');await expect(a.locator('#mode-options button')).toHaveCount(3);await a.locator('#mode-options button').filter({hasText:'satellite'}).click();await a.getByRole('button',{name:'Queue cluster',exact:true}).click();await a.getByRole('button',{name:'Queue tac_nuke',exact:true}).click();
   await a.locator('.silo-production>summary').click();
   await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');
-  for(const name of ['Satellite','Cluster','Tac nuke']){await a.getByRole('button',{name:`Target ${name}`,exact:true}).click();const point=await hover(a,enemy);await expect(a.locator('#range-readout')).toContainText('ticks to hit after launch');await expect(a.locator('#range-readout')).toContainText(name);if(name==='Tac nuke')await review.capture('nuke-target-flight-time-and-area',a);await a.mouse.click(...point);}
+  const predicted={};
+  for(const name of ['Satellite','Cluster','Tac nuke']){await a.getByRole('button',{name:`Target ${name}`,exact:true}).click();const point=await hover(a,enemy);await expect(a.locator('#range-readout')).toContainText('ticks to hit after launch');await expect(a.locator('#range-readout')).toContainText(name);predicted[name.toLowerCase().replace(' ','_')]=Number((await a.locator('#range-readout').innerText()).match(/(\d+) ticks to hit/)[1]);if(name==='Tac nuke')await review.capture('nuke-target-flight-time-and-area',a);await a.mouse.click(...point);}
   await expect(a.locator('.missile-launches li')).toHaveCount(3);await a.getByRole('button',{name:'Remove launch 3',exact:true}).click();await expect(a.locator('.missile-launches li')).toHaveCount(2);
   await a.getByRole('button',{name:'Target Tac nuke',exact:true}).click();await tile(a,enemy);
   await a.getByRole('button',{name:'Auto launch: Off',exact:true}).click();await a.getByRole('button',{name:'Auto launch: On',exact:true}).click();
   await expect(a.locator('#actions [data-key="f"]')).toBeHidden();await review.capture('blueprint-missiles-and-queued-launches',a);
   await tile(a,constructor);await a.keyboard.press('c');await area(a,build);await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);
   const flights=await a.evaluate(()=>window.atemporal.revisions.get(window.atemporal.current).events.filter(e=>e.event.kind==='missile_launch').map(e=>e.event.flight));expect(flights.map(f=>f.type_key)).toEqual(['satellite','cluster','tac_nuke']);
-  for(const f of flights)expect(f.impact_tick-f.launch_tick).toBeLessThanOrEqual(30);
+  for(const f of flights){expect(f.impact_tick-f.launch_tick).toBeLessThanOrEqual(30);expect(f.impact_tick-f.launch_tick).toBe(predicted[f.type_key]);}
   const satellite=flights[0],mid=satellite.launch_tick+Math.floor((satellite.impact_tick-satellite.launch_tick)/2);
   await seek(a,mid);const position=await a.evaluate(()=>{const g=window.atemporal,f=g.missileState().missiles.find(f=>f.type_key==='satellite'),k=(g.playhead-f.launch_tick)/(f.impact_tick-f.launch_tick);return{x:Math.round(f.origin.x+(f.target.x-f.origin.x)*k),y:Math.round(f.origin.y+(f.target.y-f.origin.y)*k)}});
   expect(await a.evaluate(t=>window.atemporal.visibility().has(`${t.x},${t.y}`),position)).toBe(true);await hover(a,position);await review.capture('satellite-moving-vision-and-flight',a);

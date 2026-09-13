@@ -3,7 +3,7 @@ import {idKey} from './game';
 import type {MissileCapability, MissileFlight, SiloPlan, Tile} from './contracts.generated';
 import {unitIcon} from './icons';
 export const missileName=(key:string)=>key==='tac_nuke'?'Tac nuke':key[0].toUpperCase()+key.slice(1);
-export const flightTicks=(a:{x:number,y:number},b:Tile,m:MissileCapability)=>Math.max(1,Math.min(m.max_flight_ticks,Math.ceil(Math.hypot(a.x-b.x,a.y-b.y)/m.speed)));
+export const flightTicks=(a:{x:number,y:number},b:Tile,m:MissileCapability)=>Math.max(1,Math.min(m.max_flight_ticks,Math.ceil(Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2)/m.speed)));
 export function flightPosition(f:MissileFlight,tick:number):Tile {const k=Math.max(0,Math.min(1,(tick-f.launch_tick)/(f.impact_tick-f.launch_tick)));return{x:f.origin.x+(f.target.x-f.origin.x)*k,y:f.origin.y+(f.target.y-f.origin.y)*k};}
 export function siloPlan(g:Game,v:EntityView):SiloPlan {
   let plan=v.settings?.silo_plan ?? (v.silo??v.exact?.production?.silo)?.plan ?? {automatic:false,launches:[]};
