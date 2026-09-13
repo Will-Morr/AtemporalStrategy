@@ -2,6 +2,7 @@
 // opening with actual mouse/keyboard input, commit, seek non-sample ticks and play back.
 // Run: ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --replays target/ui-replays' npm run ui:review --prefix client -- --grep slice --project=desktop-chromium
 import { test, expect } from './fixtures.mjs';
+import { isolatedServer } from './game-helpers.mjs';
 
 const state = page => page.evaluate(() => {
   const g = window.atemporal;
@@ -27,8 +28,8 @@ const state = page => page.evaluate(() => {
 // Pan to the tile first (as a player would with WASD/minimap) so it is not under a panel.
 const screenOf = (page, tile) => page.evaluate(t => {
   const r = window.atemporal.renderer;
-  const [x0, y0] = r.screen(t.x + 0.5, t.y + 0.5);
-  if (y0 > window.innerHeight - 260 || y0 < 50 || x0 < 0 || x0 > window.innerWidth) r.centerOn(t.x, t.y);
+  r.camera.scale = 26;
+  r.centerOn(t.x, t.y);
   const [x, y] = r.screen(t.x + 0.5, t.y + 0.5);
   return { x, y };
 }, tile);
@@ -44,7 +45,13 @@ const oreArea = page => page.evaluate(() => {
   return { min: { x: Math.min(...tiles.map(t => t.x)), y: Math.min(...tiles.map(t => t.y)) }, max: { x: Math.max(...tiles.map(t => t.x)), y: Math.max(...tiles.map(t => t.y)) } };
 });
 async function dragTiles(page, a, b) {
-  const p = await screenOf(page, a), q = await screenOf(page, b);
+  const [p, q] = await page.evaluate(([a, b]) => {
+    const r = window.atemporal.renderer;
+    // Fit both endpoints between the floating replay/minimap controls before dragging.
+    r.camera.scale = Math.min(r.camera.scale, (r.map.width-140)/(Math.abs(a.x-b.x)+4), (r.map.height-240)/(Math.abs(a.y-b.y)+4));
+    r.centerOn((a.x+b.x)/2, (a.y+b.y)/2);
+    return [a,b].map(t => {const [x,y] = r.screen(t.x+.5,t.y+.5); return {x,y};});
+  }, [a,b]);
   await page.mouse.move(p.x, p.y);
   await page.mouse.down();
   await page.mouse.move(q.x, q.y, { steps: 5 });
@@ -60,14 +67,16 @@ async function waitRevision(page, revision) {
   await expect.poll(async () => (await state(page)).exactRevision, { timeout: 30000 }).toBe(revision);
 }
 
-test('two players and a spectator play the opening, rewrite and replay', async ({ review }) => {
-  test.setTimeout(400000);
+test('two players and a spectator play the opening, rewrite and replay', async ({ review }, testInfo) => {
+  test.setTimeout(180000);
+  const server = await isolatedServer(testInfo);
+  review.afterClose(server.stop);
   const contexts = {};
   const pages = {};
   for (const name of ['player-a', 'player-b', 'spectator']) {
     contexts[name] = await review.newContext(name);
     pages[name] = await contexts[name].newPage();
-    await pages[name].goto('/');
+    await pages[name].goto(server.url);
     await expect(pages[name].locator('#status')).toContainText(/slot/);
   }
   const a = pages['player-a'], b = pages['player-b'], s = pages['spectator'];
