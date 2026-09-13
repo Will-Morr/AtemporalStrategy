@@ -27,7 +27,7 @@
 <tr><td>Q, then recipe number</td><td>Append a unit. The on-screen prompt lists the loaded recipes in number order.</td></tr>
 <tr><td>L / P, then 1–3</td><td>Toggle looping / choose high, medium or low priority.</td></tr>
 <tr><td>Select factory, then F / G / M / C / X</td><td>Set a factory’s stored attack-move, support, mine, construct or idle order using the same target gestures.</td></tr>
-<tr><td>Delete</td><td>Remove a selected draft entry, or cancel a focused blueprint or queue item. Arrow keys navigate queue buttons. Cancel active and Replace pending (empty) are also available in the factory panel.</td></tr>
+<tr><td>Delete</td><td>Delete a selected blueprint or unfinished building of any type, or remove the selected draft entry. The selection panel also has Delete selected blueprints / Cancel selected construction. Removing a draft placement removes its dependent settings; undo restores the change. Invested matter is lost when an unfinished building is cancelled. Factory queue items have their own remove controls.</td></tr>
 <tr><td>O</td><td>Cycle keep, drop all, and the configured following window. The draft shows a non-authoritative member/slot lock estimate. Actual reasons appear in the round viewer after replay.</td></tr>
 <tr><td>Ctrl+Z / Ctrl+U</td><td>Undo / redo the uncommitted draft.</td></tr>
 <tr><td>Enter / Escape</td><td>Commit or pass / cancel a gesture, then clear selection. Finish or cancel placement before committing.</td></tr>
@@ -44,3 +44,6 @@
 <p>A connection interruption preserves your view and draft while reconnecting to the same server. If the server instance has changed, use Reload current server for its current match, roster and guide. Team members share a map color; owner numbers preserve individual identity.</p>
 
 <p>Unbuilt blueprints are selectable: configure their unit queue, priority, looping, and starting order before construction. Production begins when construction completes. The matter counter follows the viewed tick. Fog of war uses your units’ vision (shared with allies); spectators see the whole battlefield. Purple timeline markers show every applied command tick for the selection. Green WIN and red LOSS describe the timeline’s final survival result; elimination can reverse during simulation, and match completion is labeled separately.</p>
+
+<p>Units start without a control group. Group numbers appear only after assignment; queued membership and priority changes appear immediately at the draft tick, including a Mixed label when the selection differs. Constructors show H/M/L for high/medium/low priority. Construction funding uses the target building’s priority. Ore is yellow until exhausted, when it becomes gray; fog darkens open tiles while walls retain their dark gray.</p>
+<p>In Statistics, choose Display → Slope (smoothed) to compare rates such as matter mined per tick. The slope uses a local linear fit over up to five adjacent samples, does not bridge missing data, and can be negative. Thinking-time slopes use rounds instead of ticks.</p>

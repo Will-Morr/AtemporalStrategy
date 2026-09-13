@@ -461,11 +461,53 @@ export class Game {
     return ghosts.length > 0;
   }
 
+  effectivePriority(v: EntityView): Priority {
+    let priority = v.settings?.priority ?? v.exact?.priority ?? 'medium';
+    if(this.current===this.latest && this.draft.tick===Math.floor(this.playhead)) for(const d of this.draft.commands) {
+      if(d.command.kind==='set_priority' && d.command.entities.some(id=>idKey(id)===idKey(v.id))) priority=d.command.priority;
+    }
+    return priority;
+  }
+
+  blueprintRef(v: EntityView): DraftItemRef | null {
+    if(v.blueprint)return v.blueprint;
+    if(v.lifecycle!=='site')return null;
+    const id=v.exact?.blueprint_id ?? this.exact?.state.blueprints.find(b=>b.site_id && idKey(b.site_id)===idKey(v.id))?.id;
+    return id ? {kind:'persistent',id} : null;
+  }
+
+  cancelSelectedBlueprints(): boolean {
+    const refs=this.selectedViews().filter(v=>this.ownSelectable(v)).map(v=>this.blueprintRef(v)).filter((r): r is DraftItemRef=>r!==null);
+    if(!refs.length)return false;
+    this.stage({kind:'cancel_blueprints',blueprint_ids:refs});
+    return true;
+  }
+
+  removeDraftCommand(index: number): void {
+    const removed=this.draft.commands[index];if(!removed)return;
+    this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});this.draft.redo=[];
+    // Removing a placement/queue append also removes its local references, never dangling them.
+    this.draft.commands=this.draft.commands.flatMap((d,i)=>{
+      if(i===index)return [];
+      const c=d.command;
+      if(c.kind==='configure_blueprints' || c.kind==='cancel_blueprints') {
+        const blueprint_ids=c.blueprint_ids.filter(ref=>ref.kind!=='draft'||ref.local_id!==removed.local_id);
+        return blueprint_ids.length ? [{...d,command:{...c,blueprint_ids}}] : [];
+      }
+      if(c.kind==='edit_production' && c.edit.kind==='remove_pending') {
+        const item_ids=c.edit.item_ids.filter(ref=>ref.kind!=='draft'||ref.local_id!==removed.local_id);
+        return item_ids.length ? [{...d,command:{...c,edit:{...c.edit,item_ids}}}] : [];
+      }
+      return [d];
+    });
+    this.draft.selected=null;if(!this.draft.commands.length)this.draft.tick=null;this.updatePanels();
+  }
+
   effectiveOrder(v: EntityView): Order | undefined {
     let order = v.exact?.production?.stored_order ?? v.exact?.action ?? v.settings?.order;
-    if (this.current === this.latest && this.draft.tick === Math.floor(this.playhead)) for (const d of this.draft.commands) {
+    if (this.current === this.latest && this.draft.tick === Math.floor(this.playhead)) for (const [index,d] of this.draft.commands.entries()) {
       const c=d.command;
-      if ((c.kind==='assign_order' && c.entities.some(id=>idKey(id)===idKey(v.id))) || (c.kind==='set_stored_order' && c.factories.some(id=>idKey(id)===idKey(v.id))) || (c.kind==='assign_group_order' && this.experience.groups().find(g=>g.id.owner===c.group.owner && g.id.slot===c.group.slot)?.members.some(id=>idKey(id)===idKey(v.id)))) order=c.order;
+      if ((c.kind==='assign_order' && c.entities.some(id=>idKey(id)===idKey(v.id))) || (c.kind==='set_stored_order' && c.factories.some(id=>idKey(id)===idKey(v.id))) || (c.kind==='assign_group_order' && this.experience.groups(index).find(g=>g.id.owner===c.group.owner && g.id.slot===c.group.slot)?.members.some(id=>idKey(id)===idKey(v.id)))) order=c.order;
     }
     return order;
   }
@@ -653,6 +695,22 @@ export class Game {
     finally { this.turnRequestPending = false; this.updatePanels(); }
   }
 
+  async checkBlueprintDraft(tick: number): Promise<void> {
+    if(!this.draft.commands.some(d=>d.command.kind==='cancel_blueprints'||d.command.kind==='configure_blueprints'))return;
+    const state=this.exact?.revision===this.current && this.exact.tick===tick ? this.exact.state :
+      (await this.net.request({kind:'get_exact_state',revision:this.current,tick},'exact_state',m=>m.revision===this.current&&m.tick===tick)).snapshot;
+    const key=(ref:DraftItemRef)=>ref.kind==='persistent'?idKey(ref.id):`${ref.local_id}:${ref.item_index}`;
+    const available=new Map(state.blueprints.filter(b=>b.owner===this.player).map(b=>[idKey(b.id),!b.site_id]));
+    for(const d of this.draft.commands){const c=d.command;
+      if(c.kind==='place_blueprints')c.tiles.forEach((_,i)=>available.set(`${d.local_id}:${i}`,true));
+      if(c.kind==='cancel_blueprints'||c.kind==='configure_blueprints')for(const ref of c.blueprint_ids){
+        const exists=available.get(key(ref));
+        if(exists===undefined || (c.kind==='configure_blueprints'&&!exists))throw new Error(`A blueprint in this plan is unavailable at tick ${tick}. Return the draft to its original tick or remove that blueprint change.`);
+        if(c.kind==='cancel_blueprints')available.delete(key(ref));
+      }
+    }
+  }
+
   async commit(): Promise<void> {
     if (!this.net.connected || this.spectator || !this.session.token || !this.phase) return;
     if (this.committed.includes(this.player ?? -1)) { await this.uncommit(); return; }
@@ -668,12 +726,13 @@ export class Game {
     const submittedRound = this.round;
     const request_id = `${this.player}-${this.round}-${Date.now()}`;
     try {
+      await this.checkBlueprintDraft(tick);
       await this.net.request({ kind: 'commit', request: { request_id, slot_token: this.session.token, draft: { based_on_revision: this.current, tick, commands: this.draft.commands } } }, 'commit_accepted', m => m.request_id === request_id);
       if (this.round === submittedRound && !this.committed.includes(this.player!)) this.committed.push(this.player!);
       this.clearDraft();
       this.toast('Turn committed. Waiting for the other players…');
     } catch (err) {
-      this.toast(`Commit rejected: ${(err as Error).message}`);
+      this.toast(`Turn not submitted. Your draft is saved. ${(err as Error).message}`);
     }
     this.turnRequestPending = false;
     this.updatePanels();
@@ -963,12 +1022,7 @@ export class Game {
         if (this.mode.kind === 'binding') { this.experience.bind(null); break; }
         if (this.experience.deleteFocused()) break;
         if (this.draft.selected !== null && this.draft.commands[this.draft.selected]) {
-          this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});
-          this.draft.redo = [];
-          this.draft.commands.splice(this.draft.selected, 1);
-          this.draft.selected = null;
-          if (!this.draft.commands.length) this.draft.tick = null;
-          this.updatePanels();
+          this.removeDraftCommand(this.draft.selected);
         }
         break;
       }
@@ -1142,6 +1196,16 @@ export class Game {
         if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
         for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}if(t.production){const details=document.createElement('details');details.innerHTML='<summary>Unit stats</summary>';details.append(stats);body.append(details);}else { body.append(stats); const order=document.createElement('div');order.className='unit-order';order.textContent=`Order: ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order); }
       } else {const label=document.createElement('strong');label.textContent=`${views.length} units selected`;body.append(label);}
+      const priorities=new Set(views.map(v=>this.effectivePriority(v)));
+      const priority=document.createElement('div');priority.id='selection-priority';priority.className='selection-value';
+      priority.dataset.value=priorities.size===1?[...priorities][0]:'mixed';
+      priority.textContent=`Priority: ${priorities.size===1?[...priorities][0]:'Mixed · '+[...priorities].join(' / ')}`;body.insertBefore(priority,icons.nextSibling);
+      const groups=this.experience.groups();
+      const memberships=views.map(v=>groups.filter(g=>g.members.some(id=>idKey(id)===idKey(v.id))).map(g=>g.id.slot).sort().join(', '));
+      if(memberships.some(Boolean)){const group=document.createElement('div');group.id='selection-groups';group.className='selection-value';group.textContent=`Groups: ${new Set(memberships).size===1?memberships[0]:'Mixed · '+[...new Set(memberships)].map(s=>s||'ungrouped').join(' / ')}`;body.insertBefore(group,priority.nextSibling);}
+      if(views.some(v=>!!this.types.get(v.type_key)?.construction)){const note=document.createElement('small');note.textContent='Construction funding uses the target building’s priority.';body.append(note);}
+      const cancellable=views.filter(v=>this.ownSelectable(v)&&this.blueprintRef(v));
+      if(cancellable.length){const cancel=document.createElement('button');cancel.id='cancel-blueprints';cancel.textContent=cancellable.some(v=>v.lifecycle==='site')?'Cancel selected construction':'Delete selected blueprints';cancel.title='Remove these plans and unfinished buildings; invested matter is lost. Undo restores an uncommitted change.';cancel.disabled=!this.canStage().ok;cancel.onclick=()=>this.cancelSelectedBlueprints();body.insertBefore(cancel,priority.nextSibling);}
     }
     // Draft panel.
     const list = $('draft-list');
@@ -1204,7 +1268,7 @@ function describe(c: DraftCommand): string {
     case 'edit_production': return `queue ${cmd.edit.kind}${'items' in cmd.edit ? ` ${cmd.edit.items.join(',')}` : ''} × ${cmd.factories.length}`;
     case 'set_queue_loop': return `loop ${cmd.enabled ? 'on' : 'off'} × ${cmd.factories.length}`;
     case 'set_stored_order': return `stored ${cmd.order.kind} × ${cmd.factories.length}`;
-    case 'configure_blueprints': return `Factory plan: ${cmd.settings.queue.length} queued · ${cmd.settings.priority} · loop ${cmd.settings.loop_enabled?'on':'off'} · ${cmd.settings.order.kind.replace('_',' ')}`;
+    case 'configure_blueprints': return `Blueprint settings: ${cmd.settings.queue.length} queued · ${cmd.settings.priority} · loop ${cmd.settings.loop_enabled?'on':'off'} · ${cmd.settings.order.kind.replace('_',' ')}`;
     case 'set_priority': return `priority ${cmd.priority} × ${cmd.entities.length}`;
     default: return cmd.kind;
   }

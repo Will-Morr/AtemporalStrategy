@@ -1,0 +1,59 @@
+import {test,expect} from './fixtures.mjs';
+import {isolatedServer,players,revision,tile,seek,area} from './game-helpers.mjs';
+
+test('blueprint deletion, queued membership and mixed priorities stay valid through commit',async({review},testInfo)=>{
+  test.setTimeout(120000);
+  const server=await isolatedServer(testInfo,c=>{c.match_defaults.max_tick=1200;});review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const units=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0).map(e=>({type:e.type_key,x:e.x,y:e.y})));
+  const constructor=units.find(e=>e.type==='constructor'),miner=units.find(e=>e.type==='miner');
+  await tile(a,constructor);await expect(a.locator('#selection-groups')).toHaveCount(0);
+  await a.keyboard.press('h');await a.keyboard.press('3');await expect(a.locator('#selection-groups')).toHaveText('Groups: 3');
+  await a.keyboard.press('Control+z');await expect(a.locator('#selection-groups')).toHaveCount(0);await a.keyboard.press('Control+u');
+  await a.keyboard.press('p');await a.keyboard.press('1');await expect(a.locator('#selection-priority')).toHaveAttribute('data-value','high');
+  const point=await a.evaluate(t=>window.atemporal.renderer.screen(t.x+.5,t.y+.5),miner);await a.keyboard.down('Shift');await a.mouse.click(...point);await a.keyboard.up('Shift');
+  await expect(a.locator('#selection-priority')).toHaveAttribute('data-value','mixed');await expect(a.locator('#selection-groups')).toContainText('Mixed');
+  await review.capture('queued-groups-and-mixed-priority',a);
+  await a.keyboard.press('p');await a.keyboard.press('3');await expect(a.locator('#selection-priority')).toHaveAttribute('data-value','low');
+  await tile(a,constructor);
+  const spots=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0],tiles=[];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+3;x++)if(g.validPlacement({x,y},true))tiles.push({x,y});return tiles;});
+  const place=async(type,pos)=>{await tile(a,constructor);await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:type}).click();await tile(a,pos);await tile(a,pos);};
+  await place('factory',spots[0]);await a.getByRole('button',{name:'Queue grunt',exact:true}).click();
+  await a.getByRole('button',{name:'Delete selected blueprints',exact:true}).click();
+  expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(false);
+  await a.keyboard.press('Control+z');expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(true);await a.keyboard.press('Control+u');
+  await place('turret',spots[1]);await expect(a.locator('#cancel-blueprints')).toBeVisible();await review.capture('turret-blueprint-delete-control',a);
+  await a.keyboard.press('Delete');
+  await place('turret',spots[2]);
+  // Removing a placement must remove its dependent settings as one undoable change.
+  await a.keyboard.press('p');await a.keyboard.press('1');
+  await a.locator('#draft-list li').filter({hasText:`place turret at ${spots[2].x},${spots[2].y}`}).click();await a.keyboard.press('Delete');
+  expect(await a.evaluate(()=>window.atemporal.draft.commands.some(d=>d.command.kind==='configure_blueprints'&&d.command.blueprint_ids.some(r=>r.kind==='draft'&&!window.atemporal.draft.commands.some(p=>p.local_id===r.local_id))))).toBe(false);
+  await a.keyboard.press('Control+z');await a.locator('#commit').click();await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');await b.locator('#commit').click();await revision(a,1);
+  await seek(a,1);await tile(a,spots[2]);await expect(a.locator('#cancel-blueprints')).toBeVisible();
+  expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0).length)).toBe(1);
+  await a.locator('#cancel-blueprints').click();await review.capture('persistent-blueprint-cancelled-in-draft',a);
+  // Rebase to a tick before this blueprint existed: keep the draft and explain locally.
+  await seek(a,0);await a.getByText('More planning tools',{exact:true}).click();await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();await a.locator('#commit').click();
+  await expect(a.locator('#toast')).toContainText('blueprint in this plan is unavailable at tick 0');
+  expect(await a.evaluate(()=>window.atemporal.committed)).not.toContain(0);
+  await seek(a,1);await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,2);
+  expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0))).toEqual([]);
+});
+
+test('depleted ore and mining slope are readable in a real replay',async({review},testInfo)=>{
+  test.setTimeout(120000);
+  const server=await isolatedServer(testInfo,c=>{c.match_defaults.max_tick=1800;c.match_defaults.stall_ticks=1800;c.match_defaults.ore_matter_per_start=200;});review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const mining=await a.evaluate(()=>{const g=window.atemporal,m=g.entities().find(e=>e.owner===0&&e.type_key==='miner');const ores=g.initialOre.flatMap((n,i)=>n>0?[{x:i%g.terrain.width,y:Math.floor(i/g.terrain.width),n}]:[]);ores.sort((a,b)=>Math.hypot(a.x-m.x,a.y-m.y)-Math.hypot(b.x-m.x,b.y-m.y));return {miner:{x:m.x,y:m.y},ore:ores[0]};});
+  await tile(a,mining.miner);await review.capture('player-colored-miner-and-gray-walls',a);await a.keyboard.press('m');await area(a,mining.ore);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await seek(a,Math.min(1000,await a.evaluate(()=>window.atemporal.availableThrough)));
+  expect(await a.evaluate(t=>window.atemporal.oreAt(t.y*window.atemporal.terrain.width+t.x),mining.ore)).toBe(0);
+  await tile(a,mining.ore);await a.keyboard.press('f');
+  const away=await a.evaluate(t=>{const g=window.atemporal;for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]]){const p={x:t.x+dx,y:t.y+dy};if(g.terrain.cells[p.y*g.terrain.width+p.x]==='floor'&&!g.entityAt(p))return p;}},mining.ore);
+  await tile(a,away);await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,1010);await tile(a,mining.ore);await review.capture('exhausted-ore-is-gray',a);
+  await a.keyboard.press('v');await a.selectOption('#metric','mined');await a.selectOption('#graph-mode','slope');await expect(a.locator('#graph-caption')).toContainText('smoothed slope / tick');
+  await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.stats.get(window.atemporal.current)?.length??0)).toBeGreaterThan(1);
+  await review.capture('smoothed-mining-rate',a);
+});

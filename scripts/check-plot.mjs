@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { build } from '../client/node_modules/esbuild/lib/main.js';
+const output=await build({entryPoints:[new URL('../client/src/plot.ts',import.meta.url).pathname],bundle:true,write:false,format:'esm'});
+const {slopePoints}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+const values=points=>slopePoints(points).map(p=>p.y);
+assert.deepEqual(values([0,1,3,6,10].map(x=>({x,y:2*x+5}))),[2,2,2,2,2]);
+assert.deepEqual(values([0,1,2].map(x=>({x,y:8-3*x}))),[-3,-3,-3]);
+assert.deepEqual(values([0,1,2].map(x=>({x,y:7}))),[0,0,0]);
+assert.deepEqual(values([{x:0,y:0},{x:1,y:2},{x:2,y:null},{x:3,y:12},{x:4,y:14}]),[2,2,null,2,2]);
+assert.deepEqual(values([{x:0,y:2}]),[null]);
+assert.deepEqual(values([{x:0,y:2},{x:0,y:3}]),[null,null]);
+console.log('Plot slopes: linear/irregular spacing, negative, flat, missing and singleton samples passed.');

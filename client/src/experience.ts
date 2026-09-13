@@ -1,3 +1,4 @@
+import { slopePoints } from './plot';
 import { unitIcon } from './icons';
 import { factoryPlan, orderLabel } from './factory';
 import type { AcceptedTurn, Command, ControlGroupState, EntityId, PlayerStats, ServerMessage, StatsSample } from './contracts.generated';
@@ -68,7 +69,7 @@ export class Experience {
     rates.value = '1'; rates.onchange = () => { g.rate = Number(rates.value); g.updatePanels(); }; speedLabel.append(rates);$('transport').append(speedLabel);
     $('transport').append(button('− Zoom', () => g.zoomTimeline(1.25)), button('+ Zoom', () => g.zoomTimeline(.8)), button('Pan ◀', () => g.panTimeline(-(g.view.t1-g.view.t0)/4)), button('Pan ▶', () => g.panTimeline((g.view.t1-g.view.t0)/4)));
     const overlay = document.createElement('div'); overlay.id = 'statistics'; overlay.className = 'overlay';
-    overlay.innerHTML = '<button id="close-stats">Close statistics (V)</button><h2>Statistics</h2><label>Metric <select id="metric"></select></label> <label>Player <select id="graph-player"></select></label> <label>Opponent <select id="graph-opponent"></select></label> <label>Window <select id="graph-window"><option value="full">Full run</option><option value="visible">Visible timeline</option></select></label><p id="graph-caption"></p><canvas id="graph" width="900" height="330"></canvas><p id="graph-hover"></p><p>Thinking time is cumulative committed time by round, separate from the live planning timer. Attrition is this player’s spend divided by the selected opponent’s spend; no spend has no defined ratio.</p>';
+    overlay.innerHTML = '<button id="close-stats">Close statistics (V)</button><h2>Statistics</h2><label>Metric <select id="metric"></select></label> <label>Player <select id="graph-player"></select></label> <label>Opponent <select id="graph-opponent"></select></label> <label>Window <select id="graph-window"><option value="full">Full run</option><option value="visible">Visible timeline</option></select></label><label>Display <select id="graph-mode"><option value="value">Value</option><option value="slope">Slope (smoothed)</option></select></label><p id="graph-caption"></p><canvas id="graph" width="900" height="330"></canvas><p id="graph-hover"></p><p>Thinking time is cumulative committed time by round, separate from the live planning timer. Attrition is this player’s spend divided by the selected opponent’s spend; no spend has no defined ratio.</p>';
     $('game').append(overlay);
     const metric = $('metric') as HTMLSelectElement;
     for (const m of metrics) metric.add(new Option(m === 'thinking' ? 'Thinking-time ratio' : m,m));
@@ -77,11 +78,12 @@ export class Experience {
       for (let p=0;p<g.config.player_count;p++) select.add(new Option(g.name(p),String(p)));
       select.value = String(id === 'graph-player' ? g.player ?? 0 : (g.player ?? 0) === 0 ? 1 : 0);
     }
-    for (const id of ['metric','graph-player','graph-opponent','graph-window']) $(id).onchange = () => { this.metric = metric.value as typeof this.metric; this.drawGraph(); };
+    for (const id of ['metric','graph-player','graph-opponent','graph-window','graph-mode']) $(id).onchange = () => { this.metric = metric.value as typeof this.metric; this.drawGraph(); };
     $('close-stats').onclick = () => overlay.classList.remove('active');
     const canvas = $('graph') as HTMLCanvasElement;
     canvas.onmousemove = e => { this.graphHover = (e.clientX-canvas.getBoundingClientRect().left)/canvas.clientWidth; this.drawGraph(); };
     canvas.onmouseleave = () => { this.graphHover = null; };
+    window.addEventListener('resize',()=>{if(overlay.classList.contains('active'))this.drawGraph();});
     $('game').append(button('Stop and archive unfinished', () => {
       if (g.session.token && g.phase) g.net.send({ kind: 'stop_and_archive', request_id: `stop-${Date.now()}`, based_on_revision: g.latest, slot_token: g.session.token });
     }));
@@ -138,11 +140,11 @@ export class Experience {
     this.g.seek(Math.min(this.g.playhead,this.g.view.t1));
     if(($('replay') as HTMLDetailsElement).open)this.loadComparison();
   }
-  groups(): ControlGroupState[] {
+  groups(through = this.g.draft.commands.length): ControlGroupState[] {
     const g = this.g;
     const groups = structuredClone(g.exact?.revision === g.current && g.exact.tick === Math.floor(g.playhead) ? g.exact.state.control_groups : []);
     if (g.draft.tick !== Math.floor(g.playhead) || g.current !== g.latest) return groups;
-    for (const d of g.draft.commands) {
+    for (const d of g.draft.commands.slice(0,through)) {
       const c = d.command;
       if (c.kind !== 'edit_group_members' && c.kind !== 'assign_group_order') continue;
       let group = groups.find(v => v.id.owner === c.group.owner && v.id.slot === c.group.slot);
@@ -164,9 +166,7 @@ export class Experience {
   deleteFocused(): boolean {
     if (this.focusDelete) { this.focusDelete(); return true; }
     if (this.g.draft.selected !== null) return false;
-    const ids = this.g.selectedViews().filter(e => e.lifecycle === 'site' && e.owner === this.g.player).map(e => e.exact?.blueprint_id).filter((id): id is EntityId => !!id);
-    if (!ids.length) return false;
-    this.g.stage({ kind:'cancel_blueprints', blueprint_ids:ids.map(id => ({kind:'persistent',id})) }); return true;
+    return this.g.cancelSelectedBlueprints();
   }
   update(): void {
     const g = this.g;
@@ -186,6 +186,7 @@ export class Experience {
         if (g.draft.tick === Math.floor(g.playhead) && g.current === g.latest) for (const d of g.draft.commands) if (d.command.kind === 'bind_factory_group' && d.command.factories.some(f => idKey(f) === idKey(e.id))) binding = d.command.group;
         return binding?.owner === this.groupOwner && binding.slot === slot;
       }).length ?? 0;
+      if(!count && !bound && !group?.latest_order)continue;
       list.append(button(`${slot}: ${count} living · ${bound} factories · ${group?.latest_order ? `${group.latest_order.order.kind} @${group.latest_order.tick}` : 'no saved order'}`, () => g.digit(slot)));
     }
     this.queue();
@@ -263,8 +264,6 @@ export class Experience {
       const recipes=document.createElement('div');recipes.className='recipe-icons';
       for(const type of g.types.get(v.type_key)?.production?.recipes ?? []){const add=button('',()=>{if(v.blueprint)configure(s=>{s.queue.push(type);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items:[type]}});});add.append(unitIcon(type,g.color(v.owner)),document.createTextNode('+'));add.setAttribute('aria-label',`Queue ${type}`);add.title=`Queue ${type} · ${g.types.get(type)?.matter_cost} matter`;add.disabled=!enabled;recipes.append(add);}card.append(recipes);
       const clear=button('Clear waiting queue',()=>{if(v.blueprint)configure(s=>{s.queue=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});});clear.disabled=!enabled||!plan.pending.length;card.append(clear);
-      const siteBlueprint = v.blueprint ?? (v.lifecycle === 'site' ? g.exact?.state.blueprints.find(b => b.site_id && idKey(b.site_id) === idKey(v.id)) : null);
-      if(siteBlueprint){const ref = 'kind' in siteBlueprint ? siteBlueprint : {kind:'persistent' as const,id:siteBlueprint.id};const cancel=button(v.lifecycle==='site'?'Cancel construction':'Cancel factory blueprint',()=>g.stage({kind:'cancel_blueprints',blueprint_ids:[ref]}));cancel.disabled=!enabled;card.append(cancel);}
       root.append(card);
     }
   }
@@ -301,6 +300,8 @@ export class Experience {
   drawGraph(): void {
     if (!$('statistics').classList.contains('active')) return;
     const g = this.g, canvas = $('graph') as HTMLCanvasElement, ctx = canvas.getContext('2d')!;
+    const width=Math.max(280,Math.floor(canvas.clientWidth)),height=280;canvas.width=width;canvas.height=height;
+    const left=60,right=width-15,bottom=height-35,plotHeight=height-60;
     const player = Number(($('graph-player') as HTMLSelectElement).value), opponent = Number(($('graph-opponent') as HTMLSelectElement).value);
     const visible = ($('graph-window') as HTMLSelectElement).value === 'visible';
     const samples = this.stats.get(g.current) ?? [];
@@ -317,15 +318,19 @@ export class Experience {
         default: return null;
       }
     };
-    const series = [player,opponent].map(owner => ({ owner, points: this.metric === 'thinking' ? [...this.rounds.values()].filter(r => r.revision <= g.current).sort((a,b) => a.round-b.round).map(r => { const own = r.time_totals.find(t => t.player_id === owner)?.total_ms ?? 0; const other = r.time_totals.find(t => t.player_id === (owner === player ? opponent : player))?.total_ms ?? 0; return {x:r.round,y:other > 0 ? own/other : null}; }) : points.map(s => ({ x:s.tick, y: s.players.find(p => p.player_id === owner) ? value(s.players.find(p => p.player_id === owner)!,s.players.find(p => p.player_id === (owner === player ? opponent : player))) : null })) }));
+    let series = [player,opponent].map(owner => ({ owner, points: this.metric === 'thinking' ? [...this.rounds.values()].filter(r => r.revision <= g.current).sort((a,b) => a.round-b.round).map(r => { const own = r.time_totals.find(t => t.player_id === owner)?.total_ms ?? 0; const other = r.time_totals.find(t => t.player_id === (owner === player ? opponent : player))?.total_ms ?? 0; return {x:r.round,y:other > 0 ? own/other : null}; }) : points.map(s => ({ x:s.tick, y: s.players.find(p => p.player_id === owner) ? value(s.players.find(p => p.player_id === owner)!,s.players.find(p => p.player_id === (owner === player ? opponent : player))) : null })) }));
     const x0 = this.metric === 'thinking' ? 0 : from, x1 = this.metric === 'thinking' ? Math.max(1,this.rounds.get(g.current)?.round ?? 1) : to;
-    const max = Math.max(1,...series.flatMap(s => s.points.map(p => p.y ?? 0)));
-    ctx.fillStyle = '#16161b'; ctx.fillRect(0,0,900,330); ctx.font = '13px system-ui';
-    for (let i=0;i<=4;i++) { const y = 290-i*65; ctx.strokeStyle = '#393944'; ctx.beginPath();ctx.moveTo(65,y);ctx.lineTo(870,y);ctx.stroke();ctx.fillStyle = '#bbb';ctx.fillText((max*i/4).toFixed(1),5,y); }
-    const px = (x:number) => 65+(x-x0)/(x1-x0)*805;
-    for (const s of series) { ctx.strokeStyle = g.color(s.owner);ctx.lineWidth = 2;ctx.beginPath();let active = false;for (const p of s.points) { if(p.y === null) {active=false;continue;} const y=290-p.y/max*260;if(active)ctx.lineTo(px(p.x),y);else ctx.moveTo(px(p.x),y);active=true;}ctx.stroke(); if (this.metric === 'thinking') for(const p of s.points) if(p.y !== null){ctx.fillStyle=g.color(s.owner);ctx.beginPath();ctx.arc(px(p.x),290-p.y/max*260,4,0,Math.PI*2);ctx.fill();} }
-    ctx.fillStyle='#ddd';ctx.fillText(`${this.metric === 'thinking' ? 'Round' : 'Tick'} ${Math.floor(x0)}`,65,318);ctx.fillText(String(Math.floor(x1)),820,318);
-    $('graph-caption').textContent = `${this.metric} · ${g.name(player)} (${g.color(player)}) / ${g.name(opponent)} (${g.color(opponent)}) · ${this.metric === 'thinking' ? series[0].points.length+' rounds' : points.length+' sampled points'}`;
-    if (this.graphHover !== null) { const x=x0+Math.max(0,Math.min(1,(this.graphHover*900-65)/805))*(x1-x0);ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(px(x),25);ctx.lineTo(px(x),290);ctx.stroke();$('graph-hover').textContent = `${this.metric === 'thinking' ? 'Round' : 'Tick'} ${Math.round(x)}: ${series.map(s => { const p=s.points.reduce<{x:number;y:number|null}|null>((best,p) => !best || Math.abs(p.x-x)<Math.abs(best.x-x)?p:best,null);return `${g.name(s.owner)} ${p?.y?.toFixed(2) ?? 'undefined (zero denominator)'}`; }).join(' · ')}`; }
+    const slope=($('graph-mode') as HTMLSelectElement).value==='slope';
+    if(slope)series=series.map(s=>({...s,points:slopePoints(s.points)}));
+    const values=series.flatMap(s=>s.points.map(p=>p.y??0));
+    const min=Math.min(0,...values),max=Math.max(slope ? .01 : 1,...values),span=max-min;
+    const py=(y:number)=>bottom-(y-min)/span*plotHeight;
+    ctx.fillStyle = '#16161b'; ctx.fillRect(0,0,width,height); ctx.font = '13px system-ui';
+    for (let i=0;i<=4;i++) { const y = bottom-i*plotHeight/4; ctx.strokeStyle = '#393944'; ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();ctx.fillStyle = '#bbb';ctx.fillText((min+span*i/4).toFixed(slope?2:1),5,y); }
+    const px = (x:number) => left+(x-x0)/(x1-x0)*(right-left);
+    for (const s of series) { ctx.strokeStyle = g.color(s.owner);ctx.lineWidth = 2;ctx.beginPath();let active = false;for (const p of s.points) { if(p.y === null) {active=false;continue;} const y=py(p.y);if(active)ctx.lineTo(px(p.x),y);else ctx.moveTo(px(p.x),y);active=true;}ctx.stroke(); if (this.metric === 'thinking') for(const p of s.points) if(p.y !== null){ctx.fillStyle=g.color(s.owner);ctx.beginPath();ctx.arc(px(p.x),py(p.y),4,0,Math.PI*2);ctx.fill();} }
+    ctx.fillStyle='#ddd';ctx.fillText(`${this.metric === 'thinking' ? 'Round' : 'Tick'} ${Math.floor(x0)}`,left,height-8);ctx.fillText(String(Math.floor(x1)),width-52,height-8);
+    $('graph-caption').textContent = `${this.metric}${slope ? ` · smoothed slope / ${this.metric==='thinking'?'round':'tick'} (up to 5 samples)` : ''} · ${g.name(player)} (${g.color(player)}) / ${g.name(opponent)} (${g.color(opponent)}) · ${this.metric === 'thinking' ? series[0].points.length+' rounds' : points.length+' sampled points'}`;
+    if (this.graphHover !== null) { const x=x0+Math.max(0,Math.min(1,(this.graphHover*width-left)/(right-left)))*(x1-x0);ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(px(x),25);ctx.lineTo(px(x),bottom);ctx.stroke();$('graph-hover').textContent = `${this.metric === 'thinking' ? 'Round' : 'Tick'} ${Math.round(x)}: ${series.map(s => { const p=s.points.reduce<{x:number;y:number|null}|null>((best,p) => !best || Math.abs(p.x-x)<Math.abs(best.x-x)?p:best,null);return `${g.name(s.owner)} ${p?.y?.toFixed(2) ?? 'unavailable'}`; }).join(' · ')}`; }
   }
 }

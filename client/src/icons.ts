@@ -17,7 +17,7 @@ export function unitIcon(type: string, color: string): SVGSVGElement {
     shape('rect',{...base,x:'7',y:'9',width:'18',height:'19'});shape('path',{d:'M5 14V3M27 14V3M10 18H22M16 12V24',stroke:'#ffe28a','stroke-width':'4'});
   } else {
     shape('path',{...base,d:type==='scout'?'M16 2L28 28H4Z':'M16 5L28 22H4Z'});
-    if(type==='miner')shape('rect',{...base,x:'8',y:'9',width:'16',height:'9',fill:'#a5f6ff'});
+    if(type==='miner')shape('rect',{...base,x:'8',y:'9',width:'16',height:'9'});
     else if(type==='grinder')for(const cx of ['9','23'])shape('circle',{...base,cx,cy:'8',r:'6',fill:'#ffb69b'});
     else shape('circle',{cx:'16',cy:'15',r:'4',fill:'#e5f5ff'});
   }

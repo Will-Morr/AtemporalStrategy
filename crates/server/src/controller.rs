@@ -1081,7 +1081,7 @@ impl Controller {
             Ok(e)
         };
         let def = |key: &str| self.content.types.iter().find(|t| t.key == key);
-        for command in commands {
+        for (command_index, command) in commands.iter().enumerate() {
             match command {
                 Command::AssignOrder { entities, order } => {
                     if entities.is_empty() {
@@ -1177,6 +1177,10 @@ impl Controller {
                                             type_key, tiles, ..
                                         } if id.birth_command.command.player == player
                                             && id.birth_command.command.round == self.round
+                                            && (id.birth_command.command.index as usize)
+                                                < command_index
+                                            && id.birth_command.target_index == 0
+                                            && id.occurrence == 0
                                             && usize::from(id.item_index) < tiles.len() =>
                                         {
                                             Some(type_key)
@@ -1201,6 +1205,17 @@ impl Controller {
                             .blueprints
                             .iter()
                             .any(|b| b.id == *id && b.owner == player)
+                            && !commands
+                                .get(id.birth_command.command.index as usize)
+                                .is_some_and(|c| {
+                                    matches!(c, Command::PlaceBlueprints { tiles, .. }
+                                    if id.birth_command.command.player == player
+                                        && id.birth_command.command.round == self.round
+                                        && (id.birth_command.command.index as usize) < command_index
+                                        && id.birth_command.target_index == 0
+                                        && id.occurrence == 0
+                                        && usize::from(id.item_index) < tiles.len())
+                                })
                         {
                             return Err("blueprint is not yours or does not exist".into());
                         }
@@ -2933,6 +2948,83 @@ pub(crate) mod tests {
         };
         assert!(events.is_empty());
     }
+    #[test]
+    fn draft_blueprints_can_be_configured_and_cancelled_without_weakening_ownership() {
+        let c = started(false, |_| {});
+        let state = c.revisions[&0].checkpoints[&0].clone();
+        let tile = state
+            .terrain
+            .cells
+            .iter()
+            .enumerate()
+            .find_map(|(i, cell)| {
+                let tile = Tile {
+                    x: (i % usize::from(state.terrain.width)) as u16,
+                    y: (i / usize::from(state.terrain.width)) as u16,
+                };
+                (*cell == TerrainCell::Floor && !state.entities.iter().any(|e| e.tile == tile))
+                    .then_some(tile)
+            })
+            .unwrap();
+        let id = EntityId {
+            birth_command: BirthCommandId {
+                command: identity::command_id(c.round, 0, 0),
+                target_index: 0,
+            },
+            item_index: 0,
+            occurrence: 0,
+        };
+        let place = Command::PlaceBlueprints {
+            type_key: "turret".into(),
+            tiles: vec![tile],
+            priority: Priority::Medium,
+            output_directions: None,
+        };
+        let configure = Command::ConfigureBlueprints {
+            blueprint_ids: vec![id.clone()],
+            settings: BlueprintSettings {
+                queue: vec![],
+                order: Order::Idle {},
+                priority: Priority::High,
+                loop_enabled: false,
+            },
+        };
+        let cancel = Command::CancelBlueprints {
+            blueprint_ids: vec![id.clone()],
+        };
+        assert!(
+            c.validate_against_state(0, &[place.clone(), configure, cancel.clone()], &state)
+                .is_ok()
+        );
+        assert!(
+            c.validate_against_state(0, std::slice::from_ref(&cancel), &state)
+                .is_err()
+        );
+        assert!(
+            c.validate_against_state(1, &[place.clone(), cancel.clone()], &state)
+                .is_err()
+        );
+        let mut missing = id.clone();
+        missing.item_index = 1;
+        assert!(
+            c.validate_against_state(
+                0,
+                &[
+                    place.clone(),
+                    Command::CancelBlueprints {
+                        blueprint_ids: vec![missing]
+                    }
+                ],
+                &state
+            )
+            .is_err()
+        );
+        assert!(
+            c.validate_against_state(0, &[cancel, place], &state)
+                .is_err()
+        );
+    }
+
     #[test]
     fn progressive_prefix_is_exact_bounded_and_invalidated_on_retry() {
         let mut c = started(false, |s| {

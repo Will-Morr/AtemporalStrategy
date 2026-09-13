@@ -12,7 +12,7 @@ Exact interval endpoints, affected command categories, and the removal represent
 
 ## Control groups
 
-Provide control groups bound to keys **0–9**. Pressing a number selects that group's units.
+Provide control groups bound to keys **0–9**. Pressing a number selects that group's units. Units start ungrouped (null); do not show group labels until assigned. Queued membership changes must appear immediately at the draft tick.
 
 Factories can be bound to a control group. All newly spawned units automatically join that group and inherit the most recent order sent to it.
 
@@ -61,6 +61,10 @@ Refresh/rejoin must visibly identify the player and preserve independent identit
 
 H adds the selection to a group; provide an explicit clear-group action. This supersedes the previous H-replace/Shift+H-add gesture.
 
+
+Blueprints of every structure type, including turrets, need a clear deletion action. Normal drafting flows must not produce invalid-blueprint commit rejections. Preview queued changes as if applied at the selected tick, including group membership and priority. Show constructor priority and distinguish a shared selection value from mixed values.
+
+Ore should be yellow; fully depleted deposits should become light gray, distinct from partly mined deposits. Fog shades open tiles only; walls retain their dark gray. Miner silhouettes must primarily show their player color. Statistics plots need a slope switch showing a lightly smoothed derivative, especially for comparing active mining rates.
 
 ## Replay during simulation
 

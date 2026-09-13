@@ -132,3 +132,12 @@ The command deck is approximately 30% shorter. A single selection shows unit sta
 ## Replay while simulation runs
 
 The browser keeps provisional data apart from published revision views. It shows a turquoise available frontier and shades the unfinished remainder, clamps seeking to completed ticks, and lets playback wait at the frontier. The result is explicitly pending; orders stay disabled. Progress updates preserve typed tick input and open inspection controls. Final publication preserves the inspected tick and replaces provisional samples with the verified replay. Refresh queries the current frontier; generation checks discard stale responses after retry or publication. Sample buffers remain bounded to eight chunks, and playback reuses samples instead of repeatedly reconstructing exact states.
+
+
+## Draft feedback and map readability
+
+All unfinished structure types expose a selection-panel cancellation action and Delete shortcut. Same-draft placement/configuration/cancellation preserves causal references; removing a placement entry removes its dependent settings in the same undo step. Cancelled ghosts disappear from the projected frame. Server validation accepts references to earlier placements in the same draft and retains ownership, item-index and causal-order checks.
+
+Selection priority shows a common value or Mixed; constructors have an H/M/L badge and an explicit explanation that target-building priority determines construction funding. Group labels use projected membership and appear only when assigned; the old numeric owner badges are removed. Group slots with neither members, bound factories nor saved orders are omitted from inspection.
+
+Ore is yellow while available and gray when exhausted. Fog shades floor only, on the battlefield and minimap. Miner bodies retain player color with a small neutral tool accent. Statistics offer Value and Slope (smoothed); the latter uses local linear regression over at most five adjacent samples without crossing null gaps, per tick (per round for thinking ratios), with a signed vertical axis.
