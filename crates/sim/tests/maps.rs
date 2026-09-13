@@ -351,3 +351,26 @@ fn dump_maps() {
         );
     }
 }
+
+#[test]
+fn generated_ore_survives_json_without_changing_float_bits() {
+    let (mut config, content) = setup();
+    for seed in [42u64, 1, 17, 99] {
+        config.seed = seed.try_into().unwrap();
+        let world = map::generate(&config, &content).unwrap();
+        let encoded = serde_json::to_vec(&world).unwrap();
+        let decoded: WorldState = serde_json::from_slice(&encoded).unwrap();
+        for (tile, (before, after)) in world.ore.iter().zip(&decoded.ore).enumerate() {
+            assert_eq!(
+                before.to_bits(),
+                after.to_bits(),
+                "seed {seed}, ore tile {tile}: {before} became {after}"
+            );
+        }
+        assert_eq!(
+            identity::world_hash(&world).unwrap(),
+            identity::world_hash(&decoded).unwrap()
+        );
+        assert_eq!(world, decoded);
+    }
+}
