@@ -39,3 +39,40 @@ Wire payloads (JSON text over WebSocket): `RevisionPublished` 70 KB (revision 1,
 ## Not measured yet
 
 Memory ceilings, the 20,000-tick cap workload with 2,000 entities, dense chokepoints, repeated near-zero rewrites, and multi-thread intent computation (the slice runs intents serially). Those belong to Gate 3/6 and the simulation/server breadth agents.
+
+## Simulation breadth
+
+Measured on the same machine (Intel Core i7-8565U, 4 cores/8 threads, 15 GiB RAM, Linux, Rust 1.97.1 release build) with `cargo bench -p atemporal-sim` (`crates/sim/benches/scale.rs`, best of three runs, in-process, no server or disk). The suite ran on a lightly loaded laptop; expect ±15% between runs.
+
+Scenarios: **march** is a 96×96 generated cave map with weapons removed, half the population at each start attack-moving to the other start for 3,000 ticks (path fields, displacement, corridor crowding, settling). **battle** is an open 96×96 field with two mixed armies (grunts, grinders, scouts, tanks, artillery, turrets) charging each other until inactivity (target scans, line of sight, combat, deaths).
+
+| Scenario | Threads | Entities | Ticks | Wall | ms/tick | Ticks/s | Stop |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| march 100 | 1 | 106 | 3,000 | 301 ms | 0.100 | 9,983 | horizon |
+| march 100 | 4 | 106 | 3,000 | 321 ms | 0.107 | 9,333 | horizon |
+| battle 100 | 1 | 100 | 441 | 52 ms | 0.118 | 8,508 | inactivity |
+| battle 100 | 4 | 100 | 441 | 51 ms | 0.115 | 8,667 | inactivity |
+| march 500 | 1 | 506 | 3,000 | 817 ms | 0.272 | 3,670 | horizon |
+| march 500 | 4 | 506 | 3,000 | 794 ms | 0.265 | 3,778 | horizon |
+| battle 500 | 1 | 500 | 577 | 196 ms | 0.339 | 2,948 | inactivity |
+| battle 500 | 4 | 500 | 577 | 211 ms | 0.366 | 2,730 | inactivity |
+| march 2,000 | 1 | 2,006 | 3,000 | 2,661 ms | 0.887 | 1,127 | horizon |
+| march 2,000 | 4 | 2,006 | 3,000 | 2,651 ms | 0.884 | 1,132 | horizon |
+| battle 2,000 | 1 | 2,000 | 1,430 | 781 ms | 0.546 | 1,831 | inactivity |
+| battle 2,000 | 4 | 2,000 | 1,430 | 737 ms | 0.515 | 1,941 | inactivity |
+
+Full configured cap (default `config/game.yaml`, 48×48, ore raised to 80,000 per start so income outlasts the horizon; both players mine, build a factory, then loop grunts at the enemy miner with the constructor also mining; export enabled, every output serialized to JSON in-process):
+
+| Threads | Terminal | Entities born | Peak alive | Sim wall | ms/tick |
+| --- | --- | --- | --- | --- | --- |
+| 1 | S[20,000], horizon, win | 740 | 602 | 5,846 ms | 0.292 |
+| 4 | S[20,000], horizon, win | 740 | 602 | 5,852 ms | 0.293 |
+
+Export volume for that run (uncompressed JSON): samples 257.7 MB (4,001 at interval 5), checkpoints 73.5 MB (200), events 0.73 MB (2,442), stats 2.64 MB, timeline 0.67 MB, dictionary 110 KB. Samples dominate because every sample carries the full ore list; the server-side retention budget and compression from the earlier sections apply unchanged.
+
+What the numbers say:
+
+- The 500-entity, 12,000-tick target (under two seconds) holds with margin: 500 entities run at 0.27–0.37 ms/tick, so 12,000 ticks are 3–4 s only in the pathological all-units-marching case and well under 2 s in the battle profile where units settle or die. The cap run at up to 602 live entities completes 20,000 ticks in under 6 s.
+- The intent pool is gated on armed population (1,000 armed entities and `simulation_threads > 1`). Below that, per-tick scoped thread spawns cost more than the target scans they split, which is why 100/500-entity rows show no thread effect and 2,000-entity battle gains only ~6%. The Gate 3 fixtures (`crates/sim/tests/equivalence.rs`) prove identical hashes, events and checkpoints for one and four threads, cold checkpoint reruns and a capacity-1 evicting field cache on a 1,100+-entity battle.
+- Profiling before these numbers showed target scanning (line-of-sight traces) and motion dominating; line of sight is now traced only for the nearest candidates in order, and a per-team prefix count of hostile occupants skips scans whose box holds no enemy. Motion at 2,000 marching units is the remaining cost (per-entity field lookups and displacement); it is linear in population and was not tuned further.
+- Not measured: peak memory, dense chokepoints as a dedicated benchmark, and repeated near-zero rewrites (server-side, Gate 6).

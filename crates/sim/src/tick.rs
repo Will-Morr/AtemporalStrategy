@@ -48,6 +48,7 @@ impl Sim {
         }
         self.apply_commands()?;
         self.reindex()?;
+        self.index_hostiles();
         let mut intents = self.intents()?;
         self.mining(&intents);
         let consumers = self.consumers(&intents);
@@ -72,18 +73,24 @@ impl Sim {
         e.next_action_tick <= self.state.tick && e.born_at_tick.is_none_or(|b| b < self.state.tick)
     }
 
-    /// Nearest hostile living entity within `radius`, by squared distance then identity.
+    /// Nearest hostile living entity within `radius`, by squared distance then identity. Line of
+    /// sight is traced in that order and only until the first visible candidate.
     fn nearest_hostile(&self, i: usize, radius: f64, need_los: bool) -> Option<usize> {
         let e = &self.state.entities[i];
         let r = radius.floor() as i32;
-        let mut best: Option<(f64, usize)> = None;
-        for dy in -r..=r {
-            for dx in -r..=r {
-                let Some(t) = self.offset(e.tile, dx, dy) else {
-                    continue;
-                };
-                let o = self.occ[self.idx(t)];
-                if o == NONE {
+        let (cx, cy) = (i32::from(e.tile.x), i32::from(e.tile.y));
+        let (x0, x1) = ((cx - r).max(0), (cx + r).min(self.width() - 1));
+        let (y0, y1) = ((cy - r).max(0), (cy + r).min(self.height() - 1));
+        if !self.hostile_prefix.is_empty() && self.hostiles_in_box(e.owner, x0, y0, x1, y1) == 0 {
+            return None;
+        }
+        let limit = radius * radius + EPS;
+        let mut candidates: Vec<(f64, &EntityId, usize)> = vec![];
+        for y in y0..=y1 {
+            let row = y as usize * self.width() as usize;
+            for x in x0..=x1 {
+                let o = self.occ[row + x as usize];
+                if o == NONE || o == RESERVED {
                     continue;
                 }
                 let o = o as usize;
@@ -91,18 +98,17 @@ impl Sim {
                 if !self.hostile(e.owner, other.owner) {
                     continue;
                 }
-                let d = Self::dist2(e.tile, t);
-                if d > radius * radius + EPS || (need_los && !self.line_of_sight(e.tile, t)) {
-                    continue;
-                }
-                if best.is_none_or(|b| {
-                    (d, &self.state.entities[o].id) < (b.0, &self.state.entities[b.1].id)
-                }) {
-                    best = Some((d, o));
+                let d = Self::dist2(e.tile, other.tile);
+                if d <= limit {
+                    candidates.push((d, &other.id, o));
                 }
             }
         }
-        best.map(|b| b.1)
+        candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(b.1)));
+        candidates
+            .into_iter()
+            .find(|(_, _, o)| !need_los || self.line_of_sight(e.tile, self.state.entities[*o].tile))
+            .map(|c| c.2)
     }
 
     fn target_valid(&self, i: usize, j: usize, radius: f64, need_los: bool) -> bool {
@@ -112,8 +118,9 @@ impl Sim {
             && (!need_los || self.line_of_sight(a.tile, b.tile))
     }
 
-    /// Populations below this run intents serially; the pool only pays off on large ticks.
-    const PARALLEL_THRESHOLD: usize = 256;
+    /// Fewer armed entities than this run intents serially: per-tick scoped spawns cost more
+    /// than the target scans they split below roughly this population (measured, see docs).
+    const PARALLEL_THRESHOLD: usize = 1000;
 
     /// Serial prepass that touches the shared field cache, then read-only intents computed
     /// in ordered slots by a bounded scoped pool (or serially below the threshold).
@@ -144,8 +151,10 @@ impl Sim {
             prep.push(p);
         }
         let threads = usize::from(self.config.simulation_threads).max(1);
+        // Target scanning dominates intent cost, so the pool is gated on armed entities.
+        let armed = (0..n).filter(|i| self.def(*i).weapon.is_some()).count();
         let intents: Vec<(Intent, Option<EntityId>)> =
-            if threads == 1 || n < Self::PARALLEL_THRESHOLD {
+            if threads == 1 || armed < Self::PARALLEL_THRESHOLD {
                 (0..n).map(|i| self.intent(i, &prep[i])).collect()
             } else {
                 let chunk = n.div_ceil(threads);
@@ -679,6 +688,7 @@ impl Sim {
                 continue;
             }
             let e = self.state.entities.remove(i);
+            self.occupancy_changed_tick = self.state.tick;
             let def = self.content.types[self.ty[i]].clone();
             let owner = usize::from(e.owner);
             self.state.players[owner].counters.lost_invested_matter += e.paid_matter;
@@ -761,7 +771,10 @@ impl Sim {
                     // detour around the cluster, otherwise settle behind it. Settlement is
                     // evaluated even on cooldown so arrivals are never churned by displacement.
                     // Settled units re-check on a fixed rotation so cells freed later fill in.
-                    if self.state.entities[i].goal_settled && !(t + i as u32).is_multiple_of(8) {
+                    if self.state.entities[i].goal_settled
+                        && (!(t + i as u32).is_multiple_of(8)
+                            || self.occupancy_changed_tick + 8 < t)
+                    {
                         continue;
                     }
                     let detour = self.local_detour(&field, from, m.neighbors);
@@ -892,6 +905,7 @@ impl Sim {
                 continue;
             };
             // Apply both moves atomically: vacate, then place mover and blocker.
+            self.occupancy_changed_tick = t;
             self.set_occ(from, NONE);
             self.set_occ(to, NONE);
             let blocker_id = self.state.entities[o].id.clone();
@@ -971,6 +985,7 @@ impl Sim {
 
     fn commit_move(&mut self, i: usize, from: Tile, to: Tile, dir: Direction, cooldown: Tick) {
         let t = self.state.tick;
+        self.occupancy_changed_tick = t;
         self.set_occ(from, NONE);
         self.set_occ(to, i as u32);
         let e = &mut self.state.entities[i];
@@ -1131,6 +1146,7 @@ impl Sim {
             g.members.dedup();
         }
         self.state.entities.extend(newborns);
+        self.occupancy_changed_tick = t;
         self.reindex()?;
         for i in 0..self.state.entities.len() {
             self.intern(i);
@@ -1194,6 +1210,7 @@ impl Sim {
                 local_detour: vec![],
             });
             self.state.blueprints[b].site_id = Some(bp.id);
+            self.occupancy_changed_tick = t;
         }
         self.reindex()?;
         for i in 0..self.state.entities.len() {

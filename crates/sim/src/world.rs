@@ -42,7 +42,13 @@ pub struct Sim {
     pub(crate) bucket_from: Tick,
     pub(crate) checkpoint_tick: Tick,
     pub(crate) team_of: Vec<u8>,
+    /// Derived per-team 2D prefix counts of hostile occupants, rebuilt before the action phase
+    /// so target scans can skip boxes that hold no enemy at all.
+    pub(crate) hostile_prefix: Vec<Vec<u32>>,
     pub(crate) sim_start: std::time::Instant,
+    /// Derived: last tick whose occupancy or structures changed; settled units skip re-checks
+    /// while nothing has moved. Reset conservatively on checkpoint load.
+    pub(crate) occupancy_changed_tick: Tick,
 }
 
 impl Sim {
@@ -96,7 +102,9 @@ impl Sim {
             bucket_from: request.checkpoint.tick,
             checkpoint_tick: request.checkpoint.tick,
             team_of,
+            hostile_prefix: vec![],
             sim_start: std::time::Instant::now(),
+            occupancy_changed_tick: request.checkpoint.tick,
         };
         sim.reindex()?;
         for i in 0..sim.state.entities.len() {
@@ -129,6 +137,51 @@ impl Sim {
             }
         }
         Ok(())
+    }
+
+    /// Rebuild `hostile_prefix[team][(y+1)*(w+1)+(x+1)]` = enemies of `team` in [0,x]×[0,y].
+    pub(crate) fn index_hostiles(&mut self) {
+        let (w, h) = (self.width() as usize, self.height() as usize);
+        let teams = self.team_of.iter().max().map_or(1, |t| usize::from(*t) + 1);
+        self.hostile_prefix.clear();
+        // Below this many armed entities the O(cells) rebuild costs more than the scans it saves.
+        let armed = (0..self.state.entities.len())
+            .filter(|i| self.def(*i).weapon.is_some())
+            .count();
+        if armed < 64 {
+            return;
+        }
+        for team in 0..teams as u8 {
+            let mut grid = vec![0u32; (w + 1) * (h + 1)];
+            for y in 0..h {
+                let mut row = 0;
+                for x in 0..w {
+                    let o = self.occ[y * w + x];
+                    if o != NONE
+                        && o != RESERVED
+                        && self.team_of[usize::from(self.state.entities[o as usize].owner)] != team
+                    {
+                        row += 1;
+                    }
+                    grid[(y + 1) * (w + 1) + x + 1] = grid[y * (w + 1) + x + 1] + row;
+                }
+            }
+            self.hostile_prefix.push(grid);
+        }
+    }
+    /// Enemies of `player` inside the inclusive box, from the prefix index.
+    pub(crate) fn hostiles_in_box(
+        &self,
+        player: PlayerId,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+    ) -> u32 {
+        let w = self.width() as usize + 1;
+        let g = &self.hostile_prefix[usize::from(self.team_of[usize::from(player)])];
+        let (x0, y0, x1, y1) = (x0 as usize, y0 as usize, x1 as usize + 1, y1 as usize + 1);
+        g[y1 * w + x1] + g[y0 * w + x0] - g[y0 * w + x1] - g[y1 * w + x0]
     }
 
     pub(crate) fn intern(&mut self, i: usize) -> u32 {

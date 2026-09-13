@@ -9,3 +9,7 @@ atemporal-content.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[[bench]]
+name = "scale"
+harness = false

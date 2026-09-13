@@ -389,6 +389,7 @@ impl Sim {
                         let tile = self.state.entities[i].tile;
                         self.state.entities.remove(i);
                         self.structure_version += 1;
+                        self.occupancy_changed_tick = self.state.tick;
                         self.reindex()?;
                         self.push_event(PresentationEvent::Destroyed {
                             entity_id: site,

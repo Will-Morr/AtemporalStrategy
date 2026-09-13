@@ -5,12 +5,12 @@ use atemporal_sim::*;
 use common::*;
 
 fn battle(threads: u16) -> World {
-    let mut rows: Vec<String> = (0..40)
+    let mut rows: Vec<String> = (0..60)
         .map(|y| {
-            (0..40)
+            (0..60)
                 .map(|x| {
                     let blob = (x % 9 == 4 && y % 7 == 3) || (x % 11 == 7 && y % 5 == 2);
-                    if blob && (18..22).contains(&x) {
+                    if blob && (26..34).contains(&x) {
                         '#'
                     } else {
                         '.'
@@ -19,8 +19,8 @@ fn battle(threads: u16) -> World {
                 .collect()
         })
         .collect();
-    rows[0] = "#".repeat(40);
-    rows[39] = "#".repeat(40);
+    rows[0] = "#".repeat(60);
+    rows[59] = "#".repeat(60);
     let refs: Vec<&str> = rows.iter().map(String::as_str).collect();
     let mut w = World::new(&refs);
     w.config.simulation_threads = threads;
@@ -33,13 +33,13 @@ fn battle(threads: u16) -> World {
     let mut commands = vec![vec![], vec![]];
     for k in 0..3u16 {
         let f0 = w.spawn(0, "factory", 2, 4 + 12 * k);
-        let f1 = w.spawn(1, "factory", 36, 6 + 12 * k);
+        let f1 = w.spawn(1, "factory", 56, 6 + 12 * k);
         w.spawn(0, "turret", 6, 8 + 12 * k);
-        w.spawn(1, "turret", 33, 10 + 12 * k);
+        w.spawn(1, "turret", 53, 10 + 12 * k);
         w.spawn(0, "tank", 5, 5 + 12 * k);
-        w.spawn(1, "artillery", 34, 5 + 12 * k);
+        w.spawn(1, "artillery", 54, 5 + 12 * k);
         for (player, f, target) in [
-            (0u8, f0, tile(36, 6 + 12 * k)),
+            (0u8, f0, tile(56, 6 + 12 * k)),
             (1, f1, tile(2, 4 + 12 * k)),
         ] {
             commands[usize::from(player)].extend([
@@ -69,11 +69,11 @@ fn battle(threads: u16) -> World {
             ]);
         }
     }
-    // 160 marching grunts per side keep the population above the parallel threshold.
-    for y in 12..28u16 {
+    // 540 marching grunts per side keep the armed population above the parallel threshold.
+    for y in 3..57u16 {
         for x in 0..10u16 {
-            w.spawn_with(0, "grunt", 8 + x, y, attack_move(36, 18));
-            w.spawn_with(1, "grunt", 31 - x, y, attack_move(2, 16));
+            w.spawn_with(0, "grunt", 8 + x, y, attack_move(56, 18));
+            w.spawn_with(1, "grunt", 51 - x, y, attack_move(2, 16));
         }
     }
     let t0 = commands.remove(0);
@@ -95,7 +95,7 @@ fn one_and_four_threads_replay_identically() {
         .max()
         .unwrap();
     assert!(
-        peak >= 300,
+        peak >= 1100,
         "battle must cross the parallel threshold: peak {peak}"
     );
     assert_eq!(a.result.final_hash, b.result.final_hash);
