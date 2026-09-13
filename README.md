@@ -8,6 +8,8 @@ You can watch and scrub completed ticks while the rest of a replay is still bein
 
 The default game is 1v1, with simultaneous planning and a race to five points. There are also three- and four-player free-for-all games, teams, and a timed mode that gradually locks the past.
 
+`VIBE CODE WARNING: I have read almost none of this code` I spent a good chunk of time planning out how this game should function and steering the implementation via playtesting but have not read the code and do not recommend that you do so. This is mostly a mix of Astra 6 and Fable 5.1. 
+
 ## Quick start
 
 The host needs **Bash**, **Rust via rustup**, and **Node.js 22.23.2 with npm 10.9.8**. The repository selects Rust 1.97.1 automatically through `rust-toolchain.toml`. Other players only need a browser.
