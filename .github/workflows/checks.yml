@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -28,7 +28,7 @@ jobs:
           mkdir -p artifacts/checks
           set -o pipefail
           scripts/check.sh 2>&1 | tee artifacts/checks/workspace.log
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: workspace-${{ github.run_attempt }}
@@ -43,8 +43,8 @@ jobs:
       ATEMPORAL_UI_ARTIFACTS: ${{ github.workspace }}/artifacts/ui/ci
       ATEMPORAL_MCP_ARTIFACTS: ${{ github.workspace }}/artifacts/browser-mcp/ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -65,7 +65,7 @@ jobs:
         if: ${{ !cancelled() && steps.review.outcome != 'skipped' }}
         run: node scripts/check-ui-harness.mjs
       - name: Upload browser evidence even on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: browser-evidence-${{ github.run_attempt }}
