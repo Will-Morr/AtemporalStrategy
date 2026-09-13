@@ -796,6 +796,8 @@ pub fn generate() -> Result<()> {
             .starts_with("fixtures/worlds/")
             && entry["file"] != "fixtures/protocol/exact-state.json"
             && entry["file"] != "fixtures/protocol/worker-complete.json"
+            && entry["file"] != "fixtures/protocol/get-round.json"
+            && entry["file"] != "fixtures/protocol/round-result.json"
     });
     for f in &mut worlds {
         f.request.checkpoint = canonical_world(&f.request.checkpoint)?;
@@ -831,6 +833,50 @@ pub fn generate() -> Result<()> {
     };
     write("fixtures/protocol/worker-complete.json", &complete)?;
     manifest.push(json!({"file":"fixtures/protocol/worker-complete.json","type":"WorkerEnvelope"}));
+    let request = ClientEnvelope {
+        schema_version: Version::default(),
+        message: ClientMessage::GetRound { revision: 2 },
+    };
+    write("fixtures/protocol/get-round.json", &request)?;
+    manifest.push(json!({"file":"fixtures/protocol/get-round.json","type":"ClientEnvelope"}));
+    let round = ServerEnvelope {
+        schema_version: Version::default(),
+        server_instance_id: "fixture-instance".into(),
+        message: ServerMessage::RoundResult {
+            revision: 2,
+            round: 2,
+            parent_revision: Some(1),
+            outcome: worlds[0].expected.outcome.clone(),
+            timeline_index: vec![],
+            score: None,
+            timed: None,
+            time_totals: vec![
+                PlayerTime {
+                    player_id: 0,
+                    total_ms: 2000.try_into().unwrap(),
+                },
+                PlayerTime {
+                    player_id: 1,
+                    total_ms: 3000.try_into().unwrap(),
+                },
+            ],
+            sim_duration_ms: 10.try_into().unwrap(),
+            command_outcomes: vec![CommandOutcome {
+                command_id: CommandId {
+                    round: 1,
+                    player: 0,
+                    index: 0,
+                },
+                applied_entities: vec![],
+                skipped: vec![SkippedTarget {
+                    entity_id: None,
+                    reason: SkipReason::LockedByLaterRound,
+                }],
+            }],
+        },
+    };
+    write("fixtures/protocol/round-result.json", &round)?;
+    manifest.push(json!({"file":"fixtures/protocol/round-result.json","type":"ServerEnvelope"}));
     manifest.sort_by(|a, b| a["file"].as_str().cmp(&b["file"].as_str()));
     write("fixtures/manifest.json", &manifest)?;
     println!(

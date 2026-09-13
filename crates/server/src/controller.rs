@@ -1088,7 +1088,9 @@ impl Controller {
 
     pub fn round_result(&self, revision: Revision) -> Result<ServerMessage> {
         let data = self.revision(revision)?;
-        let mut totals = BTreeMap::<PlayerId, u64>::new();
+        let mut totals: BTreeMap<PlayerId, u64> = (0..self.config.player_count)
+            .map(|player| (player, 0))
+            .collect();
         for turn in &data.turns {
             *totals.entry(turn.player).or_default() += turn.duration_ms.get();
         }
