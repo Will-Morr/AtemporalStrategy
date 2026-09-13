@@ -438,3 +438,54 @@ fn a_nuke_cannot_be_survived_by_simultaneous_overhealing() {
     assert_eq!(entity(&w.at(6), &target).hp, 1.0);
     assert!(!w.at(7).entities.iter().any(|e| e.id == target));
 }
+
+#[test]
+fn launch_cooldowns_and_fundable_plans_survive_early_termination_checks() {
+    for produce in [false, true] {
+        let mut w = world();
+        w.config.stop_when_decided = true;
+        w.config.stall_ticks = 1;
+        w.state.inactivity_deadline = 1;
+        let id = w.spawn(0, "silo", 2, 10);
+        stock(&mut w, &id, "satellite", 2);
+        w.spawn(1, "factory", 20, 10);
+        let mut launches = vec![
+            MissileLaunch {
+                type_key: "satellite".into(),
+                target: tile(2, 10)
+            };
+            2
+        ];
+        let mut commands = vec![];
+        if produce {
+            launches.push(MissileLaunch {
+                type_key: "cluster".into(),
+                target: tile(20, 10),
+            });
+            commands.push(Command::EditProduction {
+                factories: vec![id.clone()],
+                edit: ProductionEdit::Append {
+                    items: vec!["cluster".into()],
+                },
+            });
+        }
+        commands.push(Command::SetSiloPlan {
+            silos: vec![id],
+            plan: SiloPlan {
+                automatic: false,
+                launches,
+            },
+        });
+        w.turn(1, 0, 0, commands);
+        let run = w.run();
+        let ticks: Vec<_> = run
+            .events
+            .iter()
+            .filter(|e| matches!(e.event, PresentationEvent::MissileLaunch { .. }))
+            .map(|e| e.tick)
+            .collect();
+        assert_eq!(ticks, if produce { vec![0, 3, 37] } else { vec![0, 3] });
+        assert!(run.result.outcome.terminal_state_tick >= if produce { 44 } else { 5 });
+        assert_checkpoint_equivalence(&w, &run);
+    }
+}

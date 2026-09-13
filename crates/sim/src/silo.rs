@@ -270,3 +270,49 @@ impl Sim {
         Ok(annihilated)
     }
 }
+
+impl Sim {
+    /// A scheduled launch is meaningful work even when ordinary unit orders are idle.
+    pub(crate) fn silo_has_launch_work(&self, i: usize, include_production: bool) -> bool {
+        let e = &self.state.entities[i];
+        let Some(cap) = &self.def(i).silo else {
+            return false;
+        };
+        let Some(p) = &e.production else {
+            return false;
+        };
+        let Some(silo) = &p.silo else {
+            return false;
+        };
+        let available = |key: Option<&str>| {
+            silo.inventory
+                .iter()
+                .any(|s| s.count > 0 && key.is_none_or(|k| s.type_key == k))
+                || (include_production
+                    && e.priority != Priority::Off
+                    && self.state.players[usize::from(e.owner)].bank > 0.0
+                    && self
+                        .def(i)
+                        .production
+                        .as_ref()
+                        .is_some_and(|p| p.rate > 0.0)
+                    && (p
+                        .active_item
+                        .as_ref()
+                        .is_some_and(|a| key.is_none_or(|k| a.type_key == k))
+                        || p.pending_items
+                            .iter()
+                            .any(|a| key.is_none_or(|k| a.type_key == k))))
+        };
+        if let Some(order) = silo.plan.launches.first() {
+            return available(Some(&order.type_key));
+        }
+        silo.plan.automatic
+            && available(None)
+            && self.state.entities.iter().any(|target| {
+                self.hostile(e.owner, target.owner)
+                    && Self::dist2(e.tile, target.tile) <= cap.auto_range * cap.auto_range
+                    && self.side_sees(e.owner, target.tile)
+            })
+    }
+}

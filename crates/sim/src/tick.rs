@@ -1550,6 +1550,11 @@ impl Sim {
             }
             !self.state.players[usize::from(p)].currently_eliminated
                 || own.any(|e| !matches!(e.action, Order::Idle {}))
+                || self.state.entities.iter().enumerate().any(|(i, e)| {
+                    e.owner == p
+                        && e.lifecycle == Lifecycle::Complete
+                        && self.silo_has_launch_work(i, true)
+                })
                 || self
                     .events
                     .iter()
@@ -1585,6 +1590,9 @@ impl Sim {
         for (i, e) in self.state.entities.iter().enumerate() {
             if e.lifecycle != Lifecycle::Complete {
                 continue;
+            }
+            if self.silo_has_launch_work(i, false) {
+                return true;
             }
             let def = &self.content.types[self.ty[i]];
             if let Some(w) = &def.weapon
