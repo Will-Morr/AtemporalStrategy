@@ -2,9 +2,11 @@
 //! regenerable per-revision result caches. Sizes are recorded for Gate 2 measurement.
 use atemporal_sim::*;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Manifest {
@@ -33,6 +35,10 @@ pub struct RoundRecord {
     pub timed: Option<TimedAdjudication>,
     pub command_outcomes: Vec<CommandOutcome>,
     pub time_totals: Vec<PlayerTime>,
+    /// Coarse per-player activity index; kept here so a resumed server can publish without
+    /// reloading the result cache.
+    #[serde(default)]
+    pub timeline_index: Vec<TimelineBucket>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -49,11 +55,62 @@ pub struct ResultSizes {
     pub write_ms: u64,
 }
 
+/// Private slot tokens so browsers can reconnect to a resumed match; never broadcast.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LobbyRecord {
+    pub tokens: Vec<Option<String>>,
+}
+
+/// Everything a resume or replay verification needs, read back from disk.
+pub struct Loaded {
+    pub manifest: Manifest,
+    pub config_yaml: String,
+    pub content_yaml: String,
+    pub initial: WorldState,
+    pub turns: BTreeMap<(u32, PlayerId), AcceptedTurn>,
+    pub request_ids: BTreeMap<(u32, PlayerId), String>,
+    pub rounds: Vec<RoundRecord>,
+    pub tokens: Option<Vec<Option<String>>>,
+    pub archived: Option<ArchiveRecord>,
+}
+
+pub struct ResultCache {
+    pub dictionary: Vec<EntityRef>,
+    pub samples: Vec<Sample>,
+    pub checkpoints: Vec<WorldState>,
+    pub stats: Vec<StatsSample>,
+    pub events: Vec<WorldEvent>,
+    pub timeline: Vec<TimelineBucket>,
+}
+
 pub struct Archive {
     pub root: PathBuf,
 }
 
+/// Gate 5 injection: `ATEMPORAL_FAIL_AT=<point>` aborts the process at that point and
+/// `ATEMPORAL_DISK_FULL_AFTER=<n>` makes every durable write after the n-th fail like ENOSPC.
+pub fn fail_point(point: &str) {
+    if std::env::var("ATEMPORAL_FAIL_AT").is_ok_and(|p| p == point) {
+        eprintln!("ATEMPORAL_FAIL_AT={point}: aborting");
+        std::process::abort();
+    }
+}
+static WRITES: AtomicU64 = AtomicU64::new(0);
+fn disk_full() -> bool {
+    let n = WRITES.fetch_add(1, Ordering::Relaxed);
+    std::env::var("ATEMPORAL_DISK_FULL_AFTER")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .is_some_and(|limit| n >= limit)
+}
+
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+    if disk_full() {
+        return Err(format!(
+            "{}: No space left on device (injected)",
+            path.display()
+        ));
+    }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
@@ -66,6 +123,25 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 
 fn json<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     serde_json::to_vec(value).map_err(|e| e.to_string())
+}
+
+fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T> {
+    let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn read_optional<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>> {
+    if path.exists() {
+        read_json(path).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+fn turn_key(name: &str) -> Option<(u32, PlayerId)> {
+    let stem = name.strip_suffix(".json")?;
+    let (round, player) = stem.split_once('-')?;
+    Some((round.parse().ok()?, player.parse().ok()?))
 }
 
 impl Archive {
@@ -89,9 +165,96 @@ impl Archive {
             &serde_json::to_vec_pretty(manifest).map_err(|e| e.to_string())?,
         )
     }
-    /// Flushed before acknowledgement; a partial round survives restart.
-    pub fn write_turn(&self, turn: &AcceptedTurn) -> Result<String> {
+    /// Reopen an archived match: pinned files, every turn/round record and private lobby data.
+    pub fn open(replay_root: &Path, match_id: &str) -> Result<(Self, Loaded)> {
+        let root = replay_root.join(match_id);
+        let manifest: Manifest = read_json(&root.join("manifest.json"))?;
+        let initial = read_json(&root.join(&manifest.initial_state))?;
+        let config_yaml =
+            fs::read_to_string(root.join("config.yaml")).map_err(|e| e.to_string())?;
+        let content_yaml =
+            fs::read_to_string(root.join("content.yaml")).map_err(|e| e.to_string())?;
+        let mut turns = BTreeMap::new();
+        let mut request_ids = BTreeMap::new();
+        if let Ok(entries) = fs::read_dir(root.join("turns")) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if let Some(id) = name.strip_suffix(".request") {
+                    if let Some(key) = turn_key(&format!("{id}.json")) {
+                        request_ids
+                            .insert(key, fs::read_to_string(entry.path()).unwrap_or_default());
+                    }
+                } else if let Some(key) = turn_key(&name) {
+                    // Interrupted temporary files never match `<round>-<player>.json`.
+                    turns.insert(key, read_json::<AcceptedTurn>(&entry.path())?);
+                }
+            }
+        }
+        let mut rounds: Vec<RoundRecord> = vec![];
+        if let Ok(entries) = fs::read_dir(root.join("rounds")) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name
+                    .strip_suffix(".json")
+                    .is_some_and(|n| n.parse::<u32>().is_ok())
+                {
+                    rounds.push(read_json(&entry.path())?);
+                }
+            }
+        }
+        rounds.sort_by_key(|r| r.round);
+        // Recovery commits at complete round records: a gap ends the usable history there.
+        rounds.truncate(
+            rounds
+                .iter()
+                .enumerate()
+                .take_while(|(i, r)| r.round == *i as u32)
+                .count(),
+        );
+        for record in &rounds {
+            for name in &record.turns {
+                let key = turn_key(name.trim_start_matches("turns/"));
+                if key.is_none_or(|k| !turns.contains_key(&k)) {
+                    return Err(format!("round {} references missing {name}", record.round));
+                }
+            }
+        }
+        let tokens = read_optional::<LobbyRecord>(&root.join("lobby.json"))?.map(|l| l.tokens);
+        let archived = read_optional(&root.join("archive.json"))?;
+        Ok((
+            Self { root },
+            Loaded {
+                manifest,
+                config_yaml,
+                content_yaml,
+                initial,
+                turns,
+                request_ids,
+                rounds,
+                tokens,
+                archived,
+            },
+        ))
+    }
+    pub fn write_lobby(&self, record: &LobbyRecord) -> Result<()> {
+        atomic_write(&self.root.join("lobby.json"), &json(record)?)
+    }
+    pub fn write_archive_record(&self, record: &ArchiveRecord) -> Result<()> {
+        atomic_write(
+            &self.root.join("archive.json"),
+            &serde_json::to_vec_pretty(record).map_err(|e| e.to_string())?,
+        )
+    }
+    /// Flushed before acknowledgement; a partial round survives restart. The request id is
+    /// written first so a recovered turn still answers the original commit idempotently.
+    pub fn write_turn(&self, turn: &AcceptedTurn, request_id: &str) -> Result<String> {
         let name = format!("turns/{}-{}.json", turn.round, turn.player);
+        atomic_write(
+            &self
+                .root
+                .join(format!("turns/{}-{}.request", turn.round, turn.player)),
+            request_id.as_bytes(),
+        )?;
         atomic_write(
             &self.root.join(&name),
             &serde_json::to_vec_pretty(turn).map_err(|e| e.to_string())?,
@@ -107,6 +270,8 @@ impl Archive {
     pub fn write_results(&self, data: &crate::controller::RevisionData) -> Result<ResultSizes> {
         let start = std::time::Instant::now();
         let dir = self.root.join(format!("results/{}", data.revision));
+        // A stale marker from an interrupted earlier attempt must not vouch for mixed files.
+        let _ = fs::remove_file(dir.join("complete.json"));
         let samples: Vec<&Sample> = data.samples.values().collect();
         let checkpoints: Vec<&WorldState> = data.checkpoints.values().collect();
         let stats: Vec<&StatsSample> = data.stats.values().collect();
@@ -142,6 +307,22 @@ impl Archive {
         atomic_write(&dir.join("complete.json"), &json(&sizes)?)?;
         sizes.write_ms = start.elapsed().as_millis() as u64;
         Ok(sizes)
+    }
+    /// A complete, parseable result cache for a revision; anything else counts as missing.
+    pub fn read_results(&self, revision: Revision) -> Option<ResultCache> {
+        let dir = self.root.join(format!("results/{revision}"));
+        read_json::<ResultSizes>(&dir.join("complete.json")).ok()?;
+        fn load<T: for<'de> Deserialize<'de>>(dir: &Path, name: &str) -> Option<T> {
+            read_json(&dir.join(name)).ok()
+        }
+        Some(ResultCache {
+            dictionary: load(&dir, "dictionary.json")?,
+            samples: load(&dir, "samples.json")?,
+            checkpoints: load(&dir, "checkpoints.json")?,
+            stats: load(&dir, "stats.json")?,
+            events: load(&dir, "events.json")?,
+            timeline: load(&dir, "timeline.json")?,
+        })
     }
     pub fn append_measurement<T: Serialize>(&self, record: &T) -> Result<()> {
         let path = self.root.join("measurements.jsonl");

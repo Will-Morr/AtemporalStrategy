@@ -1,7 +1,9 @@
 //! Match controller: lobby slots, simultaneous planning rounds, revision store, scoring and
 //! publication. Held behind a mutex; never awaited while locked.
 use crate::adapter::{Job, OUT_CAPACITY, SimThread};
-use crate::archive::{Archive, Manifest, ResultSizes, RoundRecord};
+use crate::archive::{
+    Archive, Loaded, LobbyRecord, Manifest, ResultSizes, RoundRecord, fail_point,
+};
 use atemporal_sim::*;
 use serde::Serialize;
 use std::collections::{BTreeMap, VecDeque};
@@ -37,6 +39,8 @@ pub struct RevisionData {
     pub score: Option<RoundScore>,
     pub timed: Option<TimedAdjudication>,
     pub started: Option<Instant>,
+    /// False once the regenerable body (samples, checkpoints, stats, events, timeline) was evicted.
+    pub loaded: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -466,6 +470,9 @@ impl Controller {
             initial_state: "initial-state.json".into(),
         };
         archive.write_manifest(&manifest, &self.config_yaml, &self.content_yaml, &initial)?;
+        archive.write_lobby(&LobbyRecord {
+            tokens: self.tokens.clone(),
+        })?;
         self.archive = Some(archive);
         self.phase = Phase::Simulating;
         self.lobby.can_start = false;
@@ -576,12 +583,7 @@ impl Controller {
         data.turns = turns.clone();
         data.precedence = precedence.clone();
         data.started = Some(Instant::now());
-        let minimum_end_tick = match self.config.objective {
-            Objective::Timed {
-                lock_ticks_per_round,
-            } => (self.editable_from + lock_ticks_per_round).min(self.config.max_tick),
-            Objective::Scoreboard { .. } => 0,
-        };
+        let minimum_end_tick = minimum_end_tick(&self.config, self.editable_from);
         let mut request =
             self.build_request(revision, checkpoint, turns, precedence, minimum_end_tick);
         request.entity_dictionary = data.dictionary.clone();
@@ -616,6 +618,7 @@ impl Controller {
                 if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
                     return false;
                 }
+                fail_point("during_job");
                 pending.dictionary.extend(dictionary);
                 for s in samples {
                     pending.samples.insert(s.tick, s);
@@ -737,38 +740,40 @@ impl Controller {
         let mut sizes = ResultSizes::default();
         if let Some(archive) = &self.archive {
             sizes = archive.write_results(&data)?;
-            if round > 0 {
-                let precedence = data
-                    .precedence
-                    .iter()
-                    .find(|p| p.round == round)
-                    .cloned()
-                    .unwrap_or(RoundPrecedence {
-                        round,
-                        players: vec![],
-                    });
-                archive.write_round(&RoundRecord {
+            fail_point("after_results");
+            let precedence = data
+                .precedence
+                .iter()
+                .find(|p| p.round == round)
+                .cloned()
+                .unwrap_or(RoundPrecedence {
                     round,
-                    turns: data
-                        .turns
-                        .iter()
-                        .filter(|t| t.round == round)
-                        .map(|t| format!("turns/{}-{}.json", t.round, t.player))
-                        .collect(),
-                    precedence,
-                    parent_revision: data.parent.unwrap_or(0),
-                    revision: data.revision,
-                    base_tick: data.base_tick,
-                    editable_from: self.editable_from,
-                    outcome: outcome.clone(),
-                    final_hash: data.final_hash.clone(),
-                    sim_duration_ms: data.sim_duration_ms,
-                    score: data.score.clone(),
-                    timed: data.timed.clone(),
-                    command_outcomes: data.command_outcomes.clone(),
-                    time_totals: self.time_totals(),
-                })?;
-            }
+                    players: vec![],
+                });
+            // The complete round record is the recovery commit point; publication follows it.
+            archive.write_round(&RoundRecord {
+                round,
+                turns: data
+                    .turns
+                    .iter()
+                    .filter(|t| t.round == round)
+                    .map(|t| format!("turns/{}-{}.json", t.round, t.player))
+                    .collect(),
+                precedence,
+                parent_revision: data.parent.unwrap_or(0),
+                revision: data.revision,
+                base_tick: data.base_tick,
+                editable_from: self.editable_from,
+                outcome: outcome.clone(),
+                final_hash: data.final_hash.clone(),
+                sim_duration_ms: data.sim_duration_ms,
+                score: data.score.clone(),
+                timed: data.timed.clone(),
+                command_outcomes: data.command_outcomes.clone(),
+                time_totals: self.time_totals(),
+                timeline_index: data.timeline_index.clone(),
+            })?;
+            fail_point("before_publish");
         }
         let persist_ms = persist_start.elapsed().as_millis() as u64;
         let revision = data.revision;
@@ -1040,8 +1045,9 @@ impl Controller {
             duration_ms: duration.try_into().unwrap_or_default(),
         };
         if let Some(archive) = &self.archive {
-            archive.write_turn(&turn)?;
+            archive.write_turn(&turn, &request.request_id)?;
         }
+        fail_point("after_turn_written");
         self.time_totals[usize::from(player)] += duration;
         self.committed
             .insert(player, (request.request_id.clone(), turn));
@@ -1054,6 +1060,11 @@ impl Controller {
             return Ok((accepted, None));
         }
         self.last_commit_at = Some(now);
+        Ok((accepted, Some(self.close_round()?)))
+    }
+
+    /// Every player committed: run the round on the ledger so far.
+    fn close_round(&mut self) -> Result<mpsc::Receiver<WorkerMessage>> {
         let parent = self
             .revisions
             .get(&self.current)
@@ -1065,8 +1076,18 @@ impl Controller {
             self.round,
             self.config.player_count,
         )?);
-        let rx = self.start_job(self.round, turns, precedence)?;
-        Ok((accepted, Some(rx)))
+        self.start_job(self.round, turns, precedence)
+    }
+
+    /// After a resume: a fully committed round whose record is missing is simulated again.
+    pub fn restart_pending_round(&mut self) -> Result<Option<mpsc::Receiver<WorkerMessage>>> {
+        if self.phase == Phase::Planning
+            && self.committed.len() == usize::from(self.config.player_count)
+        {
+            self.last_commit_at = Some(Instant::now());
+            return self.close_round().map(Some);
+        }
+        Ok(None)
     }
 
     // ---- inspection --------------------------------------------------------------------------
@@ -1226,12 +1247,343 @@ impl Controller {
             stopped_at_unix_ms: now_ms().try_into().unwrap_or_default(),
         };
         if let Some(a) = &self.archive {
-            a.append_measurement(&archive)?;
+            a.write_archive_record(&archive)?;
         }
         let message = ServerMessage::MatchArchived { archive };
         self.send(message.clone());
         Ok(message)
     }
+}
+
+impl Controller {
+    /// Reopen an archived match: pinned config/content, lobby profiles and tokens, every complete
+    /// round, the current revision's result cache (regenerated from the ledger when missing) and
+    /// any partial round, which resumes planning with those commits already accepted.
+    #[allow(clippy::too_many_arguments)]
+    pub fn resume(
+        setup: Setup,
+        content: Content,
+        guide_url: String,
+        replay_root: PathBuf,
+        sim: SimThread,
+        match_id: String,
+        archive: Archive,
+        loaded: Loaded,
+    ) -> Result<Self> {
+        let mut c = Self::new(
+            setup,
+            content,
+            loaded.config_yaml.clone(),
+            loaded.content_yaml.clone(),
+            guide_url,
+            replay_root,
+            sim,
+        )?;
+        c.match_id = match_id;
+        c.config = loaded.manifest.config.clone();
+        c.fingerprint.config_hash = identity::canonical_hash(&c.config)?;
+        let recorded = &loaded.manifest.fingerprint;
+        if recorded.content_hash != c.fingerprint.content_hash
+            || recorded.config_hash != c.fingerprint.config_hash
+            || recorded.schema_version != c.fingerprint.schema_version
+        {
+            return Err("archive was recorded under different content/config; refusing to replay it silently".into());
+        }
+        if recorded.sim_build != c.fingerprint.sim_build {
+            eprintln!(
+                "warning: archive recorded with {} but this server is {}; hashes are verified on regeneration",
+                recorded.sim_build, c.fingerprint.sim_build
+            );
+        }
+        let players = usize::from(c.config.player_count);
+        c.lobby.rule_summary = rule_summary(&c.config, &c.content);
+        for profile in &loaded.manifest.profiles {
+            let slot = &mut c.lobby.slots[usize::from(profile.player_id)];
+            slot.claimed = true;
+            slot.profile = Some(profile.clone());
+        }
+        c.tokens = match loaded.tokens.clone() {
+            Some(tokens) if tokens.len() == players => tokens,
+            _ => {
+                let tokens: Vec<_> = (0..players)
+                    .map(|i| Some(token(&c.instance_id, i)))
+                    .collect();
+                println!("lobby.json missing; fresh slot tokens: {tokens:?}");
+                archive.write_lobby(&LobbyRecord {
+                    tokens: tokens.clone(),
+                })?;
+                tokens
+            }
+        };
+        c.lobby.revision = 1;
+        let mut genesis = RevisionData::new(0, 0, None, 0);
+        genesis.checkpoints.insert(0, loaded.initial.clone());
+        c.revisions.insert(0, genesis);
+        let Some(last) = loaded.rounds.last() else {
+            // Started but never published: rerun the opening like a fresh start.
+            c.archive = Some(archive);
+            c.phase = Phase::Simulating;
+            return Ok(c);
+        };
+        for record in &loaded.rounds {
+            let (turns, precedence) = ledger(&loaded, record.round)?;
+            let parent = (record.round > 0).then_some(record.parent_revision);
+            let mut data =
+                RevisionData::new(record.revision, record.round, parent, record.base_tick);
+            data.turns = turns;
+            data.precedence = precedence;
+            data.outcome = Some(record.outcome.clone());
+            data.final_hash = record.final_hash.clone();
+            data.sim_duration_ms = record.sim_duration_ms;
+            data.command_outcomes = record.command_outcomes.clone();
+            data.score = record.score.clone();
+            data.timed = record.timed.clone();
+            data.timeline_index = record.timeline_index.clone();
+            data.loaded = false;
+            if record.revision == 0 {
+                // The initial state stays resident: every replay/regeneration starts from it.
+                data.checkpoints.insert(0, loaded.initial.clone());
+            }
+            if let Some(score) = &record.score {
+                c.scores.push(score.clone());
+            }
+            c.revisions.insert(record.revision, data);
+        }
+        c.current = last.revision;
+        c.round = last.round + 1;
+        c.editable_from = last.editable_from;
+        c.timed = last.timed.clone();
+        c.match_winners = last
+            .score
+            .as_ref()
+            .map(|s| s.match_winners.clone())
+            .or_else(|| last.timed.as_ref().map(|t| t.match_winners.clone()))
+            .unwrap_or_default();
+        c.time_totals = last.time_totals.iter().map(|t| t.total_ms.get()).collect();
+        c.time_totals.resize(players, 0);
+        c.archive = Some(archive);
+        // The current revision is always resident; older bodies load or regenerate on demand.
+        let started = Instant::now();
+        let regenerated = c.load_body(c.current)?;
+        println!(
+            "resumed {}: {} rounds, current revision {} {} in {:?}",
+            c.match_id,
+            loaded.rounds.len(),
+            c.current,
+            if regenerated {
+                "regenerated from the ledger"
+            } else {
+                "loaded from results/"
+            },
+            started.elapsed()
+        );
+        if let Some(archived) = &loaded.archived {
+            c.phase = Phase::Archived;
+            println!("match was archived: {archived:?}");
+            return Ok(c);
+        }
+        let finished = !c.match_winners.is_empty()
+            || c.timed
+                .as_ref()
+                .is_some_and(|t| t.status != TimedStatus::Planning);
+        if finished {
+            c.phase = Phase::Finished;
+            return Ok(c);
+        }
+        for player in 0..c.config.player_count {
+            if let Some(turn) = loaded.turns.get(&(c.round, player)) {
+                let request_id = loaded
+                    .request_ids
+                    .get(&(c.round, player))
+                    .cloned()
+                    .unwrap_or_else(|| format!("recovered-{}-{player}", c.round));
+                c.time_totals[usize::from(player)] += turn.duration_ms.get();
+                c.committed.insert(player, (request_id, turn.clone()));
+            }
+        }
+        c.phase = Phase::Planning;
+        c.planning_opened_at = Instant::now();
+        Ok(c)
+    }
+
+    /// Full replay request for a revision: from the initial state over the ledger through its round.
+    pub fn replay_request(&self, revision: Revision) -> Result<SimRequest> {
+        let data = self.revision(revision)?;
+        let initial = self
+            .revisions
+            .get(&0)
+            .and_then(|g| g.checkpoints.get(&0))
+            .ok_or("initial state missing")?;
+        let previous = data.parent.and_then(|p| self.revisions.get(&p));
+        let previous_boundary = previous
+            .and_then(|p| p.timed.as_ref())
+            .map_or(0, |t| t.boundary);
+        let mut request = self.build_request(
+            revision,
+            initial.clone(),
+            data.turns.clone(),
+            data.precedence.clone(),
+            minimum_end_tick(&self.config, previous_boundary),
+        );
+        request.entity_dictionary = vec![];
+        Ok(request)
+    }
+
+    /// Make a revision's body resident: from `results/` when complete, otherwise by replaying the
+    /// ledger on this thread and checking the recorded hash. Returns whether it was regenerated.
+    pub fn load_body(&mut self, revision: Revision) -> Result<bool> {
+        if self.revision(revision)?.loaded {
+            return Ok(false);
+        }
+        if let Some(cache) = self.archive.as_ref().and_then(|a| a.read_results(revision)) {
+            let data = self
+                .revisions
+                .get_mut(&revision)
+                .ok_or("unknown revision")?;
+            data.dictionary = cache.dictionary;
+            data.samples = cache.samples.into_iter().map(|s| (s.tick, s)).collect();
+            data.checkpoints = cache.checkpoints.into_iter().map(|c| (c.tick, c)).collect();
+            data.stats = cache.stats.into_iter().map(|s| (s.tick, s)).collect();
+            data.events = cache.events;
+            data.timeline = cache.timeline;
+            data.loaded = true;
+            return Ok(false);
+        }
+        let request = self.replay_request(revision)?;
+        let mut fresh = RevisionData::new(revision, 0, None, 0);
+        collect_run(&request, &mut fresh, self.config.player_count)?;
+        self.install_body(revision, fresh)?;
+        Ok(true)
+    }
+
+    /// Adopt a regenerated body after checking it reproduces the recorded final hash.
+    pub fn install_body(&mut self, revision: Revision, fresh: RevisionData) -> Result<()> {
+        let data = self
+            .revisions
+            .get_mut(&revision)
+            .ok_or("unknown revision")?;
+        if fresh.final_hash != data.final_hash {
+            return Err(format!(
+                "revision {revision} regenerated with hash {} but the archive recorded {}",
+                fresh.final_hash, data.final_hash
+            ));
+        }
+        data.dictionary = fresh.dictionary;
+        data.samples = fresh.samples;
+        data.checkpoints = fresh.checkpoints;
+        data.stats = fresh.stats;
+        data.events = fresh.events;
+        data.timeline = fresh.timeline;
+        data.timeline_index = fresh.timeline_index;
+        data.loaded = true;
+        if let Some(archive) = &self.archive {
+            archive.write_results(data)?;
+        }
+        Ok(())
+    }
+}
+
+/// Timed jobs cannot stop before the next lock boundary; scoreboard jobs may stop any time.
+pub fn minimum_end_tick(config: &MatchConfig, editable_from: Tick) -> Tick {
+    match config.objective {
+        Objective::Timed {
+            lock_ticks_per_round,
+        } => (editable_from + lock_ticks_per_round).min(config.max_tick),
+        Objective::Scoreboard { .. } => 0,
+    }
+}
+
+/// Accepted turns and precedence for every round through `round`, in record order.
+pub fn ledger(loaded: &Loaded, round: u32) -> Result<(Vec<AcceptedTurn>, Vec<RoundPrecedence>)> {
+    let mut turns = vec![];
+    let mut precedence = vec![];
+    for record in loaded
+        .rounds
+        .iter()
+        .filter(|r| r.round > 0 && r.round <= round)
+    {
+        for name in &record.turns {
+            let stem = name.trim_start_matches("turns/").trim_end_matches(".json");
+            let (r, p) = stem.split_once('-').ok_or("bad turn reference")?;
+            let key = (
+                r.parse().map_err(|_| "bad turn round")?,
+                p.parse().map_err(|_| "bad turn player")?,
+            );
+            turns.push(loaded.turns.get(&key).ok_or("missing turn")?.clone());
+        }
+        precedence.push(record.precedence.clone());
+    }
+    Ok((turns, precedence))
+}
+
+/// Run a job to completion on the calling thread, collecting its outputs into `data`.
+pub fn collect_run(request: &SimRequest, data: &mut RevisionData, players: u8) -> Result<()> {
+    let cancel = AtomicBool::new(false);
+    let result = atemporal_sim::run(request, &cancel, &mut |o| match o {
+        Output::Dictionary(d) => data.dictionary.extend(d),
+        Output::Sample(s) => {
+            data.samples.insert(s.tick, s);
+        }
+        Output::Checkpoint(c) => {
+            data.checkpoints.insert(c.tick, c);
+        }
+        Output::Stats(s) => {
+            data.stats.insert(s.tick, s);
+        }
+        Output::Events(e) => data.events.extend(e),
+        Output::Timeline(t) => data.timeline.extend(t),
+        Output::Progress { .. } => {}
+    })?;
+    data.outcome = Some(result.outcome);
+    data.final_hash = result.final_hash;
+    data.sim_duration_ms = result.sim_duration_ms;
+    data.command_outcomes = result.command_outcomes;
+    data.timeline_index = timeline_index(&data.timeline, players);
+    data.loaded = true;
+    Ok(())
+}
+
+/// `--verify`: replay every recorded round from the initial state and compare final hashes.
+pub fn verify_archive(loaded: &Loaded, content: &Content) -> Result<bool> {
+    let config = &loaded.manifest.config;
+    let mut all_match = true;
+    let mut previous_boundary = 0;
+    for record in &loaded.rounds {
+        let (turns, precedence) = ledger(loaded, record.round)?;
+        let request = SimRequest {
+            schema_version: Version::default(),
+            job_id: format!("verify-{}", record.revision),
+            revision: record.revision,
+            fingerprint: loaded.manifest.fingerprint.clone(),
+            config: config.clone(),
+            content: content.clone(),
+            checkpoint: loaded.initial.clone(),
+            events: turns,
+            precedence,
+            end_tick_exclusive: config.max_tick,
+            minimum_end_tick: minimum_end_tick(config, previous_boundary),
+            entity_dictionary: vec![],
+        };
+        let started = Instant::now();
+        let mut data = RevisionData::new(record.revision, record.round, None, 0);
+        collect_run(&request, &mut data, config.player_count)?;
+        let terminal = data.outcome.as_ref().map_or(0, |o| o.terminal_state_tick);
+        let ok =
+            data.final_hash == record.final_hash && terminal == record.outcome.terminal_state_tick;
+        all_match &= ok;
+        println!(
+            "round {} revision {}: {} (terminal {} vs recorded {}, {:?}, hash {}…)",
+            record.round,
+            record.revision,
+            if ok { "match" } else { "MISMATCH" },
+            terminal,
+            record.outcome.terminal_state_tick,
+            started.elapsed(),
+            &data.final_hash[..12.min(data.final_hash.len())]
+        );
+        previous_boundary = record.timed.as_ref().map_or(0, |t| t.boundary);
+    }
+    Ok(all_match)
 }
 
 impl RevisionData {
@@ -1257,6 +1609,7 @@ impl RevisionData {
             score: None,
             timed: None,
             started: None,
+            loaded: true,
         }
     }
 }
@@ -1487,6 +1840,224 @@ pub(crate) mod tests {
         c.update_profile(&a, None, Some("#ff0000".into()), None)
             .unwrap();
         c.start_match(&a, c.lobby.revision).unwrap();
+    }
+
+    /// Drive one job to publication on this thread, like `ws::drive_job` without the runtime.
+    pub fn run_round(c: &mut Controller, mut rx: mpsc::Receiver<WorkerMessage>) {
+        while let Some(message) = rx.blocking_recv() {
+            match message {
+                WorkerMessage::Complete {
+                    job_id,
+                    outcome,
+                    final_hash,
+                    sim_duration_ms,
+                    command_outcomes,
+                    ..
+                } => {
+                    let data = c
+                        .on_complete(
+                            &job_id,
+                            outcome,
+                            final_hash,
+                            sim_duration_ms.get(),
+                            command_outcomes,
+                        )
+                        .expect("job is current");
+                    let timed_state = match c.config.objective {
+                        Objective::Timed {
+                            lock_ticks_per_round,
+                        } if data.round > 0 => {
+                            let boundary =
+                                (c.editable_from + lock_ticks_per_round).min(c.config.max_tick);
+                            let (_, cp) = data.checkpoints.range(..=boundary).next_back().unwrap();
+                            let request = c.build_request(
+                                data.revision,
+                                cp.clone(),
+                                data.turns.clone(),
+                                data.precedence.clone(),
+                                0,
+                            );
+                            Some(atemporal_sim::reconstruct(&request, boundary).unwrap())
+                        }
+                        _ => None,
+                    };
+                    c.publish(data, timed_state).unwrap();
+                    return;
+                }
+                WorkerMessage::Failed { message, .. } => panic!("job failed: {message}"),
+                other => {
+                    c.on_batch(other);
+                }
+            }
+        }
+        panic!("job ended without completion");
+    }
+
+    pub fn commit(
+        c: &mut Controller,
+        player: PlayerId,
+        request_id: &str,
+        tick: Tick,
+    ) -> Option<mpsc::Receiver<WorkerMessage>> {
+        let miner = c.revisions[&0].checkpoints[&0]
+            .entities
+            .iter()
+            .find(|e| e.owner == player && e.type_key == "miner")
+            .unwrap()
+            .id
+            .clone();
+        let command = Command::AssignOrder {
+            entities: vec![miner],
+            order: Order::Idle {},
+        };
+        let request = CommitRequest {
+            request_id: request_id.into(),
+            slot_token: c.tokens[usize::from(player)].clone().unwrap(),
+            draft: TurnDraft {
+                based_on_revision: c.current,
+                tick,
+                commands: vec![DraftCommand {
+                    local_id: "c0".into(),
+                    command: Command::AssignOrder {
+                        entities: match &command {
+                            Command::AssignOrder { entities, .. } => entities.clone(),
+                            _ => unreachable!(),
+                        },
+                        order: Order::Idle {},
+                    },
+                    future_orders: FutureOrderPolicy::Keep,
+                }],
+            },
+        };
+        assert!(c.precheck_commit(player, &request).unwrap().is_none());
+        c.accept_commit(player, &request, vec![command]).unwrap().1
+    }
+
+    pub fn started(teams: bool, edit: impl FnOnce(&mut Setup)) -> Controller {
+        let mut c = controller(teams, edit);
+        let a = claim(&mut c, 0, teams.then_some("cyan")).unwrap();
+        claim(&mut c, 1, teams.then_some("orange")).unwrap();
+        c.start_match(&a, c.lobby.revision).unwrap();
+        let rx = c.start_job(0, vec![], vec![]).unwrap();
+        run_round(&mut c, rx);
+        assert_eq!((c.phase, c.round, c.current), (Phase::Planning, 1, 0));
+        c
+    }
+
+    fn reopen(c: &Controller) -> Controller {
+        let (archive, loaded) = Archive::open(&c.replay_root, &c.match_id).unwrap();
+        let setup = atemporal_content::load_setup(&loaded.config_yaml).unwrap();
+        Controller::resume(
+            setup,
+            c.content.clone(),
+            "/guide/".into(),
+            c.replay_root.clone(),
+            SimThread::spawn(),
+            c.match_id.clone(),
+            archive,
+            loaded,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn resume_restores_ledger_profiles_tokens_and_partial_round() {
+        let mut c = started(true, |_| {});
+        assert!(commit(&mut c, 0, "a1", 0).is_none());
+        let rx = commit(&mut c, 1, "b1", 0).unwrap();
+        run_round(&mut c, rx);
+        assert_eq!((c.round, c.current), (2, 1));
+        assert!(commit(&mut c, 0, "a2", 5).is_none());
+        let token_a = c.tokens[0].clone().unwrap();
+        let turns_before = c.revisions[&1].turns.clone();
+        let hash_before = c.revisions[&1].final_hash.clone();
+        let time_before = c.time_totals.clone();
+
+        // Killed after player 0's durable input for round 2: planning resumes with it accepted.
+        let mut r = reopen(&c);
+        assert_eq!((r.phase, r.round, r.current), (Phase::Planning, 2, 1));
+        assert_eq!(r.player_for(&token_a), Some(0));
+        assert_eq!(
+            r.lobby.slots[1]
+                .profile
+                .as_ref()
+                .unwrap()
+                .team_id
+                .as_deref(),
+            Some("orange")
+        );
+        assert!(matches!(r.config.multiplayer, Multiplayer::Teams { .. }));
+        assert_eq!(r.revisions[&1].turns, turns_before);
+        assert_eq!(r.revisions[&1].final_hash, hash_before);
+        assert!(r.revisions[&1].loaded && !r.revisions[&0].loaded);
+        assert_eq!(r.time_totals, time_before);
+        let precheck = r
+            .precheck_commit(
+                0,
+                &CommitRequest {
+                    request_id: "a2".into(),
+                    slot_token: token_a.clone(),
+                    draft: TurnDraft {
+                        based_on_revision: 1,
+                        tick: 5,
+                        commands: vec![],
+                    },
+                },
+            )
+            .unwrap();
+        assert!(
+            matches!(precheck, Some(ServerMessage::CommitAccepted { .. })),
+            "retry is idempotent"
+        );
+        assert!(r.restart_pending_round().unwrap().is_none());
+
+        // Killed after both inputs but before the round record: the round is simulated again.
+        let _dropped_job = commit(&mut r, 1, "b2", 5).unwrap();
+        let mut r2 = reopen(&r);
+        assert_eq!(r2.committed.len(), 2);
+        let rx = r2.restart_pending_round().unwrap().unwrap();
+        run_round(&mut r2, rx);
+        assert_eq!((r2.phase, r2.round, r2.current), (Phase::Planning, 3, 2));
+        assert_eq!(r2.revisions[&2].turns.len(), 4);
+
+        // A missing result cache regenerates from the ledger and must reproduce the hash.
+        fs::remove_dir_all(r2.replay_root.join(&r2.match_id).join("results/2")).unwrap();
+        let r3 = reopen(&r2);
+        assert!(r3.revisions[&2].loaded);
+        assert_eq!(r3.revisions[&2].final_hash, r2.revisions[&2].final_hash);
+        assert!(
+            r3.replay_root
+                .join(&r3.match_id)
+                .join("results/2/complete.json")
+                .exists()
+        );
+        let (_, loaded) = Archive::open(&r3.replay_root, &r3.match_id).unwrap();
+        assert!(verify_archive(&loaded, &r3.content).unwrap());
+    }
+
+    #[test]
+    fn resume_refuses_changed_content_and_keeps_archived_state() {
+        let mut c = started(false, |_| {});
+        let token = c.tokens[0].clone().unwrap();
+        c.stop_and_archive(&token, "stop".into(), 0).unwrap();
+        let r = reopen(&c);
+        assert_eq!(r.phase, Phase::Archived);
+        let (archive, mut loaded) = Archive::open(&c.replay_root, &c.match_id).unwrap();
+        loaded.manifest.fingerprint.content_hash = "0".repeat(64);
+        let setup = atemporal_content::load_setup(&loaded.config_yaml).unwrap();
+        let err = Controller::resume(
+            setup,
+            c.content.clone(),
+            "/guide/".into(),
+            c.replay_root.clone(),
+            SimThread::spawn(),
+            c.match_id.clone(),
+            archive,
+            loaded,
+        )
+        .err()
+        .unwrap();
+        assert!(err.contains("different content/config"), "{err}");
     }
 
     #[test]
