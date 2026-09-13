@@ -5,6 +5,7 @@ use crate::archive::{Archive, Manifest, ResultSizes, RoundRecord};
 use atemporal_sim::*;
 use serde::Serialize;
 use std::collections::{BTreeMap, VecDeque};
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -185,11 +186,67 @@ impl Controller {
 
     fn bump_lobby(&mut self) {
         self.lobby.revision += 1;
-        self.lobby.can_start =
-            self.phase == Phase::Lobby && self.lobby.slots.iter().all(|s| s.claimed);
+        self.lobby.can_start = self.phase == Phase::Lobby && self.roster_multiplayer().is_ok();
         self.send(ServerMessage::LobbyUpdated {
             lobby: self.lobby.clone(),
         });
+    }
+
+    /// Pinned multiplayer mode from the roster: FFA without configured teams, otherwise every
+    /// slot's chosen team must form at least two nonempty sides.
+    fn roster_multiplayer(&self) -> Result<Multiplayer> {
+        if !self.lobby.slots.iter().all(|s| s.claimed) {
+            return Err("all slots must be claimed".into());
+        }
+        if self.lobby.available_teams.is_empty() {
+            return Ok(Multiplayer::Ffa {});
+        }
+        let mut assignments = vec![];
+        for slot in &self.lobby.slots {
+            let profile = slot.profile.as_ref().ok_or("all slots must be claimed")?;
+            assignments.push(TeamAssignment {
+                player_id: slot.slot,
+                team_id: profile
+                    .team_id
+                    .clone()
+                    .ok_or_else(|| format!("slot {} has not chosen a team", slot.slot))?,
+            });
+        }
+        let mode = Multiplayer::Teams { assignments };
+        scoring::sides(self.config.player_count, &mode)?;
+        Ok(mode)
+    }
+
+    /// Team choice validated against config/teams.yaml: known team with free capacity.
+    fn validate_team(&self, slot: PlayerId, team_id: Option<&TeamId>) -> Result<()> {
+        if self.lobby.available_teams.is_empty() {
+            return match team_id {
+                Some(_) => Err("this match has no teams".into()),
+                None => Ok(()),
+            };
+        }
+        let team_id = team_id.ok_or("choose a team")?;
+        let team = self
+            .lobby
+            .available_teams
+            .iter()
+            .find(|t| t.team_id == *team_id)
+            .ok_or("unknown team")?;
+        let members = self
+            .lobby
+            .slots
+            .iter()
+            .filter(|s| s.slot != slot)
+            .filter(|s| {
+                s.profile
+                    .as_ref()
+                    .is_some_and(|p| p.team_id.as_ref() == Some(team_id))
+            })
+            .count();
+        if team.capacity.is_some_and(|cap| members >= usize::from(cap)) {
+            return Err(format!("team {} is full", team.label));
+        }
+        Ok(())
     }
 
     fn validate_profile(username: &str, color: &str) -> Result<()> {
@@ -217,22 +274,15 @@ impl Controller {
             return Err("match already started; reconnect with your slot token".into());
         }
         let index = usize::from(slot);
-        let Some(entry) = self.lobby.slots.get_mut(index) else {
+        let Some(entry) = self.lobby.slots.get(index) else {
             return Err("no such slot".into());
         };
         if entry.claimed {
             return Err("slot already claimed".into());
         }
         Self::validate_profile(&username, &color)?;
-        if let Some(team) = &team_id
-            && !self
-                .lobby
-                .available_teams
-                .iter()
-                .any(|t| t.team_id == *team)
-        {
-            return Err("unknown team".into());
-        }
+        self.validate_team(slot, team_id.as_ref())?;
+        let entry = &mut self.lobby.slots[index];
         entry.claimed = true;
         entry.connected = true;
         entry.profile = Some(PlayerProfile {
@@ -275,6 +325,9 @@ impl Controller {
             return Err("profiles are pinned after start".into());
         }
         let player = self.player_for(token).ok_or("unknown slot token")?;
+        if team_id.is_some() {
+            self.validate_team(player, team_id.as_ref())?;
+        }
         let profile = self.lobby.slots[usize::from(player)]
             .profile
             .as_mut()
@@ -393,9 +446,9 @@ impl Controller {
             });
             return Err("lobby changed; review the roster and start again".into());
         }
-        if !self.lobby.slots.iter().all(|s| s.claimed) {
-            return Err("all slots must be claimed".into());
-        }
+        // Team choices become the pinned assignments; the fingerprint follows the pinned config.
+        self.config.multiplayer = self.roster_multiplayer()?;
+        self.fingerprint.config_hash = identity::canonical_hash(&self.config)?;
         let initial = map::generate(&self.config, &self.content)?;
         let archive = Archive::create(&self.replay_root, &self.match_id)?;
         let manifest = Manifest {
@@ -1292,4 +1345,168 @@ pub fn timeline_index(buckets: &[TimelineBucket], players: u8) -> Vec<TimelineBu
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    pub fn test_root(name: &str) -> PathBuf {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "atemporal-server-test-{}-{name}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        root
+    }
+
+    pub fn controller(teams: bool, edit: impl FnOnce(&mut Setup)) -> Controller {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config");
+        let config_yaml = fs::read_to_string(dir.join("game.yaml")).unwrap();
+        let content_yaml = fs::read_to_string(dir.join("content.yaml")).unwrap();
+        let mut setup = atemporal_content::load_setup(&config_yaml).unwrap();
+        if teams {
+            setup.available_teams = ["cyan", "orange"]
+                .iter()
+                .map(|t| AvailableTeam {
+                    team_id: t.to_string(),
+                    label: t.to_uppercase(),
+                    capacity: Some(1),
+                })
+                .collect();
+        }
+        edit(&mut setup);
+        let content = atemporal_content::load_content(&content_yaml).unwrap();
+        Controller::new(
+            setup,
+            content,
+            config_yaml,
+            content_yaml,
+            "/guide/".into(),
+            test_root("lobby"),
+            SimThread::spawn(),
+        )
+        .unwrap()
+    }
+
+    fn claim(c: &mut Controller, slot: u8, team: Option<&str>) -> Result<String> {
+        c.claim_slot(
+            slot,
+            format!("player{slot}"),
+            "#4fc3f7".into(),
+            team.map(str::to_string),
+        )
+    }
+
+    #[test]
+    fn teams_require_choice_capacity_and_two_sides() {
+        let mut c = controller(true, |_| {});
+        assert!(
+            claim(&mut c, 0, None)
+                .unwrap_err()
+                .contains("choose a team")
+        );
+        assert!(
+            claim(&mut c, 0, Some("pink"))
+                .unwrap_err()
+                .contains("unknown team")
+        );
+        let a = claim(&mut c, 0, Some("cyan")).unwrap();
+        assert!(
+            claim(&mut c, 1, Some("cyan"))
+                .unwrap_err()
+                .contains("is full")
+        );
+        assert!(!c.lobby.can_start);
+        let b = claim(&mut c, 1, Some("orange")).unwrap();
+        assert!(c.lobby.can_start);
+        // Moving slot 1 onto slot 0's full team is rejected; swapping via a free team works.
+        assert!(
+            c.update_profile(&b, None, None, Some("cyan".into()))
+                .is_err()
+        );
+        c.update_profile(&a, Some("Ada".into()), None, None)
+            .unwrap();
+        assert_eq!(c.lobby.slots[0].profile.as_ref().unwrap().username, "Ada");
+        let before = c.fingerprint.config_hash.clone();
+        c.start_match(&a, c.lobby.revision).unwrap();
+        match &c.config.multiplayer {
+            Multiplayer::Teams { assignments } => {
+                assert_eq!(assignments.len(), 2);
+                assert_eq!(assignments[1].team_id, "orange");
+            }
+            other => panic!("expected pinned teams, got {other:?}"),
+        }
+        assert_ne!(c.fingerprint.config_hash, before);
+        assert!(
+            c.update_profile(&a, Some("late".into()), None, None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn ffa_lobby_rejects_teams_and_pins_ffa() {
+        let mut c = controller(false, |_| {});
+        assert!(claim(&mut c, 0, Some("cyan")).is_err());
+        let a = claim(&mut c, 0, None).unwrap();
+        assert!(!c.lobby.can_start);
+        claim(&mut c, 1, None).unwrap();
+        assert!(c.lobby.can_start);
+        c.start_match(&a, c.lobby.revision).unwrap();
+        assert_eq!(c.config.multiplayer, Multiplayer::Ffa {});
+        assert_eq!(c.phase, Phase::Simulating);
+    }
+
+    #[test]
+    fn stale_start_is_rejected_with_a_roster_refresh() {
+        let mut c = controller(false, |_| {});
+        let a = claim(&mut c, 0, None).unwrap();
+        let seen = c.lobby.revision;
+        let b = claim(&mut c, 1, None).unwrap();
+        let mut rx = c.broadcast.subscribe();
+        let err = c.start_match(&a, seen).unwrap_err();
+        assert!(err.contains("lobby changed"), "{err}");
+        assert!(
+            matches!(rx.try_recv(), Ok(ServerMessage::LobbyUpdated { lobby }) if lobby.revision == c.lobby.revision)
+        );
+        assert_eq!(c.phase, Phase::Lobby);
+        assert!(
+            c.start_match(&b, c.lobby.revision)
+                .unwrap_err()
+                .contains("first occupied")
+        );
+        assert!(c.update_profile(&a, Some(" ".into()), None, None).is_err());
+        assert!(
+            c.update_profile(&a, None, Some("red".into()), None)
+                .is_err()
+        );
+        c.update_profile(&a, None, Some("#ff0000".into()), None)
+            .unwrap();
+        c.start_match(&a, c.lobby.revision).unwrap();
+    }
+
+    #[test]
+    fn spectators_cannot_start_stop_or_commit() {
+        let mut c = controller(false, |_| {});
+        assert_eq!(c.player_for("guest"), None);
+        assert_eq!(c.connect(Some("guest")), None);
+        claim(&mut c, 0, None).unwrap();
+        claim(&mut c, 1, None).unwrap();
+        assert!(
+            c.start_match("guest", c.lobby.revision)
+                .unwrap_err()
+                .contains("claimed slot")
+        );
+        assert!(
+            c.stop_and_archive("guest", "r".into(), 0)
+                .unwrap_err()
+                .contains("claimed slot")
+        );
+        assert!(c.release_slot("guest").is_err());
+        assert!(c.lobby.can_start);
+    }
 }
