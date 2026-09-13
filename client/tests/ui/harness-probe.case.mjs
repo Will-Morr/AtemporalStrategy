@@ -7,6 +7,12 @@ test('probe assertion failure preserves evidence for each identity', async ({ re
     const page = await context.newPage();
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Atemporal Strategy', exact: true })).toBeVisible();
+    if (name === 'spectator') {
+      const closedPage = await context.newPage();
+      await closedPage.goto('/guide/');
+      await expect(closedPage.getByRole('heading', { name: 'How to play Atemporal Strategy' })).toBeVisible();
+      await closedPage.close();
+    }
   }
   expect('actual', 'intentional assertion probe').toBe('expected');
 });
@@ -28,4 +34,9 @@ test('probe failed requests fail automatically', async ({ page }) => {
   await page.goto('/');
   await page.route('**/harness-probe', route => route.abort('failed'));
   await page.evaluate(() => fetch('/harness-probe').catch(() => {}));
+});
+
+test('probe console errors fail automatically', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => console.error('intentional consoleerror probe'));
 });

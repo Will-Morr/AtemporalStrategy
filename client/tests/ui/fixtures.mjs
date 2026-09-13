@@ -40,11 +40,16 @@ export const test = base.extend({
       const videoDir = testInfo.outputPath(`${name}-video`);
       await mkdir(videoDir, { recursive: true });
       const target = await browser.newContext({ baseURL, viewport, locale: 'en-US', timezoneId: 'UTC', colorScheme: 'dark', reducedMotion: 'reduce', recordVideo: { dir: videoDir } });
-      owned.push({ name, context: target });
+      const videos = [];
+      target.on('page', opened => {
+        const video = opened.video();
+        if (video) videos.push(video);
+      });
+      owned.push({ name, context: target, videos });
       observeContext(target);
       return target;
     };
-    const errors = () => log.filter(item => ['pageerror', 'requestfailed', 'http-error'].includes(item.kind) || item.level === 'error');
+    const errors = () => log.filter(item => ['pageerror', 'requestfailed', 'http-error', 'cleanup-error'].includes(item.kind) || item.level === 'error');
     try {
       await use({ capture, log, observe, newContext });
     } finally {
@@ -55,11 +60,15 @@ export const test = base.extend({
         }
       }
       for (const item of owned) {
-        const videos = item.context.pages().map(target => target.video()).filter(Boolean);
-        await item.context.close();
-        for (const [index, video] of videos.entries()) {
-          if (failed) await testInfo.attach(`${item.name}-video-${index}`, { path: await video.path(), contentType: 'video/webm' });
-          else await video.delete();
+        // Keep collecting evidence even if one context or video cannot be finalized.
+        await item.context.close().catch(error => record({ kind: 'cleanup-error', context: item.name, text: error.message }));
+        for (const [index, video] of item.videos.entries()) {
+          try {
+            if (failed || errors().length > 0) await testInfo.attach(`${item.name}-video-${index}`, { path: await video.path(), contentType: 'video/webm' });
+            else await video.delete();
+          } catch (error) {
+            record({ kind: 'cleanup-error', context: item.name, text: error.message });
+          }
         }
       }
       const path = testInfo.outputPath('browser-log.json');

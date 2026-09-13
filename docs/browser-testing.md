@@ -40,7 +40,7 @@ The command prints an `artifacts/ui/<run-id>/` path. Override it with `ATEMPORAL
 - `run.json`: run ID, server URL, arguments, timestamps, server command, exit status and startup errors.
 - `runner.log`: combined runner/build/server output, including failures before tests start.
 - `results.json`, `junit.xml` and `report/index.html`: machine-readable and human-readable results (available once Playwright starts).
-- `results/<test>/`: named PNG screenshots, accessibility snapshots, browser console/network errors, and `trace.zip`. Videos are retained on failure, including fixture-owned player/spectator contexts. Accessibility snapshots and diagnostics are attached to the HTML report. Failure captures cover every open observed page before owned contexts close.
+- `results/<test>/`: named PNG screenshots, accessibility snapshots, browser console/network errors, and `trace.zip`. Videos are retained on failure, including fixture-owned player/spectator contexts and pages that closed during the test. Accessibility snapshots and diagnostics are attached to the HTML report. Failure captures cover every open observed page before owned contexts close.
 
 Open reports and traces locally:
 
@@ -68,7 +68,7 @@ Run the failure-path check independently:
 node scripts/check-ui-harness.mjs
 ```
 
-Its four intentionally failing cases are excluded from normal review. The outer command succeeds only when assertions, HTTP errors, page-script errors and failed requests produce failures with diagnostic/report/trace/screenshot evidence, including all three identity videos. These injected errors validate automation plumbing; they do not validate gameplay or application error recovery.
+Its five intentionally failing cases are excluded from normal review. The outer command succeeds only when assertions, HTTP errors, page-script errors, failed requests and console errors produce failures with diagnostic/report/trace/screenshot evidence, including all three identity videos and a video from a page closed before failure. Cleanup failures are reported while the remaining diagnostics are still collected. These injected errors validate automation plumbing; they do not validate gameplay or application error recovery.
 
 ## Gameplay scenario activation
 
