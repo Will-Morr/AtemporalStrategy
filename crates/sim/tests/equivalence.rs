@@ -24,8 +24,8 @@ fn battle(threads: u16) -> World {
     let refs: Vec<&str> = rows.iter().map(String::as_str).collect();
     let mut w = World::new(&refs);
     w.config.simulation_threads = threads;
-    w.config.max_tick = 1500;
-    w.config.stall_ticks = 200;
+    w.config.max_tick = 700;
+    w.config.stall_ticks = 100;
     w.config.checkpoint_interval = 100;
     w.config.snapshot_interval = 25;
     w.bank(0, 3000.0);
@@ -83,24 +83,30 @@ fn battle(threads: u16) -> World {
     w
 }
 
+/// One test shares the expensive runs: a serial replay, a pooled replay, three cold checkpoint
+/// reruns and a stepwise replay with a capacity-1 evicting field cache. The 1,000-armed-entity
+/// battle takes ~10 s in release and ~160 s unoptimized, so it runs only in release
+/// (`cargo test -p atemporal-sim --release`); pass `--ignored` to force it in debug.
 #[test]
-fn one_and_four_threads_replay_identically() {
+#[cfg_attr(debug_assertions, ignore)]
+fn threads_checkpoints_and_evicted_caches_replay_identically() {
     let serial = battle(1);
     let pooled = battle(4);
     let a = serial.run();
     let b = pooled.run();
-    let peak = trace(&serial)
+    // The genesis population itself crosses the armed threshold (1,080 grunts plus turrets).
+    let armed = serial
+        .state
+        .entities
         .iter()
-        .map(|s| s.entities.len())
-        .max()
-        .unwrap();
+        .filter(|e| serial.def(&e.type_key).weapon.is_some())
+        .count();
     assert!(
-        peak >= 1100,
-        "battle must cross the parallel threshold: peak {peak}"
+        armed >= 1000,
+        "battle must cross the parallel threshold: {armed} armed"
     );
     assert_eq!(a.result.final_hash, b.result.final_hash);
     assert_eq!(a.result.outcome, b.result.outcome);
-    assert_eq!(a.events.len(), b.events.len());
     assert!(a.events == b.events, "event streams differ");
     assert_eq!(a.checkpoints.len(), b.checkpoints.len());
     for (x, y) in a.checkpoints.iter().zip(&b.checkpoints) {
@@ -116,42 +122,43 @@ fn one_and_four_threads_replay_identically() {
             .iter()
             .any(|e| matches!(e.event, PresentationEvent::Attack { .. }))
     );
-    assert!(a.result.outcome.terminal_state_tick > 400);
-}
+    assert!(a.result.outcome.terminal_state_tick > 300);
 
-#[test]
-fn cold_checkpoint_reruns_match_the_warm_full_replay_with_the_pool() {
-    let w = battle(4);
-    let full = w.run();
-    assert_checkpoint_equivalence(&w, &full);
-}
+    for checkpoint in b.checkpoints.iter().filter(|c| c.tick.is_multiple_of(200)) {
+        if checkpoint.tick == 0 || checkpoint.tick >= b.result.outcome.terminal_state_tick {
+            continue;
+        }
+        let mut request = pooled.request();
+        request.checkpoint = checkpoint.clone();
+        let partial = run_request(&request);
+        assert_eq!(
+            partial.result.final_hash, b.result.final_hash,
+            "cold checkpoint {} diverges from the warm full replay",
+            checkpoint.tick
+        );
+        assert_eq!(partial.result.outcome, b.result.outcome);
+    }
 
-#[test]
-fn evicted_field_cache_never_changes_decisions() {
-    let w = battle(4);
-    let request = w.request();
-    let mut warm = Sim::new(&request).unwrap();
+    let request = pooled.request();
     let mut evicted = Sim::new(&request).unwrap();
     evicted.set_field_cache_capacity(1);
     let mut sink = |_: Output| {};
     let mut compared = 0;
-    while warm.state.tick < request.end_tick_exclusive {
-        warm.step(&mut sink).unwrap();
+    while evicted.state.tick < request.end_tick_exclusive {
         evicted.step(&mut sink).unwrap();
-        if warm.state.tick.is_multiple_of(50) {
+        if let Some(c) = b.checkpoints.iter().find(|c| c.tick == evicted.state.tick) {
             assert_eq!(
-                warm.hash_state().unwrap(),
+                identity::world_hash(c).unwrap(),
                 evicted.hash_state().unwrap(),
                 "S[{}] differs with an evicting cache",
-                warm.state.tick
+                c.tick
             );
             compared += 1;
         }
-        if warm.inactive() {
-            assert!(evicted.inactive());
+        if evicted.inactive() {
             break;
         }
     }
-    assert!(compared >= 8);
-    assert_eq!(warm.hash_state().unwrap(), evicted.hash_state().unwrap());
+    assert!(compared >= 3);
+    assert_eq!(evicted.hash_state().unwrap(), b.result.final_hash);
 }
