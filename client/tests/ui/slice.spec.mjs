@@ -368,6 +368,7 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
   const { once } = await import('node:events');
   const root = new URL('../../../',import.meta.url).pathname;
   const config = JSON.parse(await readFile(`${root}config/game.yaml`,'utf8'));
+  config.match_defaults.seed = 42;
   config.match_defaults.objective = {kind:'timed',lock_ticks_per_round:100};
   const dir = testInfo.outputPath('timed-server'); await mkdir(dir,{recursive:true});
   const configPath = `${dir}/game.json`; await writeFile(configPath,JSON.stringify(config));

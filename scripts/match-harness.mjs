@@ -36,6 +36,7 @@ export async function startServer(work, name, extra, env = {}) {
 
 export async function writeConfig(work, name, edit) {
   const config = JSON.parse(await readFile(`${root}config/game.yaml`, 'utf8'));
+  config.match_defaults.seed = 42;
   edit(config);
   await mkdir(`${work}/${name}`, { recursive: true });
   const path = `${work}/${name}/game.yaml`;

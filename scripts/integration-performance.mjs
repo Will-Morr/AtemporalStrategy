@@ -6,7 +6,7 @@ import { root, startServer, Client, lobby, assert, now } from './match-harness.m
 import { chromium } from '../client/node_modules/@playwright/test/index.mjs';
 const reviewOnly=process.argv.includes('--review-only');
 const dir=`${root}target/integration-performance`;await mkdir(dir,{recursive:true});
-const config=JSON.parse(await readFile(`${root}config/game.yaml`,'utf8'));
+const config=JSON.parse(await readFile(`${root}config/game.yaml`,'utf8'));config.match_defaults.seed=42;
 config.match_defaults.map_size=96;config.match_defaults.starting_matter=1020;config.match_defaults.stall_ticks=20000;
 const content=JSON.parse(await readFile(`${root}config/content.yaml`,'utf8'));
 for(const t of content.types){t.weapon=null;if(t.key==='grunt'||t.key==='factory')t.matter_cost=1;}

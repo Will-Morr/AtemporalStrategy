@@ -10,6 +10,8 @@ Constructors can mine at 50% of the rate of a dedicated miner. The purpose is to
 
 Ore is scattered around the map in clusters of 1 to 9 tiles, weighted toward the smaller sizes, so the map allows back-and-forth play. There does not need to be a large guaranteed deposit next to the starting position (playtest decision, 2026-09-13; this supersedes the earlier fixed start patch).
 
+Map generation should be fresh for every game (or at least drawn from a pool of randomly generated maps). Ore must not concentrate along the main corridors: that forces constant unit collisions as troops push past constructors and makes the corridor the only tactically significant place. Distribute ore better, tending to place it along the edges of open areas. The layout itself should not be one large open area with a few insignificant columns and a handful of dead-end tunnels (map decision, 2026-09-13).
+
 A miner claims the tile it is mining. Other miners sent to the same area path through or around claimed tiles instead of all converging on the closest one, so a group fills out a fillable area rather than clustering on its entry corner (playtest decision, 2026-09-13).
 
 ## Elimination and simulation outcomes

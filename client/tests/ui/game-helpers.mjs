@@ -7,6 +7,7 @@ import { once } from 'node:events';
 export async function isolatedServer(testInfo, edit = () => {}, editContent = () => {}, serverArgs = []) {
   const root = new URL('../../../', import.meta.url).pathname;
   const config = JSON.parse(await readFile(`${root}config/game.yaml`, 'utf8'));
+  config.match_defaults.seed = 42;
   edit(config);
   const dir = testInfo.outputPath('server'); await mkdir(dir, { recursive:true });
   const content=JSON.parse(await readFile(`${root}config/content.yaml`,'utf8'));editContent(content);const contentPath=`${dir}/content.json`;await writeFile(contentPath,JSON.stringify(content));

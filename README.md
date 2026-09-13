@@ -61,7 +61,7 @@ Open **How to play** from the lobby, or visit `/guide/` on your server, for surv
 
 ## Hosting and saved games
 
-Match settings live in [config/game.yaml](config/game.yaml); unit and building definitions live in [config/content.yaml](config/content.yaml). Change them before starting the server. The in-game guide generates its stats from the loaded content.
+Match settings live in [config/game.yaml](config/game.yaml) (the default `seed` of 0 generates a fresh map for every match; set a nonzero seed to replay one layout); unit and building definitions live in [config/content.yaml](config/content.yaml). Change them before starting the server. The in-game guide generates its stats from the loaded content.
 
 Games are archived under `replays/`. An ordinary launch starts a new match; resume an existing one with:
 

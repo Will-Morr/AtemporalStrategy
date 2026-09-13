@@ -477,7 +477,13 @@ impl Controller {
             return Err("lobby changed; review the roster and start again".into());
         }
         // Team choices become the pinned assignments; the fingerprint follows the pinned config.
+        // Seed 0 in the setup file means a fresh map per match, pinned here for replays.
         self.config.multiplayer = self.roster_multiplayer()?;
+        if self.config.seed.get() == 0 {
+            let fresh = identity::sha256(self.match_id.as_bytes());
+            let fresh = u64::from_str_radix(&fresh[..12], 16).map_err(|e| e.to_string())?;
+            self.config.seed = fresh.max(1).try_into()?;
+        }
         self.fingerprint.config_hash = identity::canonical_hash(&self.config)?;
         let initial = map::generate(&self.config, &self.content)?;
         let archive = Archive::create(&self.replay_root, &self.match_id)?;
@@ -2217,6 +2223,32 @@ pub(crate) mod tests {
             "#4fc3f7".into(),
             team.map(str::to_string),
         )
+    }
+
+    #[test]
+    fn seed_zero_draws_a_fresh_pinned_seed_at_start() {
+        let mut c = controller(false, |s| s.match_defaults.seed = 0u64.try_into().unwrap());
+        let a = claim(&mut c, 0, None).unwrap();
+        claim(&mut c, 1, None).unwrap();
+        assert_eq!(c.config.seed.get(), 0);
+        c.start_match(&a, c.lobby.revision).unwrap();
+        let drawn = c.config.seed.get();
+        assert_ne!(drawn, 0);
+        assert_eq!(
+            c.fingerprint.config_hash,
+            identity::canonical_hash(&c.config).unwrap()
+        );
+        // Match ids carry a millisecond timestamp; step past it so the second draw differs.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let mut d = controller(false, |s| s.match_defaults.seed = 0u64.try_into().unwrap());
+        let b = claim(&mut d, 0, None).unwrap();
+        claim(&mut d, 1, None).unwrap();
+        d.start_match(&b, d.lobby.revision).unwrap();
+        assert_ne!(
+            d.config.seed.get(),
+            drawn,
+            "different matches draw different seeds"
+        );
     }
 
     #[test]

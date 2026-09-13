@@ -75,6 +75,8 @@ impl World {
             atemporal_content::load_setup(include_str!("../../../../config/game.yaml"))
                 .unwrap()
                 .match_defaults;
+        // Fixture worlds keep a fixed seed; the setup file's 0 means a fresh seed per match.
+        config.seed = 42u64.try_into().unwrap();
         config.map_size = (width.max(height).max(8) + 1) & !1;
         config.max_tick = 2000;
         config.stall_ticks = 50;

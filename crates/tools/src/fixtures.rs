@@ -49,6 +49,7 @@ fn base(name: &str, description: &str, max_tick: u32) -> GoldenWorldFixture {
     let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))
         .unwrap()
         .match_defaults;
+    config.seed = 42u64.try_into().unwrap();
     config.map_size = 8;
     config.max_tick = max_tick;
     config.stall_ticks = 3;

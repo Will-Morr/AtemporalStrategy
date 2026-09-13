@@ -331,3 +331,18 @@ fn generation_is_deterministic_per_seed() {
         identity::world_hash(&c).unwrap()
     );
 }
+
+/// `cargo test -p atemporal-sim --test maps dump_maps -- --ignored --nocapture` prints a
+/// batch of default-size maps for visual tuning.
+#[test]
+#[ignore]
+fn dump_maps() {
+    let (mut config, content) = setup();
+    for seed in 0..8u64 {
+        config.seed = seed.try_into().unwrap();
+        println!(
+            "seed {seed}\n{}",
+            ascii(&map::generate(&config, &content).unwrap())
+        );
+    }
+}
