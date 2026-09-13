@@ -88,6 +88,15 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #outcome-banner[data-outcome=preview]{border-color:#5eead4;background:#153b3b;color:#a7fff1}
 .selection-value{font-size:12px;padding:3px 0;color:#dce6ee}.selection-value[data-value="high"],.selection-value[data-value="mixed"]{color:#ffd36a}#cancel-blueprints{display:block;margin:5px 0;color:#ffb7ad;border-color:#b87367}
 #graph{height:280px}#selection-body>small{display:block;margin-top:4px;color:var(--dim)}
+/* Keep match standings prominent at every replay tick, including narrow screens. */
+#game{--hud-height:76px}#top{height:var(--hud-height);padding-right:min(43vw,530px)}
+#scoreboard{position:absolute;right:8px;top:4px;width:min(41vw,510px);color:#e7f0f6}
+.scoreboard-heading{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;letter-spacing:.06em;margin:0 2px 3px}.scoreboard-heading strong{color:#ffe49a}.scoreboard-heading span{color:#bed0dc;letter-spacing:0}
+.scoreboard-players{display:flex;gap:5px}.score-player{position:relative;flex:1;min-width:0;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;gap:0 6px;padding:4px 8px;background:#18232e;border:1px solid #3c4b59;border-top:3px solid var(--player-color);border-radius:5px}
+.score-name{color:var(--player-color);font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center}.score-count{font-size:30px;line-height:1;grid-column:2;grid-row:1/3;font-variant-numeric:tabular-nums;color:var(--player-color)}.score-status{font-size:9px;color:#aabdc9;letter-spacing:.07em}.score-points{grid-column:1/-1;font-size:9px;color:#d3dde3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score-player[data-status=leading]{background:#263329;border-color:#ba9c55;border-top-color:var(--player-color)}.score-player[data-status=leading] .score-status{color:#ffe097;font-weight:800}.score-player[data-status=winner]{background:#264f36;border-color:#9ce5a6}.score-player[data-status=winner] .score-status{color:#aeffbf;font-weight:800}
+#outcome-banner{top:calc(var(--hud-height) + 4px)}#mode{top:calc(var(--hud-height) + 40px)}#result{display:none}#replay{top:calc(var(--hud-height) + 54px)}
+@media(max-width:1000px){#game{--hud-height:142px}#top{padding-right:10px;overflow:visible}#scoreboard{top:64px;left:6px;right:6px;width:auto}.score-name{font-size:11px}.score-count{font-size:28px}.score-player{padding:4px 6px}.scoreboard-heading{font-size:10px}#replay{top:calc(var(--hud-height) + 54px)}}
 </style></head><body>
 <section id="lobby">
   <h1>Atemporal Strategy</h1>
@@ -109,7 +118,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 </section>
 <section id="game">
   <canvas id="map" tabindex="0" aria-label="Battlefield"></canvas>
-  <div id="top"><span id="top-phase"></span><span id="top-tick"></span><span id="top-bank"></span><span id="top-score"></span><span id="top-sim"></span><span id="top-exact"></span></div>
+  <div id="top"><span id="top-phase"></span><span id="top-tick"></span><span id="top-bank"></span><section id="scoreboard" aria-label="Match scoreboard" aria-live="polite"></section><span id="top-sim"></span><span id="top-exact"></span></div>
   <div id="mode"></div><div id="outcome-banner" role="status"></div>
   <div id="result"></div>
   <div id="toast"></div>

@@ -1130,8 +1130,6 @@ export class Game {
       ? this.exact.state.players.filter(p => this.spectator || p.player_id === this.player).map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`)
       : sample?.players.filter(p => this.spectator || p.player_id === this.player).map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`) ?? [];
     $('top-bank').textContent = `MATTER · ${banks.join(' · ')} · tick ${Math.floor(this.playhead)}${this.exact?.tick === Math.floor(this.playhead) ? '' : ' (sampled)'}`;
-    const score = rev?.score?.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id} ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · ');
-    $('top-score').textContent = score ? `score: ${score}` : '';
     const round = this.experience?.rounds.get(this.current);
     if(this.viewingPreview) $('top-sim').textContent=`Simulation continues · completed through tick ${this.preview!.through_tick} · final result pending`;
     else if (round) {

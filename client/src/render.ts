@@ -29,7 +29,8 @@ export class Renderer {
 
   resize(): void {
     this.map.width = window.innerWidth;
-    this.map.height = Math.max(100, document.getElementById('panels')!.getBoundingClientRect().top);
+    this.headerHeight = document.getElementById('top')!.offsetHeight;
+    this.map.height = Math.max(this.headerHeight+100, document.getElementById('panels')!.getBoundingClientRect().top);
     this.map.style.height = `${this.map.height}px`;
     this.minimap.width = this.minimap.clientWidth || 200;
     this.minimap.height = this.minimap.clientHeight || 200;
@@ -37,6 +38,7 @@ export class Renderer {
     this.timeline.width = this.timeline.clientWidth || 600;
     this.timeline.height = this.timeline.clientHeight || 80;
   }
+  private headerHeight = 76;
   centerOn(x: number, y: number): void {
     this.camera.x = x;
     this.camera.y = y;
@@ -46,7 +48,7 @@ export class Renderer {
   clamp(): void {
     const t = this.game.terrain;
     if (!t) return;
-    const vw = this.map.width / this.camera.scale, vh = (this.map.height - 64) / this.camera.scale;
+    const vw = this.map.width / this.camera.scale, vh = (this.map.height - this.headerHeight) / this.camera.scale;
     const margin = 2;
     const range = (view: number, size: number, value: number) => {
       const a = view / 2 - margin, b = size - view / 2 + margin;
@@ -60,7 +62,7 @@ export class Renderer {
     const t = this.game.terrain;
     if (!t) return false;
     if (!this.game.spectator) {this.camera.scale=26;const e=this.game.rawEntities().find(e=>e.owner===this.game.player);if(e)this.centerOn(e.x,e.y);return true;}
-    const usable = this.map.height - 84;
+    const usable = this.map.height - this.headerHeight - 20;
     this.camera.scale = Math.max(1, Math.min(32, Math.floor(Math.min(usable / t.height, (this.map.width - 40) / t.width))));
     const fits = t.height * this.camera.scale <= usable && t.width * this.camera.scale <= this.map.width;
     this.camera.x = t.width / 2;
@@ -93,7 +95,7 @@ export class Renderer {
   }
 
   worldAt(px: number, py: number): { x: number; y: number } {
-    return { x: (px - this.map.width / 2) / this.camera.scale + this.camera.x, y: (py - (this.map.height + 64) / 2) / this.camera.scale + this.camera.y };
+    return { x: (px - this.map.width / 2) / this.camera.scale + this.camera.x, y: (py - (this.map.height + this.headerHeight) / 2) / this.camera.scale + this.camera.y };
   }
   tileAt(px: number, py: number): Tile {
     const w = this.worldAt(px, py);
@@ -102,7 +104,7 @@ export class Renderer {
     return { x: clamp(w.x, t?.width ?? 1), y: clamp(w.y, t?.height ?? 1) };
   }
   screen(x: number, y: number): [number, number] {
-    return [(x - this.camera.x) * this.camera.scale + this.map.width / 2, (y - this.camera.y) * this.camera.scale + (this.map.height + 64) / 2];
+    return [(x - this.camera.x) * this.camera.scale + this.map.width / 2, (y - this.camera.y) * this.camera.scale + (this.map.height + this.headerHeight) / 2];
   }
   minimapTile(px: number, py: number): Tile | null {
     const t = this.game.terrain;
@@ -162,7 +164,7 @@ export class Renderer {
     }
     const visible = this.game.visibility();
     const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
-    const cornerA=this.worldAt(0,64),cornerB=this.worldAt(width,height);
+    const cornerA=this.worldAt(0,this.headerHeight),cornerB=this.worldAt(width,height);
     if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
     const views = this.game.entities();
     const byIndex = new Map(views.map(v => [v.index, v]));
@@ -198,7 +200,7 @@ export class Renderer {
     // Entities.
     for (const v of views) {
       const [px,py]=this.screen(v.x,v.y);
-      if(px+s<0 || py+s<64 || px>width || py>height) continue;
+      if(px+s<0 || py+s<this.headerHeight || px>width || py>height) continue;
       this.drawEntity(ctx, v, s, byIndex);
     }
     // Selection highlight and orders.
@@ -323,7 +325,7 @@ export class Renderer {
       g.fillStyle = this.game.color(v.owner);
       g.fillRect(v.x * sx, v.y * sy, Math.max(2, sx), Math.max(2, sy));
     }
-    const vw = this.map.width / this.camera.scale, vh = (this.map.height - 64) / this.camera.scale;
+    const vw = this.map.width / this.camera.scale, vh = (this.map.height - this.headerHeight) / this.camera.scale;
     g.strokeStyle = '#fff';
     g.strokeRect((this.camera.x - vw / 2) * sx, (this.camera.y - vh / 2) * sy, vw * sx, vh * sy);
   }

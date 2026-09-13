@@ -1740,6 +1740,17 @@ impl Controller {
         {
             return Err("archive was recorded under different content/config; refusing to replay it silently".into());
         }
+        if recorded
+            .sim_build
+            .rsplit_once(" rules ")
+            .and_then(|(_, version)| version.parse::<u32>().ok())
+            != Some(atemporal_sim::RULES_VERSION)
+        {
+            return Err(format!(
+                "archive uses incompatible simulator rules/build: {}; this server uses {}. Resume with the original binary.",
+                recorded.sim_build, c.fingerprint.sim_build
+            ));
+        }
         if recorded.sim_build != c.fingerprint.sim_build {
             eprintln!(
                 "warning: archive recorded with {} but this server is {}; hashes are verified on regeneration",

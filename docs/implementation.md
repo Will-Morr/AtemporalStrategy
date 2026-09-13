@@ -142,6 +142,8 @@ The coordinator retains shared content/contracts and merges changes sequentially
 - [x] Per-item queue looping, five-unit Shift-click additions, shared High/Medium/Low/Off priority dropdown, and turret self-repair at half construction efficiency.
 - [x] Darkest walls / medium unseen floor / lightest seen floor, no battlefield priority badges, and blocky player-colored miners.
 
+- [x] Persistent player-colored scoreboard with timeline win counts, match leadership and victory, stable historical viewing and refresh recovery.
+
 ## Progressive replay
 
 - [x] View completed replay ticks while simulation continues, with an advancing available frontier, exact seeks, playback, refresh and preserved viewing position at final publication. Controller and native peripheral serve generation-isolated prefixes; provisional results remain read-only until verification. See the progressive replay pass in [integration verification](integration-verification.md).

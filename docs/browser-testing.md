@@ -131,3 +131,7 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 
 
 `feedback.spec.mjs` covers factory/turret blueprint deletion, undo/redo and removal of dependent settings, shared/mixed priority and group feedback, rebasing before a blueprint existed without submitting an invalid commit, cancellation of an active turret construction site, exhausted ore and smoothed mining-rate plots. It uses the peripheral when `ATEMPORAL_UI_PERIPHERAL=1`; direct and replicated verification evidence is recorded in the integration log. The pure slope checks run with `npm test --prefix client` and cover irregular spacing, negative/zero rates, missing samples and singleton windows.
+
+## Production, repair and scoreboard scenarios
+
+`production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real five-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop/narrow viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.

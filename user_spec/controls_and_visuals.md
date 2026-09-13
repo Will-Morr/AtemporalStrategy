@@ -62,7 +62,7 @@ Refresh/rejoin must visibly identify the player and preserve independent identit
 H adds the selection to a group; provide an explicit clear-group action. This supersedes the previous H-replace/Shift+H-add gesture.
 
 
-Blueprints of every structure type, including turrets, need a clear deletion action. Normal drafting flows must not produce invalid-blueprint commit rejections. Preview queued changes as if applied at the selected tick, including group membership and priority. Show constructor priority and distinguish a shared selection value from mixed values.
+Blueprints of every structure type, including turrets, need a clear deletion action. Normal drafting flows must not produce invalid-blueprint commit rejections. Preview queued changes as if applied at the selected tick, including group membership and priority. Show constructor priority in the bottom UI and distinguish a shared selection value from mixed values.
 
 Ore should be yellow; fully depleted deposits should become light gray, distinct from partly mined deposits. Fog shades open tiles only; walls retain their dark gray. Miner silhouettes must primarily show their player color. Statistics plots need a slope switch showing a lightly smoothed derivative, especially for comparing active mining rates.
 
@@ -77,3 +77,7 @@ Factory looping is per queue item. The loop switch controls additions: units que
 Use one shared priority dropdown in the bottom selection UI for all eligible entities, including constructors, factories and turrets. Display common or mixed values. Never draw matter priority on the battlefield. Off disables spending.
 
 Terrain gray values must be darkest for walls, medium for unseen floor, and lightest for seen floor. Miners must have a blocky silhouette and clear owner coloring. These replace earlier shading and miner presentation.
+
+## Persistent scoreboard
+
+Show a clear, prominent scoreboard with the current count of timelines won by each player. It must be easy to tell who is leading at any replay tick. Keep player-colored totals visible while inspecting history, distinguish match totals from a single timeline result, and make progress toward match victory readable.

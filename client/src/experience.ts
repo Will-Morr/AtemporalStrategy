@@ -1,3 +1,4 @@
+import { scoreboard } from './scoreboard';
 import { slopePoints } from './plot';
 import { unitIcon } from './icons';
 import { factoryPlan, orderLabel } from './factory';
@@ -168,8 +169,29 @@ export class Experience {
     if (this.g.draft.selected !== null) return false;
     return this.g.cancelSelectedBlueprints();
   }
+  updateScoreboard(): void {
+    const g=this.g, root=$('scoreboard'), data=scoreboard(g.config,g.latest,this.rounds);
+    const signature=JSON.stringify([data,Array.from({length:g.config.player_count},(_,p)=>[g.name(p),g.color(p)]),g.current!==g.latest,g.viewingPreview]);
+    if(root.dataset.signature===signature)return;root.dataset.signature=signature;root.replaceChildren();
+    const heading=document.createElement('div');heading.className='scoreboard-heading';
+    const title=document.createElement('strong');title.textContent='TIMELINE WINS';
+    const goal=document.createElement('span');goal.textContent=`${data.goal} · ${g.viewingPreview?'result pending':`after round ${data.round}`}`;heading.append(title,goal);root.append(heading);
+    root.title=`Current match totals after round ${data.round}. Scrubbing past ticks does not change these totals.${g.viewingPreview?' The running timeline has not scored yet.':''}`;
+    const players=document.createElement('div');players.className='scoreboard-players';
+    for(const row of data.rows){
+      const card=document.createElement('div');card.className='score-player';card.dataset.player=String(row.player);card.dataset.wins=row.wins===null?'pending':String(row.wins);card.dataset.status=row.winner?'winner':row.leading?'leading':'neutral';card.style.setProperty('--player-color',g.color(row.player));
+      const name=document.createElement('span');name.className='score-name';name.textContent=g.name(row.player);name.title=g.name(row.player);
+      const count=document.createElement('strong');count.className='score-count';count.textContent=row.wins===null?'…':String(row.wins);count.setAttribute('aria-label',`${g.name(row.player)}: ${row.wins===null?'loading':row.wins} timelines won`);
+      const status=document.createElement('span');status.className='score-status';status.textContent=row.winner?'WINNER':row.leading?'LEADING':row.wins===null?'Loading':'wins';
+      card.append(name,count,status);
+      if(row.showPoints){const points=document.createElement('small');points.className='score-points';points.textContent=`${row.team?`${row.team} · `:''}${Number(row.points.toFixed(2))} pts`;points.title='Match scoring includes team totals, configured draw awards and any time penalty.';card.append(points);}
+      players.append(card);
+    }
+    root.append(players);
+  }
   update(): void {
     const g = this.g;
+    this.updateScoreboard();
     this.actions();
     const policy = document.querySelector<HTMLButtonElement>('#actions [data-key="o"]');
     if (policy) policy.textContent = `O ${g.draft.policy === 'keep' ? 'Keep future orders' : g.draft.policy === 'drop_all' ? 'Replace all future' : 'Replace next window'}`;

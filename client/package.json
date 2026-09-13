@@ -10,7 +10,7 @@
   "scripts": {
     "generate": "node ../scripts/generate.mjs",
     "check": "tsc --noEmit",
-    "test": "node ../scripts/check-fixtures.mjs && node ../scripts/check-plot.mjs",
+    "test": "node ../scripts/check-fixtures.mjs && node ../scripts/check-plot.mjs && node ../scripts/check-scoreboard.mjs",
     "build": "npm run generate && npm run check && node ../scripts/build-client.mjs",
     "dev": "npm run build && node ../scripts/serve-client.mjs",
     "ui:install": "playwright install chromium",
