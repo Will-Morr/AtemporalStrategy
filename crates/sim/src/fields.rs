@@ -2,6 +2,7 @@
 use crate::world::{DIRS, Sim};
 use crate::*;
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
 
 pub const UNREACHABLE: u16 = u16::MAX;
 
@@ -15,15 +16,30 @@ pub(crate) enum Occupancy {
 }
 const CAPACITY: usize = 256;
 
-#[derive(Default)]
 pub struct FieldCache {
     version: u32,
-    fields: BTreeMap<(u32, bool), std::rc::Rc<Vec<u16>>>,
+    capacity: usize,
+    fields: BTreeMap<(u32, bool), Arc<Vec<u16>>>,
+}
+impl Default for FieldCache {
+    fn default() -> Self {
+        Self {
+            version: 0,
+            capacity: CAPACITY,
+            fields: BTreeMap::new(),
+        }
+    }
 }
 
 impl Sim {
     /// Distance grid toward `goal`. A non-traversable goal seeds its legal adjacent cells at zero.
-    pub(crate) fn field(&mut self, goal: Tile, neighbors: Neighbors) -> std::rc::Rc<Vec<u16>> {
+    /// Bound the derived field cache; eviction may cost time but never changes decisions.
+    pub fn set_field_cache_capacity(&mut self, capacity: usize) {
+        self.fields.capacity = capacity.max(1);
+        self.fields.fields.clear();
+    }
+
+    pub(crate) fn field(&mut self, goal: Tile, neighbors: Neighbors) -> Arc<Vec<u16>> {
         if self.fields.version != self.structure_version {
             self.fields.fields.clear();
             self.fields.version = self.structure_version;
@@ -32,10 +48,10 @@ impl Sim {
         if let Some(f) = self.fields.fields.get(&key) {
             return f.clone();
         }
-        if self.fields.fields.len() >= CAPACITY {
+        if self.fields.fields.len() >= self.fields.capacity {
             self.fields.fields.clear();
         }
-        let field = std::rc::Rc::new(self.build_field(goal, neighbors));
+        let field = Arc::new(self.build_field(goal, neighbors));
         self.fields.fields.insert(key, field.clone());
         field
     }

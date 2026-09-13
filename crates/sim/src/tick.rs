@@ -18,6 +18,13 @@ struct Intent {
     hold: bool,
 }
 
+/// Results of the serial field-touching prepass, consumed by the read-only intent pass.
+#[derive(Clone, Default)]
+struct Prep {
+    at_destination: bool,
+    blueprint: Option<usize>,
+}
+
 #[derive(Clone, Copy)]
 enum ConsumerKind {
     Site(usize),
@@ -105,138 +112,187 @@ impl Sim {
             && (!need_los || self.line_of_sight(a.tile, b.tile))
     }
 
+    /// Populations below this run intents serially; the pool only pays off on large ticks.
+    const PARALLEL_THRESHOLD: usize = 256;
+
+    /// Serial prepass that touches the shared field cache, then read-only intents computed
+    /// in ordered slots by a bounded scoped pool (or serially below the threshold).
     fn intents(&mut self) -> Result<Vec<Intent>> {
         let n = self.state.entities.len();
-        let mut intents = vec![Intent::default(); n];
-        let mut engaged: Vec<Option<EntityId>> = vec![None; n];
+        let mut prep: Vec<Prep> = Vec::with_capacity(n);
         for i in 0..n {
-            let e = self.state.entities[i].clone();
+            let e = &self.state.entities[i];
+            let mut p = Prep::default();
             if e.lifecycle == Lifecycle::Site {
+                prep.push(p);
                 continue;
             }
-            let def = self.def(i).clone();
-            let mut intent = Intent::default();
-            let ready = self.ready_action(i);
-            let e_tile = e.tile;
-            let at_destination = |sim: &mut Self, dest: Tile| -> bool {
-                let f = sim.field(
-                    dest,
-                    def.movement
-                        .as_ref()
-                        .map_or(Neighbors::Four, |m| m.neighbors),
-                );
-                f[sim.idx(e_tile)] == 0
-            };
-            // A healing-capable supporter prioritizes legal healing of its ally over firing.
-            if let (Order::Support { target }, Some(h)) = (&e.action, &def.healing)
-                && let Some(ally) = self.find(target)
-                && self.state.entities[ally].lifecycle == Lifecycle::Complete
-                && self.state.entities[ally].hp < self.def(ally).max_hp - EPS
-                && Self::dist2(e.tile, self.state.entities[ally].tile) <= h.range * h.range + EPS
-            {
-                intent.hold = true;
-                if ready {
-                    intent.heal = Some(ally);
+            let def = self.def(i);
+            match &e.action {
+                Order::AttackMove { destination } if def.movement.is_some() => {
+                    let neighbors = def.movement.as_ref().unwrap().neighbors;
+                    let (dest, tile) = (*destination, e.tile);
+                    let f = self.field(dest, neighbors);
+                    p.at_destination = f[self.idx(tile)] == 0;
                 }
+                Order::Construct { area } if def.construction.is_some() => {
+                    let area = area.clone();
+                    p.blueprint = self.choose_blueprint(i, &area);
+                }
+                _ => {}
             }
-            if let Some(w) = &def.weapon
-                && !intent.hold
-            {
-                let direct = !w.indirect;
-                let range = w.range;
-                let zone_defend = range.min(def.vision);
-                let mut candidate: Option<usize> = None;
-                let mut zone = 0.0;
-                match &e.action {
-                    Order::Idle {} => zone = zone_defend,
-                    Order::AttackMove { destination } => {
-                        zone = if def.movement.is_some() && !at_destination(self, *destination) {
-                            def.vision
-                        } else {
-                            zone_defend
-                        };
-                    }
-                    Order::Support { target } => {
-                        zone = zone_defend;
-                        if let Some(ally) = self.find(target)
-                            && let Some(enemy) = self.state.entities[ally].engaged_target.as_ref()
-                            && let Some(j) = self.find(enemy)
-                            && self.target_valid(i, j, def.vision, direct)
-                        {
-                            candidate = Some(j);
-                        }
-                    }
-                    Order::Mine { .. } | Order::Construct { .. } => {}
-                }
-                if candidate.is_none() && zone > 0.0 {
-                    let retained = self.state.entities[i]
-                        .engaged_target
-                        .as_ref()
-                        .and_then(|id| self.find(id))
-                        .filter(|j| self.target_valid(i, *j, zone, direct));
-                    candidate = retained.or_else(|| self.nearest_hostile(i, zone, direct));
-                }
-                if let Some(j) = candidate {
-                    engaged[i] = Some(self.state.entities[j].id.clone());
-                    let in_range =
-                        Self::dist2(e.tile, self.state.entities[j].tile) <= range * range + EPS;
-                    if in_range {
-                        intent.hold = true;
-                        if ready && w.damage > 0.0 {
-                            intent.attack = Some(j);
-                        }
-                    } else if def.movement.is_some() {
-                        intent.goal = Some((self.state.entities[j].tile, false));
-                    }
-                }
-            }
-            if !intent.hold && intent.goal.is_none() {
-                match e.action.clone() {
-                    Order::Mine { area } if def.mining.is_some() => {
-                        let here = self.idx(e.tile);
-                        if in_rect(e.tile, &area) && self.state.ore[here] > 0.0 {
-                            intent.hold = true;
-                            intent.mine = ready;
-                        } else if let Some(goal) = self.nearest_ore(e.tile, &area) {
-                            intent.goal = Some((goal, false));
-                        }
-                    }
-                    Order::Construct { area } if def.construction.is_some() => {
-                        if let Some(b) = self.choose_blueprint(i, &area) {
-                            let target = self.state.blueprints[b].tile;
-                            if chebyshev(e.tile, target) == 1 {
-                                intent.hold = true;
-                                if ready {
-                                    intent.construct = Some(b);
-                                }
-                            } else {
-                                intent.goal = Some((target, true));
-                            }
-                        }
-                    }
-                    Order::AttackMove { destination } if def.movement.is_some() => {
-                        intent.goal = Some((destination, false));
-                    }
-                    Order::Support { target } if def.movement.is_some() => {
-                        if let Some(j) = self.find(&target) {
-                            let tile = self.state.entities[j].tile;
-                            if chebyshev(e.tile, tile) > 1 {
-                                intent.goal = Some((tile, true));
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            intents[i] = intent;
+            prep.push(p);
         }
-        for (i, engaged) in engaged.into_iter().enumerate() {
+        let threads = usize::from(self.config.simulation_threads).max(1);
+        let intents: Vec<(Intent, Option<EntityId>)> =
+            if threads == 1 || n < Self::PARALLEL_THRESHOLD {
+                (0..n).map(|i| self.intent(i, &prep[i])).collect()
+            } else {
+                let chunk = n.div_ceil(threads);
+                let sim: &Self = self;
+                std::thread::scope(|scope| {
+                    let workers: Vec<_> = prep
+                        .chunks(chunk)
+                        .enumerate()
+                        .map(|(k, slice)| {
+                            scope.spawn(move || {
+                                slice
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(j, p)| sim.intent(k * chunk + j, p))
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        .collect();
+                    workers
+                        .into_iter()
+                        .flat_map(|w| w.join().expect("intent worker panicked"))
+                        .collect()
+                })
+            };
+        let mut out = Vec::with_capacity(n);
+        for (i, (intent, engaged)) in intents.into_iter().enumerate() {
             let e = &mut self.state.entities[i];
             if e.lifecycle == Lifecycle::Complete {
                 e.engaged_target = engaged;
             }
+            out.push(intent);
         }
-        Ok(intents)
+        Ok(out)
+    }
+
+    /// Read-only intent for one entity from the pre-tick snapshot and its prepass result.
+    fn intent(&self, i: usize, prep: &Prep) -> (Intent, Option<EntityId>) {
+        let e = &self.state.entities[i];
+        let mut intent = Intent::default();
+        let mut engaged = None;
+        if e.lifecycle == Lifecycle::Site {
+            return (intent, engaged);
+        }
+        let def = self.def(i);
+        let ready = self.ready_action(i);
+        // A healing-capable supporter prioritizes legal healing of its ally over firing.
+        if let (Order::Support { target }, Some(h)) = (&e.action, &def.healing)
+            && let Some(ally) = self.find(target)
+            && self.state.entities[ally].lifecycle == Lifecycle::Complete
+            && self.state.entities[ally].hp < self.def(ally).max_hp - EPS
+            && Self::dist2(e.tile, self.state.entities[ally].tile) <= h.range * h.range + EPS
+        {
+            intent.hold = true;
+            if ready {
+                intent.heal = Some(ally);
+            }
+        }
+        if let Some(w) = &def.weapon
+            && !intent.hold
+        {
+            let direct = !w.indirect;
+            let range = w.range;
+            let zone_defend = range.min(def.vision);
+            let mut candidate: Option<usize> = None;
+            let mut zone = 0.0;
+            match &e.action {
+                Order::Idle {} => zone = zone_defend,
+                Order::AttackMove { .. } => {
+                    zone = if def.movement.is_some() && !prep.at_destination {
+                        def.vision
+                    } else {
+                        zone_defend
+                    };
+                }
+                Order::Support { target } => {
+                    zone = zone_defend;
+                    if let Some(ally) = self.find(target)
+                        && let Some(enemy) = self.state.entities[ally].engaged_target.as_ref()
+                        && let Some(j) = self.find(enemy)
+                        && self.target_valid(i, j, def.vision, direct)
+                    {
+                        candidate = Some(j);
+                    }
+                }
+                Order::Mine { .. } | Order::Construct { .. } => {}
+            }
+            if candidate.is_none() && zone > 0.0 {
+                let retained = e
+                    .engaged_target
+                    .as_ref()
+                    .and_then(|id| self.find(id))
+                    .filter(|j| self.target_valid(i, *j, zone, direct));
+                candidate = retained.or_else(|| self.nearest_hostile(i, zone, direct));
+            }
+            if let Some(j) = candidate {
+                engaged = Some(self.state.entities[j].id.clone());
+                let in_range =
+                    Self::dist2(e.tile, self.state.entities[j].tile) <= range * range + EPS;
+                if in_range {
+                    intent.hold = true;
+                    if ready && w.damage > 0.0 {
+                        intent.attack = Some(j);
+                    }
+                } else if def.movement.is_some() {
+                    intent.goal = Some((self.state.entities[j].tile, false));
+                }
+            }
+        }
+        if !intent.hold && intent.goal.is_none() {
+            match &e.action {
+                Order::Mine { area } if def.mining.is_some() => {
+                    let here = self.idx(e.tile);
+                    if in_rect(e.tile, area) && self.state.ore[here] > 0.0 {
+                        intent.hold = true;
+                        intent.mine = ready;
+                    } else if let Some(goal) = self.nearest_ore(e.tile, area) {
+                        intent.goal = Some((goal, false));
+                    }
+                }
+                Order::Construct { .. } if def.construction.is_some() => {
+                    if let Some(b) = prep.blueprint {
+                        let target = self.state.blueprints[b].tile;
+                        if chebyshev(e.tile, target) == 1 {
+                            intent.hold = true;
+                            if ready {
+                                intent.construct = Some(b);
+                            }
+                        } else {
+                            intent.goal = Some((target, true));
+                        }
+                    }
+                }
+                Order::AttackMove { destination } if def.movement.is_some() => {
+                    intent.goal = Some((*destination, false));
+                }
+                Order::Support { target } if def.movement.is_some() => {
+                    if let Some(j) = self.find(target) {
+                        let tile = self.state.entities[j].tile;
+                        if chebyshev(e.tile, tile) > 1 {
+                            intent.goal = Some((tile, true));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        (intent, engaged)
     }
 
     fn nearest_ore(&self, from: Tile, area: &Rect) -> Option<Tile> {
