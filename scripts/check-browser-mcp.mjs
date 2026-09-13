@@ -9,23 +9,46 @@ import assert from 'node:assert/strict';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const artifacts=resolve(process.env.ATEMPORAL_MCP_ARTIFACTS??`${root}artifacts/browser-mcp/smoke-${Date.now()}-${process.pid}`);
 await mkdir(artifacts,{recursive:true});
-let server;
+assert.equal((await readdir(artifacts)).length,0,`Artifact directory must be empty: ${artifacts}`);
+console.log(`MCP check artifacts: ${artifacts}`);
+const transcript=[];
+const diagnostics=[];
+const status={startedAt:new Date().toISOString(),status:'running'};
+let server, child, call;
+let sequence=0;const pending=new Map();
+const diagnostic=data=>{diagnostics.push(String(data));process.stderr.write(data);};
+const rejectPending=error=>{for(const waiter of pending.values()){clearTimeout(waiter.timer);waiter.reject(error);}pending.clear();};
+const stop=async process=>{
+  if(!process || process.exitCode!==null || process.signalCode!==null) return;
+  await new Promise(done=>{
+    const timer=setTimeout(()=>process.kill('SIGKILL'),3000);
+    process.once('close',()=>{clearTimeout(timer);done();});
+    process.kill('SIGTERM');
+  });
+};
+try {
 let url=process.env.ATEMPORAL_UI_BASE_URL;
 if(!url) {
-  const probe=createServer();await new Promise(done=>probe.listen(0,'127.0.0.1',done));const port=probe.address().port;await new Promise(done=>probe.close(done));
+  const probe=createServer();await new Promise((done,reject)=>{probe.once('error',reject);probe.listen(0,'127.0.0.1',done);});const port=probe.address().port;await new Promise(done=>probe.close(done));
   url=`http://127.0.0.1:${port}`;
   server=spawn(process.execPath,[`${root}scripts/serve-client.mjs`],{cwd:root,env:{...process.env,PORT:String(port)},stdio:['ignore','pipe','pipe']});
-  server.stdout.on('data',data=>process.stderr.write(data));server.stderr.on('data',data=>process.stderr.write(data));
-  let ready=false;
-  for(let i=0;i<100;i++) {try{if((await fetch(url)).ok){ready=true;break;}}catch{} await new Promise(done=>setTimeout(done,50));}
-  if(!ready) {server.kill();throw new Error('Preview server did not start');}
+    // Wait for our own process to announce listening; never attach to a port squatter.
+  await new Promise((done,reject)=>{
+    let output='';
+    const timer=setTimeout(()=>reject(new Error('Preview server did not start within 120 seconds')),120000);
+    server.once('error',error=>{clearTimeout(timer);reject(error);});
+    server.once('exit',code=>{clearTimeout(timer);reject(new Error(`Preview server exited ${code}`));});
+    server.stdout.on('data',data=>{diagnostic(data);output+=data;if(output.includes(`Scaffold preview: ${url}`)){clearTimeout(timer);done();}});
+    server.stderr.on('data',diagnostic);
+  });
 }
 const configuration=JSON.parse(await readFile(`${root}.mcp.json`,'utf8')).mcpServers['atemporal-browser'];
-const child=spawn(configuration.command,configuration.args,{cwd:root,env:{...process.env,...configuration.env,ATEMPORAL_MCP_ARTIFACTS:artifacts},stdio:['pipe','pipe','pipe']});
-let sequence=0;const pending=new Map();const transcript=[];
-child.stderr.on('data',data=>process.stderr.write(data));
+child=spawn(configuration.command,configuration.args,{cwd:root,env:{...configuration.env,...process.env,ATEMPORAL_MCP_ARTIFACTS:artifacts},stdio:['pipe','pipe','pipe']});
+child.stderr.on('data',diagnostic);
+child.on('error',rejectPending);
+child.stdin.on('error',rejectPending);
 createInterface({input:child.stdout}).on('line',line=>{
-  let message;try{message=JSON.parse(line);}catch{throw new Error(`Non-JSON output polluted MCP stdout: ${line}`);}
+  let message;try{message=JSON.parse(line);}catch{rejectPending(new Error(`Non-JSON output polluted MCP stdout: ${line}`));child.kill();return;}
   transcript.push(message);
   const waiter=pending.get(message.id);
   if(waiter){clearTimeout(waiter.timer);pending.delete(message.id);if(message.error)waiter.reject(new Error(JSON.stringify(message.error)));else waiter.resolve(message.result);}
@@ -33,10 +56,11 @@ createInterface({input:child.stdout}).on('line',line=>{
 child.on('exit',code=>{for(const waiter of pending.values()){clearTimeout(waiter.timer);waiter.reject(new Error(`MCP exited ${code}`));}pending.clear();});
 const request=(method,params={})=>new Promise((resolve,reject)=>{
   const id=++sequence;const timer=setTimeout(()=>{pending.delete(id);reject(new Error(`MCP timeout: ${method}`));},30000);
-  pending.set(id,{resolve,reject,timer});child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');
+  const message={jsonrpc:'2.0',id,method,params};transcript.push({direction:'request',...message});
+  pending.set(id,{resolve,reject,timer});child.stdin.write(JSON.stringify(message)+'\n');
 });
-const call=async(name,args)=>{const result=await request('tools/call',{name,arguments:args});assert(!result.isError,JSON.stringify(result));return result;};
-try {
+call=async(name,args)=>{const result=await request('tools/call',{name,arguments:args});assert(!result.isError,JSON.stringify(result));return result;};
+  status.baseURL=url;
   await request('initialize',{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'atemporal-browser-smoke',version:'1.0.0'}});
   child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
   const {tools}=await request('tools/list');
@@ -51,8 +75,25 @@ try {
   assert((await stat(`${artifacts}/${screenshot}`)).size>1000);
   await writeFile(`${artifacts}/transcript.json`,JSON.stringify(transcript,null,2));
   console.log(`MCP initialize, tool discovery, navigation, link click, snapshot and screenshot passed.\nArtifacts: ${artifacts}`);
+  status.status='passed';
+} catch(error) {
+  status.status='failed';status.error=error.stack;process.exitCode=1;console.error(error);
 } finally {
+  if(call && child?.exitCode===null && child?.signalCode===null) {
+    for(const [name,args] of [
+      ['browser_console_messages',{level:'info',all:true,filename:`${artifacts}/console.log`}],
+      ['browser_network_requests',{static:true,filename:`${artifacts}/network.log`}],
+      ...(status.status==='failed'?[['browser_take_screenshot',{filename:`${artifacts}/failure.png`,fullPage:true}]]:[]),
+      ['browser_close',{}]
+    ]) {
+      try {await call(name,args);} catch(error) {diagnostics.push(`Diagnostic ${name}: ${error.message}\n`);}
+    }
+  }
+  child?.stdin.end();
+  await Promise.all([stop(child),stop(server)]);
+  status.finishedAt=new Date().toISOString();
+  await writeFile(`${artifacts}/run.json`,JSON.stringify(status,null,2));
+  await writeFile(`${artifacts}/diagnostics.log`,diagnostics.join(''));
   await writeFile(`${artifacts}/transcript.json`,JSON.stringify(transcript,null,2));
-  child.stdin.end();child.kill('SIGTERM');server?.kill('SIGTERM');
   for(const waiter of pending.values())clearTimeout(waiter.timer);
 }

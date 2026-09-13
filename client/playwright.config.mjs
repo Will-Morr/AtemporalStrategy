@@ -6,13 +6,15 @@ const artifacts=process.env.ATEMPORAL_UI_ARTIFACTS;
 if(!artifacts) throw new Error('Run npm run ui:review --prefix client so each run gets its own artifacts and port.');
 export default defineConfig({
   testDir:'./tests/ui',
+  testMatch:process.env.ATEMPORAL_UI_HARNESS_CHECK==='1'?'**/harness-probe.case.mjs':'**/*.spec.mjs',
   outputDir:resolve(artifacts,'results'),
   fullyParallel:true,
+  forbidOnly:!!process.env.CI,
   workers:2,
   retries:0,
   timeout:30000,
   expect:{timeout:5000},
-  reporter:[['list'],['json',{outputFile:resolve(artifacts,'results.json')}],['html',{outputFolder:resolve(artifacts,'report'),open:'never'}]],
+  reporter:[['list'],['junit',{outputFile:resolve(artifacts,'junit.xml')}],['json',{outputFile:resolve(artifacts,'results.json')}],['html',{outputFolder:resolve(artifacts,'report'),open:'never'}]],
   use:{baseURL:process.env.ATEMPORAL_UI_RESOLVED_URL,headless:true,trace:'on',screenshot:'on',video:'retain-on-failure',locale:'en-US',timezoneId:'UTC',colorScheme:'dark',reducedMotion:'reduce',deviceScaleFactor:1},
   projects:[{name:'desktop-chromium',use:{browserName:'chromium',viewport:{width:1440,height:1000}}},{name:'narrow-chromium',use:{browserName:'chromium',viewport:{width:390,height:844}}}],
   webServer:process.env.ATEMPORAL_UI_BASE_URL?undefined:{

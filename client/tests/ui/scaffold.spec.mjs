@@ -22,20 +22,18 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
   await page.getByRole('link',{name:'Back to lobby'}).click();await expect(page).toHaveURL(/\/$/);
 });
 
-test('two players and spectator can use isolated browser contexts',async({browser,baseURL,viewport,review})=>{
+test('two players and spectator can use isolated browser contexts',async({review})=>{
   const contexts=[];
-  try {
-    for(const role of ['player-a','player-b','spectator']) {
-      const context=await browser.newContext({baseURL,viewport,locale:'en-US',timezoneId:'UTC',colorScheme:'dark',reducedMotion:'reduce'});contexts.push(context);
-      const page=await context.newPage();review.observe(page);await page.goto('/');
-      expect(await page.evaluate(()=>localStorage.getItem('review-role'))).toBeNull();
-      await page.evaluate(role=>localStorage.setItem('review-role',role),role);
-    }
-    for(const [index,role] of ['player-a','player-b','spectator'].entries()) {
-      const page=contexts[index].pages()[0];await page.reload();
-      expect(await page.evaluate(()=>localStorage.getItem('review-role'))).toBe(role);
-      await expect(page.locator('#status')).toContainText('10 unit and structure types');
-      await review.capture(role,page);
-    }
-  } finally {await Promise.all(contexts.map(context=>context.close()));}
+  for(const role of ['player-a','player-b','spectator']) {
+    const context=await review.newContext(role);contexts.push(context);
+    const page=await context.newPage();await page.goto('/');
+    expect(await page.evaluate(()=>localStorage.getItem('review-role'))).toBeNull();
+    await page.evaluate(role=>localStorage.setItem('review-role',role),role);
+  }
+  for(const [index,role] of ['player-a','player-b','spectator'].entries()) {
+    const page=contexts[index].pages()[0];await page.reload();
+    expect(await page.evaluate(()=>localStorage.getItem('review-role'))).toBe(role);
+    await expect(page.locator('#status')).toContainText('10 unit and structure types');
+    await review.capture(role,page);
+  }
 });
