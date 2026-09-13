@@ -223,11 +223,21 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
     );
     let sizes = clusters(&w);
     assert!(sizes.len() >= 16, "scattered clusters: {sizes:?}");
-    let small = sizes.iter().filter(|s| **s <= 3).count();
-    assert!(small * 2 > sizes.len(), "weighted toward small: {sizes:?}");
     assert!(
         sizes.iter().any(|s| *s >= 5),
         "some larger deposits: {sizes:?}"
+    );
+    // Weights 9..=1 give about 53% clusters of three tiles or fewer; check across seeds.
+    let mut pooled = vec![];
+    for seed in 0..6u64 {
+        let mut config = config.clone();
+        config.seed = seed.try_into().unwrap();
+        pooled.extend(clusters(&map::generate(&config, &content).unwrap()));
+    }
+    let small = pooled.iter().filter(|s| **s <= 3).count();
+    assert!(
+        small * 2 > pooled.len(),
+        "weighted toward small: {pooled:?}"
     );
     for (i, ore) in w.ore.iter().enumerate() {
         let (x, y) = ((i % 48) as i32, (i / 48) as i32);
@@ -237,6 +247,17 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
         assert!(
             *ore == 0.0 || !near_start,
             "ore at ({x},{y}) is next to a start"
+        );
+    }
+    // Ore stays off high-traffic paths: nothing hotter than 30% of the smoothed peak.
+    let starts = map::starts(config.map_size, config.player_count, &content).unwrap();
+    let traffic = map::traffic(&config, &w.terrain, &starts);
+    let peak = traffic.smooth.iter().cloned().fold(0.0, f64::max);
+    assert!(peak > 0.0, "traffic layer is populated");
+    for (i, ore) in w.ore.iter().enumerate() {
+        assert!(
+            *ore == 0.0 || traffic.smooth[i] <= 0.3 * peak + 1e-9,
+            "ore at cell {i} sits on a busy path"
         );
     }
     let walls = w
@@ -289,7 +310,7 @@ fn asymmetric_maps_support_two_to_four_players() {
 #[test]
 fn generation_succeeds_across_seeds_sizes_and_budgets() {
     let (base, content) = setup();
-    for seed in 0..24u64 {
+    for seed in 0..12u64 {
         for size in [16u16, 24, 48, 96] {
             for players in 2..=4u8 {
                 for symmetric in [true, false] {

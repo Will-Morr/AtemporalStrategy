@@ -1,6 +1,7 @@
 //! Deterministic cave map and genesis world: seeded cellular-automaton caverns with coarse
 //! density variation, caves carved into over-thick rock, start clearings, pocket removal, start
-//! access validation and ore clusters of one to nine tiles grown along cavern walls.
+//! access validation, a seeded shortest-path traffic layer, and ore clusters of one to nine
+//! tiles grown along cavern walls in low-traffic, spaced-out places.
 //! Symmetric maps are invariant under 180° rotation (2 players) or 90° rotation (4 players);
 //! asymmetric mode keeps the same start layout with unmirrored rock.
 use crate::tick::chebyshev;
@@ -19,6 +20,13 @@ const START_CLEARING: i32 = 7;
 const NEAR_START: i32 = 9;
 /// Map cells per ore cluster; the seed stream retries placement until this many are placed.
 const CELLS_PER_CLUSTER: usize = 96;
+/// Seeded shortest paths in the traffic layer and how many tiles heat fades beside a path.
+const TRAFFIC_PATHS: usize = 100;
+const TRAFFIC_FALLOFF: i32 = 4;
+/// Ore never lands where smoothed traffic exceeds this share of the map's peak.
+const HEAT_CAP: f64 = 0.3;
+/// Random head candidates scored per vein placement.
+const HEAD_SAMPLES: usize = 16;
 const MAX_CLUSTER: usize = 9;
 
 fn mix(seed: u64, x: u64, y: u64) -> u64 {
@@ -413,10 +421,179 @@ fn wall_distance(grid: &Grid) -> Vec<u16> {
     dist
 }
 
-/// Ore tiles: clusters grown along the walls of open rooms, never in corridors or room
-/// interiors, each placed with its rotations and never touching another cluster. The first
-/// cluster sits within reach of each start; sizes 1..=9 are weighted toward one.
-pub fn ore_tiles(config: &MatchConfig, terrain: &Terrain, starts: &[Start]) -> Vec<Tile> {
+/// Traffic layers from seeded shortest paths: raw path counts per tile and a smoothed copy in
+/// which heat fades beside each path along a fixed cosine gradient.
+pub struct Traffic {
+    pub raw: Vec<u32>,
+    pub smooth: Vec<f64>,
+}
+
+/// Shortest path by four- or eight-neighbour steps (no corner cutting), or none.
+fn shortest_path(
+    grid: &Grid,
+    from: Tile,
+    to: Tile,
+    diagonal: bool,
+    spin: usize,
+) -> Option<Vec<Tile>> {
+    let cells = grid.n() * grid.n();
+    let mut parent: Vec<Option<Tile>> = vec![None; cells];
+    let mut seen = vec![false; cells];
+    let mut queue = VecDeque::from([from]);
+    seen[grid.idx(from)] = true;
+    let open = |x: i32, y: i32| {
+        grid.tile(x, y)
+            .is_some_and(|t| grid.cells[grid.idx(t)] == TerrainCell::Floor)
+    };
+    while let Some(t) = queue.pop_front() {
+        if t == to {
+            let mut path = vec![t];
+            let mut cur = t;
+            while let Some(p) = parent[grid.idx(cur)] {
+                path.push(p);
+                cur = p;
+            }
+            return Some(path);
+        }
+        let (x, y) = (i32::from(t.x), i32::from(t.y));
+        let steps: &[(i32, i32)] = if diagonal {
+            &[
+                (0, -1),
+                (1, 0),
+                (0, 1),
+                (-1, 0),
+                (1, -1),
+                (1, 1),
+                (-1, 1),
+                (-1, -1),
+            ]
+        } else {
+            &[(0, -1), (1, 0), (0, 1), (-1, 0)]
+        };
+        // Rotate the step order per path so ties in open rooms do not all break the same way.
+        for k in 0..steps.len() {
+            let (dx, dy) = steps[(k + spin) % steps.len()];
+            if !open(x + dx, y + dy) || (dx * dy != 0 && !(open(x + dx, y) && open(x, y + dy))) {
+                continue;
+            }
+            let n = grid.tile(x + dx, y + dy).unwrap();
+            if !seen[grid.idx(n)] {
+                seen[grid.idx(n)] = true;
+                parent[grid.idx(n)] = Some(t);
+                queue.push_back(n);
+            }
+        }
+    }
+    None
+}
+
+/// `TRAFFIC_PATHS` shortest paths between seeded floor points, a quarter of them between the
+/// surroundings of two different starts, summed over the symmetry rotations.
+pub fn traffic(config: &MatchConfig, terrain: &Terrain, starts: &[Start]) -> Traffic {
+    let size = config.map_size;
+    let n = usize::from(size);
+    let turns = symmetry_turns(config);
+    let grid = Grid {
+        size,
+        cells: terrain.cells.clone(),
+    };
+    let floor: Vec<Tile> = (0..size)
+        .flat_map(|y| (0..size).map(move |x| Tile { x, y }))
+        .filter(|t| grid.cells[grid.idx(*t)] == TerrainCell::Floor)
+        .collect();
+    let seed = config.seed.get() ^ 0x7A11_C0DE_5EED_0042;
+    let mut draw = 0u64;
+    let mut next = |salt: u64| {
+        draw += 1;
+        mix(seed, draw, salt)
+    };
+    let mut counts = vec![0u32; n * n];
+    if floor.is_empty() {
+        return Traffic {
+            raw: counts,
+            smooth: vec![0.0; n * n],
+        };
+    }
+    let radius = i32::from(size) / 4;
+    for _ in 0..TRAFFIC_PATHS {
+        let diagonal = next(1) % 2 == 0;
+        let endpoint = |anchor: Option<Tile>, next: &mut dyn FnMut(u64) -> u64| {
+            if let Some(a) = anchor {
+                for _ in 0..40 {
+                    let t = grid.tile(
+                        i32::from(a.x) + (next(2) % (2 * radius as u64 + 1)) as i32 - radius,
+                        i32::from(a.y) + (next(3) % (2 * radius as u64 + 1)) as i32 - radius,
+                    );
+                    if let Some(t) = t
+                        && grid.cells[grid.idx(t)] == TerrainCell::Floor
+                    {
+                        return t;
+                    }
+                }
+            }
+            floor[(next(4) % floor.len() as u64) as usize]
+        };
+        let (a, b) = if next(5) % 4 == 0 && starts.len() > 1 {
+            let i = (next(6) % starts.len() as u64) as usize;
+            let j = (i + 1 + (next(7) % (starts.len() as u64 - 1)) as usize) % starts.len();
+            let a = endpoint(Some(starts[i].anchor), &mut next);
+            (a, endpoint(Some(starts[j].anchor), &mut next))
+        } else {
+            let a = endpoint(None, &mut next);
+            (a, endpoint(None, &mut next))
+        };
+        let spin = (next(8) % 8) as usize;
+        if let Some(path) = shortest_path(&grid, a, b, diagonal, spin) {
+            for t in path {
+                counts[grid.idx(t)] += 1;
+            }
+        }
+    }
+    let mut raw = vec![0u32; n * n];
+    for y in 0..size {
+        for x in 0..size {
+            let t = Tile { x, y };
+            raw[grid.idx(t)] = turns
+                .iter()
+                .map(|q| counts[grid.idx(rotate(t, size, *q))])
+                .sum();
+        }
+    }
+    let mut smooth = vec![0.0; n * n];
+    let span = f64::from(TRAFFIC_FALLOFF + 1);
+    for y in 0..size {
+        for x in 0..size {
+            let t = Tile { x, y };
+            let heat = f64::from(raw[grid.idx(t)]);
+            if heat == 0.0 {
+                continue;
+            }
+            for dy in -TRAFFIC_FALLOFF..=TRAFFIC_FALLOFF {
+                for dx in -TRAFFIC_FALLOFF..=TRAFFIC_FALLOFF {
+                    let Some(o) = grid.tile(i32::from(x) + dx, i32::from(y) + dy) else {
+                        continue;
+                    };
+                    let d = f64::from(dx.abs().max(dy.abs()));
+                    let weight = 0.5 * (1.0 + (std::f64::consts::PI * d / span).cos());
+                    let i = grid.idx(o);
+                    smooth[i] = f64::max(smooth[i], heat * weight);
+                }
+            }
+        }
+    }
+    Traffic { raw, smooth }
+}
+
+/// Ore tiles: clusters grown along walls in low-traffic places, spaced out from earlier
+/// veins and never on high-traffic paths, each placed with its rotations and never touching
+/// another cluster. The first cluster sits within reach of each start; sizes 1..=9 are
+/// weighted toward one.
+pub fn ore_tiles(
+    config: &MatchConfig,
+    terrain: &Terrain,
+    starts: &[Start],
+    traffic: &Traffic,
+) -> Vec<Tile> {
     let size = config.map_size;
     let n = usize::from(size);
     let turns = symmetry_turns(config);
@@ -425,33 +602,33 @@ pub fn ore_tiles(config: &MatchConfig, terrain: &Terrain, starts: &[Start]) -> V
         cells: terrain.cells.clone(),
     };
     let dist = wall_distance(&grid);
+    let peak = traffic.smooth.iter().cloned().fold(0.0, f64::max).max(1.0);
+    let heat = |t: Tile| traffic.smooth[grid.idx(t)] / peak;
     let seed = config.seed.get() ^ 0x5DEE_CE66_D1B4_2F0D;
     let keep_out = (i32::from(size) / 8).clamp(2, 5);
-    let allowed = |t: Tile| {
-        let d = dist[grid.idx(t)];
-        (1..=2).contains(&d)
+    let quiet = |t: Tile, cap: f64| {
+        (1..=2).contains(&dist[grid.idx(t)])
+            && heat(t) <= cap
             && starts.iter().all(|s| {
                 chebyshev(s.anchor, t) > keep_out && s.entities.iter().all(|(_, e, _)| *e != t)
             })
     };
-    // Room edges: wall-hugging floor with a 5×5 open block nearby, so corridors are skipped.
-    let edge = |t: Tile| {
-        allowed(t)
-            && dist[grid.idx(t)] == 1
-            && (-3..=3).any(|dy| {
-                (-3..=3).any(|dx| {
-                    grid.tile(i32::from(t.x) + dx, i32::from(t.y) + dy)
-                        .is_some_and(|o| dist[grid.idx(o)] >= 3)
-                })
-            })
-    };
-    let heads: Vec<Tile> = (0..size)
+    // Tiny maps are all path: relax the cap until some wall-side floor qualifies.
+    let all: Vec<Tile> = (0..size)
         .flat_map(|y| (0..size).map(move |x| Tile { x, y }))
-        .filter(|t| edge(*t))
         .collect();
-    if heads.is_empty() {
+    let Some(cap) = [HEAT_CAP, 2.0 * HEAT_CAP, 1.0].into_iter().find(|cap| {
+        all.iter()
+            .any(|t| quiet(*t, *cap) && dist[grid.idx(*t)] == 1)
+    }) else {
         return vec![];
-    }
+    };
+    let allowed = |t: Tile| quiet(t, cap);
+    let heads: Vec<Tile> = all
+        .iter()
+        .copied()
+        .filter(|t| allowed(*t) && dist[grid.idx(*t)] == 1)
+        .collect();
     let mut ore = vec![false; n * n];
     let touching = |ore: &[bool], t: Tile| {
         (-1..=1).any(|dy| {
@@ -462,8 +639,9 @@ pub fn ore_tiles(config: &MatchConfig, terrain: &Terrain, starts: &[Start]) -> V
         })
     };
     let target = (n * n / CELLS_PER_CLUSTER).max(turns.len());
+    let spacing = f64::from(size) / (target as f64).sqrt();
     let mut placed = 0;
-    let mut tiles = vec![];
+    let mut tiles: Vec<Tile> = vec![];
     let mut draw = 0u64;
     let mut next = |salt: u64| {
         draw += 1;
@@ -480,23 +658,36 @@ pub fn ore_tiles(config: &MatchConfig, terrain: &Terrain, starts: &[Start]) -> V
         if placed >= target {
             break;
         }
-        let head = match near.first() {
-            Some(&anchor) => {
-                let close: Vec<Tile> = heads
-                    .iter()
-                    .copied()
-                    .filter(|t| chebyshev(anchor, *t) <= NEAR_START)
-                    .collect();
-                if close.is_empty() {
-                    continue;
-                }
-                close[(next(1) % close.len() as u64) as usize]
-            }
-            None => heads[(next(1) % heads.len() as u64) as usize],
+        // Score a handful of random candidates: cooler and farther from existing veins wins.
+        let pool: Vec<Tile> = match near.first() {
+            Some(&anchor) => heads
+                .iter()
+                .copied()
+                .filter(|t| chebyshev(anchor, *t) <= NEAR_START)
+                .collect(),
+            None => heads.clone(),
         };
-        if touching(&ore, head) {
+        if pool.is_empty() {
+            near = &near[near.len().min(1)..];
             continue;
         }
+        let mut best: Option<(f64, Tile)> = None;
+        for _ in 0..HEAD_SAMPLES {
+            let t = pool[(next(1) % pool.len() as u64) as usize];
+            if touching(&ore, t) {
+                continue;
+            }
+            let gap = tiles
+                .iter()
+                .map(|o| f64::from(chebyshev(*o, t)))
+                .fold(f64::INFINITY, f64::min);
+            let crowding = (1.0 - gap / spacing).max(0.0);
+            let score = heat(t) + crowding;
+            if best.is_none_or(|(b, _)| score < b) {
+                best = Some((score, t));
+            }
+        }
+        let Some((_, head)) = best else { continue };
         // Weights 9..=1 for sizes 1..=9.
         let mut roll = (next(3) % 45) as usize;
         let mut want = 1;
@@ -564,7 +755,12 @@ pub fn generate(config: &MatchConfig, content: &Content) -> Result<WorldState> {
     let starts = starts(size, config.player_count, &content)?;
     let terrain = terrain(config, &starts)?;
     let mut ore = vec![0.0; n * n];
-    let tiles = ore_tiles(config, &terrain, &starts);
+    let tiles = ore_tiles(
+        config,
+        &terrain,
+        &starts,
+        &traffic(config, &terrain, &starts),
+    );
     if tiles.is_empty() {
         return Err("no room for ore clusters".into());
     }

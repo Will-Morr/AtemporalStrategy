@@ -1,4 +1,5 @@
 mod fixtures;
+mod map_review;
 use atemporal_contracts::*;
 use std::{
     collections::BTreeMap,
@@ -30,6 +31,7 @@ fn run() -> Result<()> {
         "schema" => &["--out"],
         "guide" => &["--content", "--prose", "--out", "--expected-hash"],
         "normalize" => &["--content", "--setup", "--out"],
+        "map-review" => &["--setup", "--content", "--out", "--count"],
         "fixtures" | "help" => &[],
         _ => return Err(format!("unknown command {command}; use help")),
     };
@@ -42,6 +44,19 @@ fn run() -> Result<()> {
         |key: &str, default: &str| options.get(key).cloned().unwrap_or_else(|| default.into());
     match command.as_str() {
         "fixtures" => fixtures::generate()?,
+        "map-review" => {
+            let setup =
+                atemporal_content::load_setup(&read(&option("--setup", "config/game.yaml"))?)?;
+            let content = atemporal_content::load_content(&read(&option(
+                "--content",
+                "config/content.yaml",
+            ))?)?;
+            let count = option("--count", "12")
+                .parse()
+                .map_err(|e| format!("--count: {e}"))?;
+            let png = map_review::render(&setup.match_defaults, &content, count)?;
+            write(Path::new(&option("--out", "target/map-review.png")), png)?;
+        }
         "schema" => {
             let schema = atemporal_contracts::json_schema();
             write(
@@ -84,7 +99,7 @@ fn run() -> Result<()> {
             );
         }
         _ => println!(
-            "Commands: fixtures (regenerate authored golden data); schema [--out PATH]; guide [--content YAML --expected-hash HASH --prose HTML --out DIR]; normalize [--content YAML --setup YAML --out DIR]. Run from repository root; errors exit nonzero."
+            "Commands: fixtures (regenerate authored golden data); schema [--out PATH]; guide [--content YAML --expected-hash HASH --prose HTML --out DIR]; normalize [--content YAML --setup YAML --out DIR]; map-review [--setup YAML --content YAML --out PNG --count N] (one row per seed: cave, raw traffic, smoothed traffic, ore). Run from repository root; errors exit nonzero."
         ),
     }
     Ok(())

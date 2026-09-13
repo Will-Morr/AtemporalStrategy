@@ -47,7 +47,7 @@ ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --rep
 
 The workspace tests include the engine acceptance suite: all eight authored tiny worlds run through the real engine and are checked with the golden comparator, checkpoint reruns hash-match full replays, and the generated map runs the miner → factory → grunt → attack opening (`crates/sim/tests`). The browser walkthrough (`client/tests/ui/slice.spec.mjs`) drives two players and a spectator with real input against the real server and keeps screenshots under `artifacts/ui/<run>/`. Both are engineering verification, not a user playtest. See [Gate 2 measurements](gate2-measurements.md) for the recorded numbers and [browser review](browser-testing.md) for the harness.
 
-Useful tools: `cargo run -p atemporal-tools -- schema | guide | normalize | fixtures`. Regenerate authored tiny-world data deliberately with `fixtures`; it writes expectations, not engine output.
+Useful tools: `cargo run -p atemporal-tools -- schema | guide | normalize | fixtures | map-review`. `map-review --count 12 --out target/map-review.png` renders one row per seed with the cave, raw traffic, smoothed traffic and the final ore layout for tuning `crates/sim/src/map.rs`. Regenerate authored tiny-world data deliberately with `fixtures`; it writes expectations, not engine output.
 
 ## Layout
 
