@@ -14,7 +14,9 @@ npm run build --prefix client     # regenerates schema/types and bundles client/
 cargo run --release -p atemporal-server -- --port 8080 --config config/game.yaml
 ```
 
-Open `http://127.0.0.1:8080/` in two browser tabs (or two machines on the LAN), claim slot 0 and slot 1 with a username and color, and press **Start match** from the first occupied slot. Extra tabs spectate. The guide is `/guide/`, generated at startup from the loaded content into `.guide-cache/<content hash>/`. `--port` beats the `PORT` environment variable, which beats `default_port` in the YAML; an occupied port fails with a message instead of choosing another address. Other flags: `--content`, `--client`, `--prose`, `--replays`, `--guide-dir`, `--help`.
+The setup file's `seed: 0` draws a fresh map for every match. Test harnesses and review runs pass `--seed 42` (or pin the seed in their config copy) so they never run on a live random seed.
+
+Open `http://127.0.0.1:8080/` in two browser tabs (or two machines on the LAN), claim slot 0 and slot 1 with a username and color, and press **Start match** from the first occupied slot. Extra tabs spectate. The guide is `/guide/`, generated at startup from the loaded content into `.guide-cache/<content hash>/`. `--port` beats the `PORT` environment variable, which beats `default_port` in the YAML; an occupied port fails with a message instead of choosing another address. Other flags: `--content`, `--client`, `--prose`, `--replays`, `--guide-dir`, `--seed`, `--help`.
 
 ### Inputs-only peripheral
 
@@ -41,7 +43,7 @@ node scripts/gate2-check.mjs      # real server + protocol: three rounds, rewrit
 node scripts/match-check.mjs      # timed lock advancement + mid-match resume + history_exhausted, timed loss, time penalty, stop/archive, occupied port/routes/restart instance/archived-content guide → target/match-check-summary.json
 node scripts/gate5-check.mjs      # failure injection: kills at four points, duplicate commits, disk-full and recoverable worker panic; each recovers the baseline hash → target/gate5-summary.json
 node scripts/peripheral-check.mjs # inputs-only server + runner: three rounds through the peripheral with archive-equal hashes, refused direct world state, runner restart catch-up, controller --resume reconnect, injected mismatch, eviction/regeneration → target/peripheral-summary.json
-ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --replays target/ui-replays' \
+ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --seed 42 --replays target/ui-replays' \
   npm run ui:review --prefix client -- --project=desktop-chromium
 ```
 

@@ -31,7 +31,7 @@ function launch(binary, args, env = {}) {
   return { child, log, ready, stop };
 }
 const serverPort = await freePort();
-const startServer = (extra) => launch('atemporal-server', ['--port', serverPort, '--replays', `${work}/replays`, '--inputs-only', ...extra]);
+const startServer = (extra) => launch('atemporal-server', ['--port', serverPort, '--seed', '42', '--replays', `${work}/replays`, '--inputs-only', ...extra]);
 const startRunner = (port, extra = [], env = {}) => launch('atemporal-runner', ['--controller', `ws://127.0.0.1:${serverPort}`, '--port', port, '--guide-dir', `${work}/guide-${port}`, ...extra], env);
 const status = async port => (await fetch(`http://127.0.0.1:${port}/peripheral/status`)).json();
 const waitStatus = async (port, test, timeout = 60000) => {

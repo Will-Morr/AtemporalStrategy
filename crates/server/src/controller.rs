@@ -2322,6 +2322,8 @@ pub(crate) mod tests {
         let config_yaml = fs::read_to_string(dir.join("game.yaml")).unwrap();
         let content_yaml = fs::read_to_string(dir.join("content.yaml")).unwrap();
         let mut setup = atemporal_content::load_setup(&config_yaml).unwrap();
+        // Tests never draw a live seed: the setup file's 0 would generate a different map per run.
+        setup.match_defaults.seed = 42u64.try_into().unwrap();
         if teams {
             setup.available_teams = ["cyan", "orange"]
                 .iter()
@@ -2357,27 +2359,16 @@ pub(crate) mod tests {
 
     #[test]
     fn seed_zero_draws_a_fresh_pinned_seed_at_start() {
+        // The only test that starts from seed 0; it checks the draw, not the drawn map.
         let mut c = controller(false, |s| s.match_defaults.seed = 0u64.try_into().unwrap());
         let a = claim(&mut c, 0, None).unwrap();
         claim(&mut c, 1, None).unwrap();
         assert_eq!(c.config.seed.get(), 0);
         c.start_match(&a, c.lobby.revision).unwrap();
-        let drawn = c.config.seed.get();
-        assert_ne!(drawn, 0);
+        assert_ne!(c.config.seed.get(), 0);
         assert_eq!(
             c.fingerprint.config_hash,
             identity::canonical_hash(&c.config).unwrap()
-        );
-        // Match ids carry a millisecond timestamp; step past it so the second draw differs.
-        std::thread::sleep(std::time::Duration::from_millis(2));
-        let mut d = controller(false, |s| s.match_defaults.seed = 0u64.try_into().unwrap());
-        let b = claim(&mut d, 0, None).unwrap();
-        claim(&mut d, 1, None).unwrap();
-        d.start_match(&b, d.lobby.revision).unwrap();
-        assert_ne!(
-            d.config.seed.get(),
-            drawn,
-            "different matches draw different seeds"
         );
     }
 

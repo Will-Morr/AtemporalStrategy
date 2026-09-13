@@ -31,7 +31,7 @@ let url=process.env.ATEMPORAL_UI_BASE_URL;
 if(!url) {
   const probe=createServer();await new Promise((done,reject)=>{probe.once('error',reject);probe.listen(0,'127.0.0.1',done);});const port=probe.address().port;await new Promise(done=>probe.close(done));
   url=`http://127.0.0.1:${port}`;
-  server=spawn('cargo',['run','--release','--quiet','-p','atemporal-server','--','--port',String(port),'--replays',`${artifacts}/replays`],{cwd:root,env:{...process.env,PORT:String(port)},stdio:['ignore','pipe','pipe']});
+  server=spawn('cargo',['run','--release','--quiet','-p','atemporal-server','--','--port',String(port),'--seed','42','--replays',`${artifacts}/replays`],{cwd:root,env:{...process.env,PORT:String(port)},stdio:['ignore','pipe','pipe']});
     // Wait for our own process to announce listening; never attach to a port squatter.
   await new Promise((done,reject)=>{
     let output='';

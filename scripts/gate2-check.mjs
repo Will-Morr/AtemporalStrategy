@@ -17,7 +17,7 @@ if (!url) {
     const probe = createServer(); await new Promise((ok, err) => { probe.once('error', err); probe.listen(0, '127.0.0.1', ok); });
     port = String(probe.address().port); await new Promise(ok => probe.close(ok));
   }
-  server = spawn('cargo', ['run', '--release', '--quiet', '-p', 'atemporal-server', '--', '--port', port, '--replays', 'target/gate2-replays'], { cwd: root, stdio: ['ignore', 'pipe', 'inherit'] });
+  server = spawn('cargo', ['run', '--release', '--quiet', '-p', 'atemporal-server', '--', '--port', port, '--seed', '42', '--replays', 'target/gate2-replays'], { cwd: root, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((ok, err) => {
     server.stdout.on('data', chunk => { const text = chunk.toString(); serverLog.push(text); if (text.includes('listening')) ok(); });
     server.on('exit', code => err(new Error(`server exited ${code}`)));

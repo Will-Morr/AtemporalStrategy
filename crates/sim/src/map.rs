@@ -1,7 +1,7 @@
 //! Deterministic cave map and genesis world: seeded cellular-automaton caverns with coarse
 //! density variation, caves carved into over-thick rock, start clearings, pocket removal, start
 //! access validation, a seeded shortest-path traffic layer, and ore clusters of one to nine
-//! tiles grown along cavern walls in low-traffic, spaced-out places.
+//! tiles grown along cavern walls in low-traffic, spaced-out places, weighted toward small veins.
 //! Symmetric maps are invariant under 180° rotation (2 players) or 90° rotation (4 players);
 //! asymmetric mode keeps the same start layout with unmirrored rock.
 use crate::tick::chebyshev;
@@ -14,6 +14,8 @@ const DENSITY_SWING: f64 = 14.0;
 const SMOOTHING_PASSES: usize = 4;
 /// Rock thicker than this (Chebyshev distance to floor) gets a cave carved into it.
 const MAX_ROCK: u16 = 4;
+/// Rock cost relative to floor when routing each start to the central clearing.
+const ROCK_COST: u32 = 3;
 /// Radius of the round open clearing around each start anchor.
 const START_CLEARING: i32 = 7;
 /// Chebyshev radius within which each start is guaranteed a first ore cluster.
@@ -137,6 +139,46 @@ impl Grid {
             x: x as u16,
             y: y as u16,
         })
+    }
+    /// Cheapest four-neighbour route where floor costs one and rock costs `rock`, ties broken
+    /// by tile order.
+    fn route(&self, from: Tile, to: Tile, rock: u32) -> Vec<Tile> {
+        let cells = self.n() * self.n();
+        let mut cost = vec![u32::MAX; cells];
+        let mut parent: Vec<Option<Tile>> = vec![None; cells];
+        let mut heap = std::collections::BinaryHeap::new();
+        cost[self.idx(from)] = 0;
+        heap.push(std::cmp::Reverse((0u32, from)));
+        while let Some(std::cmp::Reverse((c, t))) = heap.pop() {
+            if c > cost[self.idx(t)] {
+                continue;
+            }
+            if t == to {
+                break;
+            }
+            for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                let Some(n) = self.tile(i32::from(t.x) + dx, i32::from(t.y) + dy) else {
+                    continue;
+                };
+                let step = if self.cells[self.idx(n)] == TerrainCell::Floor {
+                    1
+                } else {
+                    rock
+                };
+                if c + step < cost[self.idx(n)] {
+                    cost[self.idx(n)] = c + step;
+                    parent[self.idx(n)] = Some(t);
+                    heap.push(std::cmp::Reverse((c + step, n)));
+                }
+            }
+        }
+        let mut path = vec![to];
+        let mut t = to;
+        while let Some(p) = parent[self.idx(t)] {
+            path.push(p);
+            t = p;
+        }
+        path
     }
     fn carve(&mut self, t: Tile, turns: &[u8]) {
         for q in turns {
@@ -323,6 +365,42 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
             if !border && (open || near_start(t)) {
                 let i = grid.idx(t);
                 grid.cells[i] = TerrainCell::Floor;
+            }
+        }
+    }
+    // Central clearing, then a route from the first start to it that follows existing caves
+    // where they are close and tunnels through rock only where needed, two tiles wide, with
+    // its rotations. The centre route is then the shortest base-to-base path while the cave's
+    // winding side routes remain.
+    let center = Tile {
+        x: size / 2,
+        y: size / 2,
+    };
+    let r = (i32::from(size) / 12).max(2);
+    let blob = seed ^ 0xCE47E2;
+    for dy in -r..=r {
+        for dx in -r..=r {
+            let rough = (mix(blob, (dx + r) as u64, (dy + r) as u64) % 100) as f64 / 100.0;
+            if f64::from(dx * dx + dy * dy) / f64::from(r * r) < 1.0 - 0.3 * rough
+                && let Some(t) = grid.tile(i32::from(center.x) + dx, i32::from(center.y) + dy)
+                && t.x > 0
+                && t.y > 0
+                && t.x < size - 1
+                && t.y < size - 1
+            {
+                grid.carve(t, &turns);
+            }
+        }
+    }
+    for t in grid.route(starts[0].anchor, center, ROCK_COST) {
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1)] {
+            if let Some(o) = grid.tile(i32::from(t.x) + dx, i32::from(t.y) + dy)
+                && o.x > 0
+                && o.y > 0
+                && o.x < size - 1
+                && o.y < size - 1
+            {
+                grid.carve(o, &turns);
             }
         }
     }
@@ -688,11 +766,11 @@ pub fn ore_tiles(
             }
         }
         let Some((_, head)) = best else { continue };
-        // Weights 9..=1 for sizes 1..=9.
-        let mut roll = (next(3) % 45) as usize;
+        // Weights 81, 64, ..., 1 for sizes 1..=9: about two thirds of veins are three tiles or fewer.
+        let mut roll = (next(3) % 285) as usize;
         let mut want = 1;
-        while roll >= MAX_CLUSTER - (want - 1) {
-            roll -= MAX_CLUSTER - (want - 1);
+        while roll >= (MAX_CLUSTER - (want - 1)).pow(2) {
+            roll -= (MAX_CLUSTER - (want - 1)).pow(2);
             want += 1;
         }
         let mut cluster = vec![head];

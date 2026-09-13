@@ -11,7 +11,7 @@ npm ci --prefix client
 npm run ui:install --prefix client
 cargo build --release -p atemporal-server
 npm run build --prefix client
-ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --replays target/ui-replays' npm run ui:review --prefix client
+ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --seed 42 --replays target/ui-replays' npm run ui:review --prefix client
 ```
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.

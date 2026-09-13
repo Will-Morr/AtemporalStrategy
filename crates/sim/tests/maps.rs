@@ -52,6 +52,42 @@ fn reachable(w: &WorldState) -> Vec<bool> {
     seen
 }
 
+/// Four-neighbour shortest path between two floor tiles.
+fn shortest(w: &WorldState, from: Tile, to: Tile) -> Vec<Tile> {
+    let n = usize::from(w.terrain.width);
+    let mut parent: Vec<Option<Tile>> = vec![None; n * n];
+    let mut seen = vec![false; n * n];
+    let mut queue = VecDeque::from([from]);
+    seen[idx(w, from)] = true;
+    while let Some(t) = queue.pop_front() {
+        if t == to {
+            break;
+        }
+        for (dx, dy) in [(0i32, -1i32), (1, 0), (0, 1), (-1, 0)] {
+            let (x, y) = (i32::from(t.x) + dx, i32::from(t.y) + dy);
+            if x < 0 || y < 0 || x >= n as i32 || y >= n as i32 {
+                continue;
+            }
+            let nt = Tile {
+                x: x as u16,
+                y: y as u16,
+            };
+            if w.terrain.cells[idx(w, nt)] == TerrainCell::Floor && !seen[idx(w, nt)] {
+                seen[idx(w, nt)] = true;
+                parent[idx(w, nt)] = Some(t);
+                queue.push_back(nt);
+            }
+        }
+    }
+    let mut path = vec![to];
+    let mut t = to;
+    while let Some(p) = parent[idx(w, t)] {
+        path.push(p);
+        t = p;
+    }
+    path
+}
+
 fn assert_connected_and_accessible(w: &WorldState, config: &MatchConfig) {
     let seen = reachable(w);
     for (i, cell) in w.terrain.cells.iter().enumerate() {
@@ -227,7 +263,27 @@ fn default_two_player_map_is_rotationally_symmetric_and_connected() {
         sizes.iter().any(|s| *s >= 5),
         "some larger deposits: {sizes:?}"
     );
-    // Weights 9..=1 give about 53% clusters of three tiles or fewer; check across seeds.
+    // The centre is open and the shortest base-to-base path runs through it, on every seed.
+    for seed in 0..12u64 {
+        let mut config = config.clone();
+        config.seed = seed.try_into().unwrap();
+        let w = map::generate(&config, &content).unwrap();
+        let center = Tile { x: 24, y: 24 };
+        assert_eq!(
+            w.terrain.cells[idx(&w, center)],
+            TerrainCell::Floor,
+            "seed {seed}"
+        );
+        let path = shortest(&w, w.entities[0].tile, w.entities[3].tile);
+        let near = path
+            .iter()
+            .any(|t| (i32::from(t.x) - 24).abs() <= 5 && (i32::from(t.y) - 24).abs() <= 5);
+        assert!(
+            near,
+            "seed {seed}: base-to-base path avoids the centre: {path:?}"
+        );
+    }
+    // Squared weights give about two thirds of clusters three tiles or fewer; check across seeds.
     let mut pooled = vec![];
     for seed in 0..6u64 {
         let mut config = config.clone();

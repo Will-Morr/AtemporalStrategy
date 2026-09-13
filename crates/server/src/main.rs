@@ -24,7 +24,7 @@ fn run() -> Result<()> {
     while let Some(key) = args.next() {
         if key == "--help" {
             println!(
-                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--memory-budget-mb N] [--results-budget-mb N] [--inputs-only] [--resume MATCH_ID | --verify MATCH_ID]"
+                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--seed N] [--memory-budget-mb N] [--results-budget-mb N] [--inputs-only] [--resume MATCH_ID | --verify MATCH_ID]"
             );
             return Ok(());
         }
@@ -77,7 +77,12 @@ fn run() -> Result<()> {
             read(Path::new(&option("--content", "config/content.yaml")))?,
         ),
     };
-    let setup = atemporal_content::load_setup(&config_yaml)?;
+    let mut setup = atemporal_content::load_setup(&config_yaml)?;
+    // Harness runs pin a map; players normally leave the setup file's 0 for a fresh map.
+    if let Some(seed) = options.get("--seed") {
+        let seed: u64 = seed.parse().map_err(|_| "seed must be an integer")?;
+        setup.match_defaults.seed = seed.try_into()?;
+    }
     let content = match &resume {
         Some((_, (_, loaded))) => atemporal_content::load_archived_content(
             &content_yaml,
