@@ -1,5 +1,27 @@
 # Browser integration verification — 2026-09-13
 
+## Missile silos and desktop review target
+
+Implemented on `agent/missile-silos` from main `be32b99`. Silos use matter priority and per-item production loops, store missiles by type, and accept automatic or ordered manual launches while planned, under construction or complete. Manual launches are unlimited and take 1–30 ticks. Satellite vision follows flight and persists at landing; Cluster deals 100 damage within seven tiles; Tac nuke annihilates entities within four tiles, including allies and entities receiving simultaneous healing. Silo destruction loses stock but does not cancel launched missiles. See [missile rules and implementation defaults](missiles.md).
+
+Replay checkpoints, compact samples, events and native peripheral replication include missile state. Range overlays show turret reach and silo automatic acquisition; launch previews show blast/vision area and flight time after launch. Stock counts and targeting buttons remain beside an expandable production section. One-tick flights between compact samples are reconstructed from launch events.
+
+The user's latest display decision makes desktop the required target. The harness now uses **1920×1080 at device scale 1**, with no mobile project or forced phone-sized guide screenshots. Earlier 1440×1000 and 390×844 evidence below is retained as history, not a mobile support commitment.
+
+Verification:
+
+- `scripts/check.sh` passed after the final launch-cutoff fix: workspace tests, strict workspace/simulator Clippy, serial simulator tests, client generation/build, JavaScript fixture/plot/score tests, guide and generated-file drift. The release server and native peripheral also rebuilt successfully.
+- The final peripheral-enabled desktop suite passed **24/24** at 1920×1080 (`artifacts/ui/2026-09-13T23-20-15.198Z-974253`), with all 24 trace ZIPs intact. This run includes the final launch-cutoff guard and covers multiplayer, timed/single-order/hybrid variants, recovery, progressive replay, queues and match-end results. Factory placement and the five-win scoreboard were also manually reviewed at this desktop size.
+- Final 1080p controller silo coverage passed **2/2** (`artifacts/ui/2026-09-13T23-20-15.204Z-974260`), with both traces intact. Full 1920×1080 frames were manually inspected for silo placement, target flight/radius previews, stored inventory, satellite flight and Cluster impact.
+- Twelve simulator missile regressions cover inventory/loops/Off, production and launch waiting, blast boundaries, friendly fire, simultaneous healing, satellite flight/expiry, unlimited range and the flight cap, silo death, automatic shared vision, cancelled plans, ghost configuration, invalid ownership, cold/evicted checkpoint replay, and early-termination/cooldown boundaries.
+- The broad peripheral-enabled run passed **48/48** desktop/narrow scenarios (`artifacts/ui/2026-09-13T23-07-32.605Z-960325`), and all 48 trace ZIPs passed integrity checks. This run used the runtime before the final launch-cutoff guard. Its desktop silo trace contains actual production, map-target, commit, playback, rewrite and refresh inputs.
+- Authoritative-controller silo coverage passed **4/4** in the old two-viewport matrix (`artifacts/ui/2026-09-13T23-07-32.612Z-960327`). The earlier automatic-targeting test sought state zero and incorrectly expected the tick-zero command to have applied. Seeking state one corrected that test; the original failure remains retained.
+- Full rendered frames were manually inspected for stockpiles, targeting previews, turret reach, moving and landed satellite vision, nuclear impact, and automatic fire with an allied spotter. Initial review moved stock counts and launch targets out of the expanded production list. Narrow panels required scrolling; mobile is now outside the required scope.
+
+Representative frames, result metadata, trace integrity summaries and check logs are retained in `artifacts/review/2026-09-13-missile-silos` in the main checkout; full reports and traces remain in the implementation worktree.
+
+The separate 2,000-live-entity controller/browser/peripheral cold-seek and peak-memory measurement remains open. This feature pass does not claim that workload, Firefox/WebKit or WAN coverage.
+
 ## Work targeting, fogged ore and selection
 
 Implemented on `agent/pathing-selection` from main `e79ec1b`. Mining acquires reachable ore by walking distance with exclusive claims. Construction ranks usable adjacent work positions by legal walking distance for both planned and funded buildings; creation precedence only breaks equal paths. Source fields rank candidates without generating a separate BFS for each candidate. Dedicated work-goal fields guide the selected constructor, while factory-output clearing retains ordinary movement. Grinders now cost 100 matter with 275 HP, 25 damage per five ticks and movement every two ticks; tanks retain 250 HP, the same cost/damage rate and movement every four ticks.

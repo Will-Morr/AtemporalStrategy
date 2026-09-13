@@ -159,4 +159,4 @@ The browser feature, multiplayer/single-order/recovery, and peripheral implement
 - [x] Reachable walking-distance selection for ore and construction work positions; unreachable work is skipped and miner claims spread.
 - [x] Tank-priced grinders: 275 HP, 25 damage per five ticks, movement every two ticks, melee range.
 - [x] Fogged ore readouts and owner/type selection filters with All army / All units helpers.
-- [ ] Missile silos: inventory, production/launch queues, automatic/manual targets, three missile effects, flight replay and placement/impact previews.
+- [x] Missile silos: inventory, production/launch queues, automatic/manual targets, three missile effects, flight replay and placement/impact previews. Verified through controller and native peripheral at desktop 1920×1080; see [integration verification](integration-verification.md).
