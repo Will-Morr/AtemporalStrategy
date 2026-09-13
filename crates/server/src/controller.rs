@@ -15,6 +15,10 @@ use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
 pub const TIMELINE_BUCKET: Tick = 20;
+/// Published index entries per player; cap-length runs widen buckets instead of growing.
+pub const TIMELINE_INDEX_PER_PLAYER: Tick = 500;
+/// Most stats buckets one `get_stats` answer carries; wider windows coarsen automatically.
+pub const MAX_STAT_BUCKETS: Tick = 2000;
 const EXACT_CACHE: usize = 64;
 pub const DEFAULT_MEMORY_BUDGET: u64 = 512 << 20;
 pub const DEFAULT_DISK_BUDGET: u64 = 2048 << 20;
@@ -1158,16 +1162,25 @@ impl Controller {
         bucket_width: Tick,
     ) -> Result<ServerMessage> {
         let data = self.revision(revision)?;
-        let width = bucket_width.max(self.config.snapshot_interval);
-        Ok(ServerMessage::StatsRange {
-            revision,
-            buckets: data
-                .stats
-                .range(from..=to)
-                .filter(|(t, _)| (**t).is_multiple_of(width) || **t == to)
-                .map(|(_, s)| s.clone())
-                .collect(),
-        })
+        let interval = self.config.snapshot_interval.max(1);
+        let span = to.saturating_sub(from).saturating_add(1);
+        let width = bucket_width
+            .max(interval)
+            .max(span.div_ceil(MAX_STAT_BUCKETS))
+            .next_multiple_of(interval);
+        // Banks and counters are gauges/cumulative, so a bucket reports its latest sample.
+        let mut buckets: Vec<StatsSample> = vec![];
+        for (tick, sample) in data.stats.range(from..=to) {
+            let bucket = (tick - from) / width;
+            if buckets
+                .last()
+                .is_some_and(|last| (last.tick - from) / width == bucket)
+            {
+                buckets.pop();
+            }
+            buckets.push(sample.clone());
+        }
+        Ok(ServerMessage::StatsRange { revision, buckets })
     }
 
     pub fn commands_range(
@@ -1835,10 +1848,20 @@ fn rule_summary(config: &MatchConfig, content: &Content) -> String {
 }
 
 /// Dominant activity per player per coarse bucket: combat > construction > mining > movement > idle.
+/// Bucket width grows with the run so the index never exceeds `players × TIMELINE_INDEX_PER_PLAYER`.
 pub fn timeline_index(buckets: &[TimelineBucket], players: u8) -> Vec<TimelineBucket> {
+    let span = buckets
+        .iter()
+        .map(|b| b.to_tick_exclusive)
+        .max()
+        .unwrap_or(0);
+    let width = span
+        .div_ceil(TIMELINE_INDEX_PER_PLAYER)
+        .next_multiple_of(TIMELINE_BUCKET)
+        .max(TIMELINE_BUCKET);
     let mut merged: BTreeMap<(Tick, PlayerId), [u32; 5]> = BTreeMap::new();
     for b in buckets {
-        let key = (b.from_tick / TIMELINE_BUCKET * TIMELINE_BUCKET, b.player_id);
+        let key = (b.from_tick / width * width, b.player_id);
         let slot = merged.entry(key).or_insert([0; 5]);
         let a = b.activity as usize;
         slot[a] = slot[a].max(b.affected_entities);
@@ -1861,7 +1884,7 @@ pub fn timeline_index(buckets: &[TimelineBucket], players: u8) -> Vec<TimelineBu
                 .find(|(_, c)| *c > 0)?;
             Some(TimelineBucket {
                 from_tick: from,
-                to_tick_exclusive: from + TIMELINE_BUCKET,
+                to_tick_exclusive: from + width,
                 player_id,
                 activity: a,
                 affected_entities: c,
@@ -2271,6 +2294,65 @@ pub(crate) mod tests {
             "kept resident right after regeneration"
         );
         assert_eq!(c.exact_request(0, 7).map(|_| ()), Ok(()));
+    }
+
+    #[test]
+    fn stats_buckets_report_latest_sample_and_stay_bounded() {
+        let c = started(false, |_| {});
+        let ticks = |m: ServerMessage| match m {
+            ServerMessage::StatsRange { buckets, .. } => {
+                buckets.into_iter().map(|b| b.tick).collect::<Vec<_>>()
+            }
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            ticks(c.stats_range(0, 0, 300, 100).unwrap()),
+            vec![95, 195, 295, 300]
+        );
+        assert_eq!(ticks(c.stats_range(0, 0, 300, 7).unwrap()).len(), 31);
+        assert_eq!(ticks(c.stats_range(0, 0, 300, 5).unwrap()).len(), 61);
+        assert_eq!(ticks(c.stats_range(0, 100, 130, 1000).unwrap()), vec![130]);
+        assert!(
+            ticks(c.stats_range(0, 0, 1_000_000, 1).unwrap()).len() <= MAX_STAT_BUCKETS as usize
+        );
+    }
+
+    #[test]
+    fn timeline_index_is_bounded_for_cap_length_runs() {
+        let mut fine = vec![];
+        for from in (0..20_000).step_by(5) {
+            for player in 0..4u8 {
+                fine.push(TimelineBucket {
+                    from_tick: from,
+                    to_tick_exclusive: from + 5,
+                    player_id: player,
+                    activity: if from % 40 == 0 {
+                        Activity::Combat
+                    } else {
+                        Activity::Mining
+                    },
+                    affected_entities: 3,
+                    severity: 3.0,
+                });
+            }
+        }
+        let index = timeline_index(&fine, 4);
+        assert!(
+            index.len() <= 4 * TIMELINE_INDEX_PER_PLAYER as usize,
+            "{}",
+            index.len()
+        );
+        assert!(
+            index
+                .iter()
+                .all(|b| b.activity == Activity::Combat && b.to_tick_exclusive - b.from_tick == 40)
+        );
+        let short = timeline_index(&fine[..fine.len() / 100], 4);
+        assert!(
+            short
+                .iter()
+                .all(|b| b.to_tick_exclusive - b.from_tick == TIMELINE_BUCKET)
+        );
     }
 
     #[test]
