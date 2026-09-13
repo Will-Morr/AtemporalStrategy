@@ -169,7 +169,9 @@ async fn handle(
         ClientMessage::Hello { slot_token, .. } => {
             let mut c = app.controller.lock().unwrap();
             let _ = tx.send(c.welcome());
-            if let Some(p) = c.connect(slot_token.as_deref()) {
+            // A repeated hello on the same socket must not count as another connection.
+            let already = *player;
+            if let Some(p) = already.or_else(|| c.connect(slot_token.as_deref())) {
                 *player = Some(p);
                 let _ = tx.send(ServerMessage::SlotClaimed {
                     slot: p,

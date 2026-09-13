@@ -42,7 +42,12 @@ fn run() -> Result<()> {
     let content_yaml = read(Path::new(&option("--content", "config/content.yaml")))?;
     let setup = atemporal_content::load_setup(&config_yaml)?;
     let content = atemporal_content::load_content(&content_yaml)?;
-    let port: u16 = match options.get("--port") {
+    // CLI beats the PORT environment variable, which beats the YAML default.
+    let port: u16 = match options
+        .get("--port")
+        .cloned()
+        .or_else(|| std::env::var("PORT").ok())
+    {
         Some(p) => p.parse().map_err(|_| "port must be 1..65535")?,
         None => setup.default_port,
     };
