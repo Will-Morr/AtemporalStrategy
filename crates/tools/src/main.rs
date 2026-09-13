@@ -1,3 +1,4 @@
+mod fixtures;
 use atemporal_contracts::*;
 use std::{
     collections::BTreeMap,
@@ -36,7 +37,7 @@ fn run() -> Result<()> {
             "--expected-hash",
         ],
         "normalize" => &["--content", "--setup", "--out"],
-        "help" => &[],
+        "fixtures" | "help" => &[],
         _ => return Err(format!("unknown command {command}; use help")),
     };
     for key in options.keys() {
@@ -47,6 +48,7 @@ fn run() -> Result<()> {
     let option =
         |key: &str, default: &str| options.get(key).cloned().unwrap_or_else(|| default.into());
     match command.as_str() {
+        "fixtures" => fixtures::generate()?,
         "schema" => {
             let schema = atemporal_contracts::json_schema();
             write(
@@ -98,7 +100,7 @@ fn run() -> Result<()> {
             );
         }
         _ => println!(
-            "Commands: schema [--out PATH]; guide [--content YAML --prose HTML --out DIR]; normalize [--content YAML --setup YAML --out DIR]; select-guide [--content YAML --expected-hash HASH --prose HTML --bundled DIR --cache DIR]. Run from repository root; errors exit nonzero."
+            "Commands: fixtures (regenerate authored golden data); schema [--out PATH]; guide [--content YAML --prose HTML --out DIR]; normalize [--content YAML --setup YAML --out DIR]; select-guide [--content YAML --expected-hash HASH --prose HTML --bundled DIR --cache DIR]. Run from repository root; errors exit nonzero."
         ),
     }
     Ok(())

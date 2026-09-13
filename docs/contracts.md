@@ -151,7 +151,7 @@ WorldState = {
     lifecycle: site | complete, blueprint_id?, action, priority, engaged_target?,
     order_locks: OrderLocks, goal_settled, failed_move_attempts, blocked_step?, local_detour?: Tile[],
     next_action_tick, next_move_tick, production?, support_target?}],
-  blueprints, control_groups: ControlGroupState[], deterministic_identity_state
+  blueprints, control_groups: ControlGroupState[], survival_transitions, deterministic_identity_state
 }
 Production = { pending_items, active_item?, loop_enabled, stored_order,
                output_tile, occurrence_counters, spawn_group: ControlGroupId | null }

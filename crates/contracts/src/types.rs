@@ -410,7 +410,7 @@ record!(Terrain { width: u16, height: u16, cells: Vec<TerrainCell> });
 pub type IdentityRegistry = BTreeMap<EntityId, String>;
 record!(WorldState { schema_version: Version, tick: Tick, last_progress_tick: Tick, inactivity_deadline: Tick,
     terrain: Terrain, ore: Vec<f64>, players: Vec<PlayerState>, entities: Vec<EntityState>, blueprints: Vec<Blueprint>,
-    control_groups: Vec<ControlGroupState>, deterministic_identity_state: IdentityRegistry, rng_state: String });
+    control_groups: Vec<ControlGroupState>, survival_transitions: Vec<SurvivalTransition>, deterministic_identity_state: IdentityRegistry, rng_state: String });
 choices!(OutcomeKind {
     Stalemate,
     Win,
@@ -713,7 +713,7 @@ pub enum ServerMessage {
         fingerprint: Fingerprint,
         config: MatchConfig,
         content: Content,
-        initial_state: WorldState,
+        initial_state: Box<WorldState>,
         ledger: Vec<AcceptedTurn>,
         precedence: Vec<RoundPrecedence>,
     },
@@ -776,7 +776,7 @@ record!(ExpectedBank {
     mined: f64
 });
 record!(TickExpectation { state_tick: Tick, entities: Vec<ExpectedEntity>, banks: Vec<ExpectedBank>, groups: Vec<ControlGroupState> });
-record!(GoldenExpectation { outcome: Outcome, states: Vec<TickExpectation>, command_outcomes: Vec<CommandOutcome> });
+record!(GoldenExpectation { final_hash: Option<String>, outcome: Outcome, states: Vec<TickExpectation>, command_outcomes: Vec<CommandOutcome> });
 record!(GoldenWorldFixture {
     schema_version: Version,
     name: String,

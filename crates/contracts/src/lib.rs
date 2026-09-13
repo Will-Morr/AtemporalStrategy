@@ -1,4 +1,5 @@
 //! Version 1 interchange types. Simulation policy lives outside these records.
+pub mod golden;
 pub mod identity;
 pub mod scoring;
 mod types;

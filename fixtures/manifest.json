@@ -1,7 +1,86 @@
 [
-  {"file":"fixtures/protocol/hello.json","type":"ClientEnvelope"},
-  {"file":"client/public/guide/manifest.json","type":"GuideManifest"},
-  {"file":"client/public/guide/content.json","type":"Content"},
-  {"file":"config/game.yaml","type":"Setup"},
-  {"file":"config/teams.yaml","type":"Setup"}
+  {
+    "file": "client/public/guide/content.json",
+    "type": "Content"
+  },
+  {
+    "file": "client/public/guide/manifest.json",
+    "type": "GuideManifest"
+  },
+  {
+    "file": "config/game.yaml",
+    "type": "Setup"
+  },
+  {
+    "file": "config/teams.yaml",
+    "type": "Setup"
+  },
+  {
+    "file": "fixtures/protocol/command-variants.json",
+    "type": "ClientEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/exact-state.json",
+    "type": "ServerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/group-preview.json",
+    "type": "ClientEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/hello.json",
+    "type": "ClientEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/planning-opened.json",
+    "type": "ServerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/revision-published.json",
+    "type": "ServerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/welcome.json",
+    "type": "ServerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/worker-complete.json",
+    "type": "WorkerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/worker-progress.json",
+    "type": "WorkerEnvelope"
+  },
+  {
+    "file": "fixtures/worlds/dormant-cause.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/factory-recovery.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/future-input.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/group-birth.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/mining-half.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/mutual-elimination.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/partial-group-suppression.json",
+    "type": "GoldenWorldFixture"
+  },
+  {
+    "file": "fixtures/worlds/quiet.json",
+    "type": "GoldenWorldFixture"
+  }
 ]

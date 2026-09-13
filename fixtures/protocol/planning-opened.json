@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "server_instance_id": "fixture-instance",
+  "message": {
+    "kind": "planning_opened",
+    "round": 1,
+    "revision": 0,
+    "editable_from": 0,
+    "available_through": 3,
+    "committed_players": [],
+    "time_totals": [
+      {
+        "player_id": 0,
+        "total_ms": 0
+      },
+      {
+        "player_id": 1,
+        "total_ms": 0
+      }
+    ]
+  }
+}

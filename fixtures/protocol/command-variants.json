@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "message": {
+    "kind": "commit",
+    "request": {
+      "request_id": "fixture-request-1",
+      "slot_token": "fixture-private-token",
+      "draft": {
+        "based_on_revision": 1,
+        "tick": 20,
+        "commands": [
+          {
+            "command": {
+              "kind": "assign_order",
+              "entities": [
+                "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce"
+              ],
+              "order": {
+                "kind": "mine",
+                "area": {
+                  "min": {
+                    "x": 1,
+                    "y": 1
+                  },
+                  "max": {
+                    "x": 1,
+                    "y": 1
+                  }
+                }
+              }
+            },
+            "future_orders": "drop_window"
+          },
+          {
+            "command": {
+              "kind": "assign_group_order",
+              "group": {
+                "owner": 0,
+                "slot": 0
+              },
+              "order": {
+                "kind": "attack_move",
+                "destination": {
+                  "x": 4,
+                  "y": 4
+                }
+              }
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "edit_group_members",
+              "group": {
+                "owner": 0,
+                "slot": 0
+              },
+              "edit": {
+                "kind": "replace",
+                "entities": [
+                  "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+                  "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce"
+                ]
+              }
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "bind_factory_group",
+              "factories": [
+                "entity:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              ],
+              "group": {
+                "owner": 0,
+                "slot": 0
+              }
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "set_priority",
+              "entities": [
+                "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57"
+              ],
+              "priority": "high"
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "place_blueprints",
+              "type_key": "factory",
+              "tiles": [
+                {
+                  "x": 2,
+                  "y": 2
+                }
+              ],
+              "priority": "high"
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "cancel_blueprints",
+              "blueprint_ids": [
+                "blueprint:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              ]
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "edit_production",
+              "factories": [
+                "entity:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              ],
+              "edit": {
+                "kind": "append",
+                "items": [
+                  "grunt",
+                  "scout"
+                ]
+              }
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "set_queue_loop",
+              "factories": [
+                "entity:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              ],
+              "enabled": true
+            },
+            "future_orders": "keep"
+          },
+          {
+            "command": {
+              "kind": "set_stored_order",
+              "factories": [
+                "entity:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              ],
+              "order": {
+                "kind": "support",
+                "target": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57"
+              }
+            },
+            "future_orders": "keep"
+          }
+        ]
+      }
+    }
+  }
+}

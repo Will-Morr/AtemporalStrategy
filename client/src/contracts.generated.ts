@@ -679,6 +679,7 @@ export interface GoldenWorldFixture {
  */
 export interface GoldenExpectation {
   command_outcomes: CommandOutcome[];
+  final_hash?: string | null;
   outcome: Outcome;
   states: TickExpectation[];
 }
@@ -807,6 +808,7 @@ export interface WorldState {
   players: PlayerState[];
   rng_state: string;
   schema_version: Version;
+  survival_transitions: SurvivalTransition[];
   terrain: Terrain;
   tick: number;
 }

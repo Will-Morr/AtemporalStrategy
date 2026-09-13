@@ -1296,6 +1296,12 @@
           },
           "type": "array"
         },
+        "final_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "outcome": {
           "$ref": "#/$defs/Outcome"
         },
@@ -4337,6 +4343,12 @@
         "schema_version": {
           "$ref": "#/$defs/Version"
         },
+        "survival_transitions": {
+          "items": {
+            "$ref": "#/$defs/SurvivalTransition"
+          },
+          "type": "array"
+        },
         "terrain": {
           "$ref": "#/$defs/Terrain"
         },
@@ -4358,6 +4370,7 @@
         "entities",
         "blueprints",
         "control_groups",
+        "survival_transitions",
         "deterministic_identity_state",
         "rng_state"
       ],

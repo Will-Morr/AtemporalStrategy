@@ -293,3 +293,70 @@ fn recovery_stalemate_does_not_score_and_malformed_inputs_fail() {
         .is_err()
     );
 }
+
+#[test]
+fn configurable_fixed_target_and_team_lead_use_complete_vectors() {
+    let fixed = ScoreboardRules {
+        victory_rule: VictoryRule::FixedTarget { points: 2. },
+        ..Default::default()
+    };
+    let mode = Multiplayer::Ffa {};
+    let one = resolve_round(
+        1,
+        2,
+        &mode,
+        &fixed,
+        &outcome(2, &mode, &[0]),
+        &times(2),
+        None,
+    )
+    .unwrap();
+    assert!(one.match_winners.is_empty());
+    let two = resolve_round(
+        2,
+        2,
+        &mode,
+        &fixed,
+        &outcome(2, &mode, &[0]),
+        &times(2),
+        Some(&one),
+    )
+    .unwrap();
+    assert_eq!(two.match_winners, vec![SideId::Player { player_id: 0 }]);
+    let mode = teams();
+    let lead = ScoreboardRules {
+        victory_rule: VictoryRule::Lead { margin: 2. },
+        ..Default::default()
+    };
+    let one = resolve_round(
+        1,
+        4,
+        &mode,
+        &lead,
+        &outcome(4, &mode, &[0, 2, 3]),
+        &times(4),
+        None,
+    )
+    .unwrap();
+    assert!(one.match_winners.is_empty());
+    let two = resolve_round(
+        2,
+        4,
+        &mode,
+        &lead,
+        &outcome(4, &mode, &[0, 2, 3]),
+        &times(4),
+        Some(&one),
+    )
+    .unwrap();
+    assert_eq!(
+        two.entries.iter().map(|e| e.raw_total).collect::<Vec<_>>(),
+        [2., 4.]
+    );
+    assert_eq!(
+        two.match_winners,
+        vec![SideId::Team {
+            team_id: "b".into()
+        }]
+    );
+}

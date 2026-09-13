@@ -1,0 +1,909 @@
+{
+  "schema_version": 1,
+  "name": "mining-half",
+  "description": "Commands at t=0 first affect S[1]. Four equal mining opportunities transfer 8 matter from the miner and 4 from the constructor.",
+  "request": {
+    "schema_version": 1,
+    "job_id": "mining-half",
+    "revision": 1,
+    "fingerprint": {
+      "schema_version": 1,
+      "sim_build": "tiny-world-contract-v1",
+      "target": "x86_64-unknown-linux-gnu",
+      "config_hash": "cd147de7b9925ded9f3c614a11b8c14480541e55bbad86277d16ad7cf74e7b57",
+      "content_hash": "11cfb4c975821d045c90a198a38d17811c457b371cd533a587b9d91b73fdfa9a"
+    },
+    "config": {
+      "schema_version": 1,
+      "seed": 42,
+      "map_size": 8,
+      "player_count": 2,
+      "symmetric": true,
+      "multiplayer": {
+        "kind": "ffa"
+      },
+      "objective": {
+        "kind": "scoreboard",
+        "rules": {
+          "victory_rule": {
+            "kind": "fixed_target",
+            "points": 5.0
+          },
+          "tie_policy": "continue_until_unique",
+          "draw_scoring": "none",
+          "time_penalty": "none"
+        }
+      },
+      "control_limit": "timestamp",
+      "future_orders": {
+        "window_ticks": 100
+      },
+      "max_tick": 4,
+      "stall_ticks": 3,
+      "ticks_per_second": 10,
+      "starting_matter": 0.0,
+      "simulation_threads": 1,
+      "checkpoint_interval": 2,
+      "snapshot_interval": 1,
+      "transport": "authoritative",
+      "replay_directory": "replays"
+    },
+    "content": {
+      "schema_version": 1,
+      "types": [
+        {
+          "key": "artillery",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 80.0,
+          "max_hp": 50.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": {
+            "neighbors": "four",
+            "cooldown": 6
+          },
+          "vision": 5.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "constructor",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 40.0,
+          "max_hp": 80.0,
+          "counts_for_survival": false,
+          "provides_build_ability": true,
+          "movement": {
+            "neighbors": "eight",
+            "cooldown": 3
+          },
+          "vision": 5.0,
+          "weapon": null,
+          "mining": {
+            "rate": 1.0,
+            "cooldown": 1
+          },
+          "construction": {
+            "rate": 4.0,
+            "cooldown": 1
+          },
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "factory",
+          "kind": "structure",
+          "shape": "rectangle",
+          "matter_cost": 200.0,
+          "max_hp": 400.0,
+          "counts_for_survival": true,
+          "provides_build_ability": true,
+          "movement": null,
+          "vision": 5.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": {
+            "rate": 3.0,
+            "recipes": [
+              "artillery",
+              "constructor",
+              "grinder",
+              "grunt",
+              "miner",
+              "scout",
+              "tank"
+            ]
+          },
+          "healing": null
+        },
+        {
+          "key": "grinder",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 25.0,
+          "max_hp": 65.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": {
+            "neighbors": "eight",
+            "cooldown": 2
+          },
+          "vision": 5.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "grunt",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 15.0,
+          "max_hp": 45.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": {
+            "neighbors": "eight",
+            "cooldown": 2
+          },
+          "vision": 5.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "miner",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 30.0,
+          "max_hp": 60.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": {
+            "neighbors": "four",
+            "cooldown": 3
+          },
+          "vision": 5.0,
+          "weapon": null,
+          "mining": {
+            "rate": 2.0,
+            "cooldown": 1
+          },
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "scout",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 20.0,
+          "max_hp": 35.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": {
+            "neighbors": "eight",
+            "cooldown": 1
+          },
+          "vision": 10.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "tank",
+          "kind": "unit",
+          "shape": "circle",
+          "matter_cost": 100.0,
+          "max_hp": 250.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": {
+            "neighbors": "four",
+            "cooldown": 4
+          },
+          "vision": 5.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "turret",
+          "kind": "structure",
+          "shape": "rectangle",
+          "matter_cost": 100.0,
+          "max_hp": 200.0,
+          "counts_for_survival": true,
+          "provides_build_ability": false,
+          "movement": null,
+          "vision": 8.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        },
+        {
+          "key": "wall",
+          "kind": "structure",
+          "shape": "rectangle",
+          "matter_cost": 10.0,
+          "max_hp": 150.0,
+          "counts_for_survival": false,
+          "provides_build_ability": false,
+          "movement": null,
+          "vision": 0.0,
+          "weapon": null,
+          "mining": null,
+          "construction": null,
+          "production": null,
+          "healing": null
+        }
+      ],
+      "starting_roster": [
+        "miner",
+        "constructor",
+        "turret"
+      ]
+    },
+    "checkpoint": {
+      "schema_version": 1,
+      "tick": 0,
+      "last_progress_tick": 0,
+      "inactivity_deadline": 3,
+      "terrain": {
+        "width": 8,
+        "height": 8,
+        "cells": [
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor",
+          "floor"
+        ]
+      },
+      "ore": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        20.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        20.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "players": [
+        {
+          "player_id": 0,
+          "bank": 0.0,
+          "counters": {
+            "mined": 0.0,
+            "total_spend": 0.0,
+            "unit_spend": 0.0,
+            "structure_spend": 0.0,
+            "lost_invested_matter": 0.0,
+            "destroyed_replacement_value": 0.0,
+            "damage_dealt": 0.0
+          },
+          "currently_eliminated": false,
+          "status_since_tick": 0,
+          "elimination_reasons": []
+        },
+        {
+          "player_id": 1,
+          "bank": 0.0,
+          "counters": {
+            "mined": 0.0,
+            "total_spend": 0.0,
+            "unit_spend": 0.0,
+            "structure_spend": 0.0,
+            "lost_invested_matter": 0.0,
+            "destroyed_replacement_value": 0.0,
+            "damage_dealt": 0.0
+          },
+          "currently_eliminated": false,
+          "status_since_tick": 0,
+          "elimination_reasons": []
+        }
+      ],
+      "entities": [
+        {
+          "id": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+          "owner": 0,
+          "type_key": "constructor",
+          "tile": {
+            "x": 1,
+            "y": 2
+          },
+          "last_move_direction": "se",
+          "hp": 80.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null
+        },
+        {
+          "id": "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3",
+          "owner": 1,
+          "type_key": "constructor",
+          "tile": {
+            "x": 6,
+            "y": 5
+          },
+          "last_move_direction": "nw",
+          "hp": 80.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null
+        },
+        {
+          "id": "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc",
+          "owner": 1,
+          "type_key": "turret",
+          "tile": {
+            "x": 7,
+            "y": 7
+          },
+          "last_move_direction": "nw",
+          "hp": 200.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null
+        },
+        {
+          "id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
+          "owner": 0,
+          "type_key": "miner",
+          "tile": {
+            "x": 1,
+            "y": 1
+          },
+          "last_move_direction": "se",
+          "hp": 60.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null
+        },
+        {
+          "id": "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236",
+          "owner": 1,
+          "type_key": "miner",
+          "tile": {
+            "x": 6,
+            "y": 6
+          },
+          "last_move_direction": "nw",
+          "hp": 60.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null
+        },
+        {
+          "id": "entity:ce95d8c988db5e06e057be3e83399e7b62bec662509b7c38d779b255e08ad29a",
+          "owner": 0,
+          "type_key": "turret",
+          "tile": {
+            "x": 0,
+            "y": 0
+          },
+          "last_move_direction": "se",
+          "hp": 200.0,
+          "paid_matter": 0.0,
+          "lifecycle": "complete",
+          "blueprint_id": null,
+          "action": {
+            "kind": "idle"
+          },
+          "priority": "medium",
+          "next_action_tick": 0,
+          "next_move_tick": 0,
+          "production": null,
+          "support_target": null
+        }
+      ],
+      "blueprints": [],
+      "control_groups": [
+        {
+          "id": {
+            "owner": 0,
+            "slot": 0
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 1
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 2
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 3
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 4
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 5
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 6
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 7
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 8
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 0,
+            "slot": 9
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 0
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 1
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 2
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 3
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 4
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 5
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 6
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 7
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 8
+          },
+          "members": [],
+          "latest_order": null
+        },
+        {
+          "id": {
+            "owner": 1,
+            "slot": 9
+          },
+          "members": [],
+          "latest_order": null
+        }
+      ],
+      "survival_transitions": [],
+      "deterministic_identity_state": {
+        "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57": "[\"atemporal\",1,\"entity\",[\"genesis\",0,1]]",
+        "entity:5835b617617ed07c49c39315ae18b510f14ab891f290366af3e1e2a827ea25f3": "[\"atemporal\",1,\"entity\",[\"genesis\",1,1]]",
+        "entity:7009bede29f31013e56ba0a7764d55d4a05dc4c219a9422ce75c128645ee77bc": "[\"atemporal\",1,\"entity\",[\"genesis\",1,2]]",
+        "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce": "[\"atemporal\",1,\"entity\",[\"genesis\",0,0]]",
+        "entity:77fcf58b501bf7d12593f46fa7b35a57f95e2f37c371f167fcb11a9433641236": "[\"atemporal\",1,\"entity\",[\"genesis\",1,0]]",
+        "entity:ce95d8c988db5e06e057be3e83399e7b62bec662509b7c38d779b255e08ad29a": "[\"atemporal\",1,\"entity\",[\"genesis\",0,2]]"
+      },
+      "rng_state": "fixture:no_rng:v1"
+    },
+    "events": [
+      {
+        "player": 0,
+        "round": 1,
+        "tick": 0,
+        "commands": [
+          {
+            "id": "r1:p0:c0",
+            "command": {
+              "kind": "assign_order",
+              "entities": [
+                "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+                "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce"
+              ],
+              "order": {
+                "kind": "mine",
+                "area": {
+                  "min": {
+                    "x": 1,
+                    "y": 1
+                  },
+                  "max": {
+                    "x": 1,
+                    "y": 2
+                  }
+                }
+              }
+            },
+            "future_orders": "keep",
+            "suppressions": []
+          }
+        ],
+        "duration_ms": 1000
+      },
+      {
+        "player": 1,
+        "round": 1,
+        "tick": 0,
+        "commands": [],
+        "duration_ms": 1000
+      }
+    ],
+    "precedence": [
+      {
+        "round": 1,
+        "players": [
+          1,
+          0
+        ]
+      }
+    ],
+    "suppressions": [],
+    "end_tick_exclusive": 4,
+    "minimum_end_tick": 0
+  },
+  "initial_hash": "a91bbe17aa5b3a1ccd0ca81fd3ef5163c0cc69f65774373a70b5f59c36c1a5fc",
+  "expected": {
+    "final_hash": null,
+    "outcome": {
+      "kind": "stalemate",
+      "stop_reason": "absolute_horizon",
+      "terminal_state_tick": 4,
+      "last_progress_tick": 3,
+      "survivors": [
+        0,
+        1
+      ],
+      "eliminated": [],
+      "surviving_sides": [
+        {
+          "kind": "player",
+          "player_id": 0
+        },
+        {
+          "kind": "player",
+          "player_id": 1
+        }
+      ],
+      "survival_transitions": []
+    },
+    "states": [
+      {
+        "state_tick": 1,
+        "entities": [
+          {
+            "entity_id": "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce",
+            "present": true,
+            "tile": {
+              "x": 1,
+              "y": 1
+            },
+            "hp": null,
+            "paid_matter": null,
+            "action": {
+              "kind": "mine",
+              "area": {
+                "min": {
+                  "x": 1,
+                  "y": 1
+                },
+                "max": {
+                  "x": 1,
+                  "y": 2
+                }
+              }
+            }
+          },
+          {
+            "entity_id": "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+            "present": true,
+            "tile": {
+              "x": 1,
+              "y": 2
+            },
+            "hp": null,
+            "paid_matter": null,
+            "action": {
+              "kind": "mine",
+              "area": {
+                "min": {
+                  "x": 1,
+                  "y": 1
+                },
+                "max": {
+                  "x": 1,
+                  "y": 2
+                }
+              }
+            }
+          }
+        ],
+        "banks": [
+          {
+            "player_id": 0,
+            "bank": 3.0,
+            "mined": 3.0
+          }
+        ],
+        "groups": []
+      },
+      {
+        "state_tick": 4,
+        "entities": [],
+        "banks": [
+          {
+            "player_id": 0,
+            "bank": 12.0,
+            "mined": 12.0
+          }
+        ],
+        "groups": []
+      }
+    ],
+    "command_outcomes": [
+      {
+        "command_id": "r1:p0:c0",
+        "applied_entities": [
+          "entity:2bc5852a88253c5650ccee51a52e0cd527031a731e4d3e5aa7c4d8fa9fef3d57",
+          "entity:727c15331c70680b5b306b13d22fadbf0f0d1b487eb95260b369282842a42bce"
+        ],
+        "skipped": []
+      }
+    ]
+  }
+}

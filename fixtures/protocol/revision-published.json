@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "server_instance_id": "fixture-instance",
+  "message": {
+    "kind": "revision_published",
+    "revision": 1,
+    "outcome": {
+      "kind": "stalemate",
+      "stop_reason": "inactivity",
+      "terminal_state_tick": 3,
+      "last_progress_tick": 0,
+      "survivors": [
+        0,
+        1
+      ],
+      "eliminated": [],
+      "surviving_sides": [
+        {
+          "kind": "player",
+          "player_id": 0
+        },
+        {
+          "kind": "player",
+          "player_id": 1
+        }
+      ],
+      "survival_transitions": []
+    },
+    "timeline_index": [],
+    "score": {
+      "round": 1,
+      "entries": [
+        {
+          "side_id": {
+            "kind": "player",
+            "player_id": 0
+          },
+          "surviving_members": [
+            0
+          ],
+          "credited_players": [],
+          "award_reason": "none",
+          "raw_delta": 0.0,
+          "adjusted_delta": 0.0,
+          "raw_total": 0.0,
+          "adjusted_total": 0.0
+        },
+        {
+          "side_id": {
+            "kind": "player",
+            "player_id": 1
+          },
+          "surviving_members": [
+            1
+          ],
+          "credited_players": [],
+          "award_reason": "none",
+          "raw_delta": 0.0,
+          "adjusted_delta": 0.0,
+          "raw_total": 0.0,
+          "adjusted_total": 0.0
+        }
+      ],
+      "victory_rule": {
+        "kind": "fixed_target",
+        "points": 5.0
+      },
+      "match_winners": []
+    },
+    "time_totals": [
+      {
+        "player_id": 0,
+        "total_ms": 1000
+      },
+      {
+        "player_id": 1,
+        "total_ms": 1000
+      }
+    ],
+    "time_ratios": [
+      {
+        "player_id": 0,
+        "ratio": 1.0
+      },
+      {
+        "player_id": 1,
+        "ratio": 1.0
+      }
+    ],
+    "sim_duration_ms": 1
+  }
+}

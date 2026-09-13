@@ -39,6 +39,7 @@ dependencies = [
 name = "atemporal-sim"
 version = "0.1.0"
 dependencies = [
+ "atemporal-content",
  "atemporal-contracts",
 ]
 
@@ -49,6 +50,7 @@ dependencies = [
  "atemporal-content",
  "atemporal-contracts",
  "schemars",
+ "serde",
  "serde_json",
 ]
 

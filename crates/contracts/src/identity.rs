@@ -171,6 +171,26 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
         g.members.sort();
         g.members.dedup();
     }
+    state
+        .survival_transitions
+        .sort_by_key(|t| (t.resolved_tick, t.player_id));
+    if state
+        .survival_transitions
+        .windows(2)
+        .any(|t| t[0].resolved_tick == t[1].resolved_tick && t[0].player_id == t[1].player_id)
+    {
+        return Err("duplicate survival transition".into());
+    }
+    for transition in &mut state.survival_transitions {
+        if transition.resolved_tick >= state.tick {
+            return Err("survival transition is not in checkpoint history".into());
+        }
+        transition.reasons.sort_by_key(|r| match r {
+            Reason::NoActiveBuilding => 0,
+            Reason::NoBuildAbility => 1,
+        });
+        transition.reasons.dedup();
+    }
     for (id, preimage) in &state.deterministic_identity_state {
         let prefix = id.split(':').next().ok_or("invalid identity")?;
         if !["entity", "blueprint", "queue"].contains(&prefix)

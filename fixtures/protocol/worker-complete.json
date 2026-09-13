@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "message": {
+    "kind": "complete",
+    "job_id": "quiet",
+    "revision": 1,
+    "outcome": {
+      "kind": "stalemate",
+      "stop_reason": "inactivity",
+      "terminal_state_tick": 3,
+      "last_progress_tick": 0,
+      "survivors": [
+        0,
+        1
+      ],
+      "eliminated": [],
+      "surviving_sides": [
+        {
+          "kind": "player",
+          "player_id": 0
+        },
+        {
+          "kind": "player",
+          "player_id": 1
+        }
+      ],
+      "survival_transitions": []
+    },
+    "final_hash": "a54fa2626ffb67402c4e7ce6237b464ad5b61b73437367587351b7f609135cb7",
+    "sim_duration_ms": 0,
+    "command_outcomes": []
+  }
+}

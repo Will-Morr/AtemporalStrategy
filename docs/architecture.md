@@ -4,6 +4,8 @@
 
 ## Processes and modules
 
+The coordinator foundation and generated wire format are implemented; see [contracts v1](contracts-v1.md) and [development](development.md). Engine/transport behavior below remains the subsystem implementation plan.
+
 Use one Rust workspace with `content`, `contracts`, `sim`, `server`, and `runner` crates, plus a small TypeScript browser client. Server serves static game and player-guide files, HTTP bootstrap/archive endpoints and a WebSocket for live state. It owns slots, planning phases, accepted commands, scores, timing, and durable match revisions. No database; one match per server process is sufficient.
 
 The server runs simulation work on a dedicated thread, using owned `SimRequest` jobs and typed `WorkerMessage` channels. IO never runs ticks on its event loop. A failed/canceled job leaves the last published revision intact; a cancellation flag is checked at each tick and stale job/revision results are ignored. Recoverable thread panics/errors become failed jobs with fresh per-job state; process-fatal failures still require archive recovery. The `runner` binary provides only the native peripheral, which invokes the same simulation library locally. No subprocess startup or simulation IPC is involved.

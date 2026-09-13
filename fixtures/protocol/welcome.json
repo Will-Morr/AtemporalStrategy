@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "server_instance_id": "fixture-instance",
+  "message": {
+    "kind": "welcome",
+    "match_id": "fixture-match",
+    "config": {
+      "schema_version": 1,
+      "seed": 42,
+      "map_size": 8,
+      "player_count": 2,
+      "symmetric": true,
+      "multiplayer": {
+        "kind": "ffa"
+      },
+      "objective": {
+        "kind": "scoreboard",
+        "rules": {
+          "victory_rule": {
+            "kind": "fixed_target",
+            "points": 5.0
+          },
+          "tie_policy": "continue_until_unique",
+          "draw_scoring": "none",
+          "time_penalty": "none"
+        }
+      },
+      "control_limit": "timestamp",
+      "future_orders": {
+        "window_ticks": 100
+      },
+      "max_tick": 12,
+      "stall_ticks": 3,
+      "ticks_per_second": 10,
+      "starting_matter": 0.0,
+      "simulation_threads": 1,
+      "checkpoint_interval": 2,
+      "snapshot_interval": 1,
+      "transport": "authoritative",
+      "replay_directory": "replays"
+    },
+    "phase": "lobby",
+    "lobby": {
+      "revision": 2,
+      "slots": [
+        {
+          "slot": 0,
+          "claimed": true,
+          "connected": true,
+          "profile": {
+            "player_id": 0,
+            "username": "Ada",
+            "color": "#00DDEE",
+            "team_id": null
+          }
+        },
+        {
+          "slot": 1,
+          "claimed": true,
+          "connected": true,
+          "profile": {
+            "player_id": 1,
+            "username": "Grace",
+            "color": "#FF9933",
+            "team_id": null
+          }
+        }
+      ],
+      "available_teams": [],
+      "can_start": true,
+      "rule_summary": "First to 5; ties continue; draws do not score."
+    },
+    "fingerprint": {
+      "schema_version": 1,
+      "sim_build": "tiny-world-contract-v1",
+      "target": "x86_64-unknown-linux-gnu",
+      "config_hash": "5808107737c7394633fa2d467e8e60fc93eaff932f8aefb223b7fd8c9348c834",
+      "content_hash": "11cfb4c975821d045c90a198a38d17811c457b371cd533a587b9d91b73fdfa9a"
+    },
+    "guide_url": "/guide/"
+  }
+}

@@ -35,3 +35,16 @@ cargo run --locked -p atemporal-tools -- select-guide --content config/content.y
 For an archived content file, add `--expected-hash <manifest content_hash>` to `select-guide`. It rejects mismatching saved data. The selected directory must be mounted by the server before the match bootstrap publishes its guide URL. The reusable library is `atemporal-content`; these commands exercise the same loader and fallback.
 
 See [contracts v1](contracts-v1.md) for encoding, scoring interpretations, subsystem ownership, and version-change rules. See [fixtures](../fixtures/README.md) for golden-world acceptance and its current limits.
+
+
+## Validation record
+
+Coordinator worktree: `/home/will/atemporal-coordinator`, branch `coordinator/contracts-v1`.
+
+- Rust workspace tests, strict Clippy, and formatting pass. They cover score rules/idempotent last-round retry, identity/canonical state hashing, malformed boundaries, shared content/setup validation, guide overrides/resume/corruption, fixture inputs and the golden comparator.
+- Browser TypeScript checking and esbuild build pass. JavaScript validates 21 shared fixtures and seven malformed cases, checks causal SHA-256 preimages, and sends serialized fixtures back through Rust for equality checks.
+- Eight authored tiny worlds define quiet stopping, mining ratio, future-input guards, mutual elimination, factory recovery, dormant IDs, group birth inheritance, and partial group suppression. Only input/expectation consistency and the comparator are tested here; actual engine execution, checkpoint/parallel replay equivalence, and performance remain simulation handoff work.
+- Local HTTP smoke checks on port 8097 returned the scaffold, JavaScript, guide, content JSON, and manifest with expected content types. Missing routes returned 404; an occupied port failed with EADDRINUSE. No browser was available through the UI tool, so rendered layout and browser interaction remain unverified.
+- Runtime routing, durable score application/crash recovery, real server/worker launches, complete player controls, and end-to-end playtests remain their separate checklist tasks. The guide prose is a baseline for the client handoff, to be reviewed against actual controls.
+
+Run `scripts/check.sh` for the complete reproducible coordinator check (including generated-artifact drift). Regenerate authored tiny-world data deliberately with `cargo run --locked -p atemporal-tools -- fixtures`; this writes expectations from `crates/tools/src/fixtures.rs`, not results from a hidden engine.
