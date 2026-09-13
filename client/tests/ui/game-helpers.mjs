@@ -37,8 +37,8 @@ export async function players(review,url,count=2,teams=false) {
     await expect(p.locator('#status')).toContainText(`You hold slot ${slot}`);pages.push(p);
   }return pages;
 }
-export async function revision(p,n){await expect.poll(()=>p.evaluate(()=>!window.atemporal?.preview && window.atemporal?.latest),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal?.current),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.revision),{timeout:30000}).toBe(n);}
-export async function seek(p,t){await p.fill('#tick-input',String(t));await p.locator('#tick-input').press('Enter');await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.tick)).toBe(t);await p.keyboard.press('Escape');}
+export async function revision(p,n){await expect.poll(()=>p.evaluate(()=>!window.atemporal?.viewingPreview && window.atemporal?.current),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal?.current),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.revision),{timeout:30000}).toBe(n);}
+export async function seek(p,t){await p.fill('#tick-input',String(t));await p.locator('#tick-input').press('Enter');await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.revision===window.atemporal.current?window.atemporal.exact.tick:null)).toBe(t);await p.keyboard.press('Escape');}
 export async function tile(p,t){const point=await p.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5);},t);await p.mouse.click(...point);}
 export async function area(p,t){const point=await p.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5);},t);await p.mouse.move(...point);await p.mouse.down();await p.mouse.up();}
 

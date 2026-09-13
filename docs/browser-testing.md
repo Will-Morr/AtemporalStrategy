@@ -10,19 +10,20 @@ From the repository root:
 npm ci --prefix client
 npm run ui:install --prefix client
 cargo build --release -p atemporal-server
+npm run build --prefix client
 ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --replays target/ui-replays' npm run ui:review --prefix client
 ```
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.
 
-Every run allocates a local port, builds the browser assets and starts the real game server (which generates its guide from effective content), runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
+Every default run allocates a local port, builds the browser assets and starts the real game server (which generates its guide from effective content), runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
 
 ```sh
 ATEMPORAL_UI_PORT=8090 npm run ui:review --prefix client
 ATEMPORAL_UI_BASE_URL=http://127.0.0.1:8080 npm run ui:review --prefix client
 ```
 
-The second command reviews an already running real game server, without launching/rebuilding or stopping it. `ATEMPORAL_UI_SERVER_COMMAND` can replace the default game-server command; it runs from the repository root and receives the selected `PORT`. The gameplay suite requires the release server and built browser assets. Most scenarios start isolated matches; the opening slice uses this base server. Use a fresh replay directory for each base-server run.
+The second command reviews an already running real game server, without launching/rebuilding or stopping it. `ATEMPORAL_UI_SERVER_COMMAND` can replace the default game-server command; it runs from the repository root and receives the selected `PORT`. The gameplay suite requires the release server and built browser assets; a custom server command skips the default build, so build the client explicitly after changing it. Most scenarios start isolated matches; the opening slice uses this base server. Use a fresh replay directory for each base-server run.
 
 Playwright flags pass through normally:
 
@@ -126,4 +127,4 @@ See [integration verification](integration-verification.md) for the tested varia
 The playtest-polish scenarios additionally cover shared-browser player identities, explicit rejoin, uncommit with restored undo/redo, factory loop and queue editing during construction, hidden enemy blueprints at visible tiles, hybrid history advancement/recovery, and exact per-player latest-write markers. See the current pass in [integration verification](integration-verification.md); retain earlier failed runs as diagnosis evidence.
 
 
-`progressive.spec.mjs` checks direct-controller and input-only-peripheral previews in both viewports: exact non-sample seeking, typing while progress advances, playback at the frontier, refresh, disabled planning and equality with the final replay. Its isolated processes use `ATEMPORAL_PREVIEW_TEST_DELAY_MS` to keep the long tail observable on fast machines; the production default adds no delay. Revision helpers wait for publication, so existing scenarios cannot accidentally count a provisional state as a verified result.
+`progressive.spec.mjs` checks direct-controller and input-only-peripheral previews in both viewports: exact non-sample seeking, typing while progress advances, playback at the frontier, refresh, disabled planning and equality with the final replay. Its isolated processes use `ATEMPORAL_PREVIEW_TEST_DELAY_MS` to keep the long tail observable on fast machines; the production default adds no delay. The project timeout also gives built-in trace finalization up to 120 seconds; the review fixture has its own cleanup budget. Revision helpers wait for publication, so existing scenarios cannot accidentally count a provisional state as a verified result.

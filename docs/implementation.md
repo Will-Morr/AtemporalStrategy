@@ -135,9 +135,9 @@ The coordinator retains shared content/contracts and merges changes sequentially
 - [x] Exact floating-point JSON recovery for fractional matter, with archive/peripheral hash checks and a generated-map regression.
 - [x] Integrate current main, pass the final 30-scenario browser suite and focused timeline scenarios, manually inspect full game frames and record actual verification limits.
 
-## Queued feature work
+## Progressive replay
 
-- [ ] Progressive replay: publish a viewable, completed prefix while simulation continues, and clearly show the available tick range and advancing simulation frontier. Proposed implementation constraints: keep provisional replay separate from the last fully published revision, keep planning closed until final publication, and handle worker retries/reconnects without mixing generations. These are engineering proposals to validate when implementing the feature.
+- [x] View completed replay ticks while simulation continues, with an advancing available frontier, exact seeks, playback, refresh and preserved viewing position at final publication. Controller and native peripheral serve generation-isolated prefixes; provisional results remain read-only until verification. See the progressive replay pass in [integration verification](integration-verification.md).
 
 ## Remaining review coverage
 

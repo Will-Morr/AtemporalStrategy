@@ -1,6 +1,29 @@
 # Browser integration verification — 2026-09-13
 
-## Current player-facing polish pass
+## Progressive replay pass
+
+Implemented in `agent/progressive-replay`, rebased onto main's seeded traffic-map changes (`aa8e7a6`). Completed prefixes are available during simulation from both the controller and native input-only peripheral. Generation checks isolate retries; exact provisional states stay outside published caches. Playback waits at the frontier, refresh restores access, and final verification preserves the inspected tick. Planning stays closed and the result remains explicitly pending until publication.
+
+Verification:
+
+- `scripts/check.sh` passed after the rebase: workspace and serial simulation tests, strict Clippy, client build, shared fixtures and generated-file drift. The final client refinements also passed TypeScript/build.
+- New controller coverage checks an exact non-sample tick against the published replay, rejects future ticks and expired retry generations, and closes the preview on publication. Peripheral coverage checks replacement/reopened inputs and duplicate delivery without reusing stale previews.
+- Release equivalence, Gate 2, match-controller scenarios, all seven Gate 5 recovery/fault scenarios and the native peripheral protocol suite passed.
+- Full desktop/narrow Chromium run `artifacts/ui/2026-09-13T18-57-27.178Z-806566` passed 33 scenarios. The narrow opening scenario completed gameplay but exceeded the built-in 30-second trace teardown budget, leaving a truncated trace. The project now permits 120 seconds for that separate teardown, in addition to the review fixture's cleanup budget.
+- Final focused run `artifacts/ui/2026-09-13T19-05-23.089Z-815191` passed all six cases: four progressive cases plus both opening scenarios after the camera correction. All six traces have valid ZIP integrity, bringing all 34 scenarios to passing coverage on the final runtime. Its progressive setup uses seed 42, a 6,000-tick cap and a test-only 150 ms batch delay, moves a constructor, plays across an advancing frontier, seeks exact tick 73, refreshes, and compares the complete provisional world with the final world. Production adds no artificial delay.
+- The failure-artifact harness passed all five intentional probes with screenshots, traces, diagnostics and identity videos (`artifacts/harness/1789326336541-815556`).
+
+Manual full-frame review covers desktop/narrow completed-prefix views, refreshed cameras with the player's units visible, pending-result/frontier presentation and verified handoff at tick 73. The desktop peripheral trace was inspected for play, typed seek, refresh and final seek, including recorded browser snapshots and ZIP integrity. Visual review found the refresh camera bug; the final cases additionally assert the constructor is within the usable viewport.
+
+Representative evidence (git-ignored, retained locally):
+
+- [Completed prefix](../artifacts/review/2026-09-13-progressive-replay/prefix-desktop.png)
+- [Peripheral refresh](../artifacts/review/2026-09-13-progressive-replay/refresh-desktop.png), [narrow refresh](../artifacts/review/2026-09-13-progressive-replay/refresh-narrow.png)
+- [Verified handoff](../artifacts/review/2026-09-13-progressive-replay/handoff-desktop.png), [narrow handoff](../artifacts/review/2026-09-13-progressive-replay/handoff-narrow.png)
+
+Logs and the inspected peripheral trace are retained beside these frames; complete and earlier failed runs remain in the implementation worktree. This feature pass does not close the outstanding 2,000-live-entity controller/browser/peripheral stress measurement. Firefox/WebKit, touchscreen-only and WAN behavior remain unverified.
+
+## Earlier player-facing polish pass
 
 Implemented in `agent/playtest-polish`, including main's map changes through `aa61a9d`. This pass adds the shorter command deck, selection stats/icons, explicit factory plans and removal controls, independent tab identities/rejoin, uncommit, player action rows and latest-write labels, 16× replay speed, hybrid mode, constructor output clearance and attack-move retaliation. Progressive replay remains queued; it is not implemented by this pass.
 

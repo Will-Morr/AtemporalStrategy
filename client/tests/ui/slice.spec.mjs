@@ -62,7 +62,7 @@ async function clickTile(page, tile) {
   await page.mouse.click(p.x, p.y);
 }
 async function waitRevision(page, revision) {
-  await expect.poll(()=>page.evaluate(()=>!window.atemporal?.preview && window.atemporal?.latest),{timeout:120000}).toBe(revision);
+  await expect.poll(()=>page.evaluate(()=>!window.atemporal?.viewingPreview && window.atemporal?.current),{timeout:120000}).toBe(revision);
   await expect(page.locator('#game')).toHaveClass(/active/,{timeout:60000});
   await expect.poll(async () => (await state(page)).current, { timeout: 120000 }).toBe(revision);
   await expect.poll(async () => (await state(page)).exactRevision, { timeout: 30000 }).toBe(revision);

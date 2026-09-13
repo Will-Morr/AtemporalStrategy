@@ -12,7 +12,8 @@ export default defineConfig({
   forbidOnly:!!process.env.CI,
   workers:2,
   retries:0,
-  timeout:30000,
+  // Built-in trace teardown has its own project timeout, separate from review cleanup.
+  timeout:120000,
   expect:{timeout:5000},
   reporter:[['list'],['junit',{outputFile:resolve(artifacts,'junit.xml')}],['json',{outputFile:resolve(artifacts,'results.json')}],['html',{outputFolder:resolve(artifacts,'report'),open:'never'}]],
   use:{baseURL:process.env.ATEMPORAL_UI_RESOLVED_URL,headless:true,trace:'on',screenshot:'on',video:'retain-on-failure',locale:'en-US',timezoneId:'UTC',colorScheme:'dark',reducedMotion:'reduce',deviceScaleFactor:1},

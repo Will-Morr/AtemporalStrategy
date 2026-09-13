@@ -89,6 +89,8 @@ export class Game {
   preview: ReplayFrontier | null = null;
   previewView: RevisionView | null = null;
   private previewBusy = false;
+  private previewSourceReady = true;
+  private previewFollowTick: number | null = null;
   private previewRequest = 0;
   private previewCoverage = new Map<number, number>();
   get viewingPreview(): boolean { return !!this.preview && this.current === this.preview.revision; }
@@ -139,7 +141,7 @@ export class Game {
     for (const t of this.content.types) this.types.set(t.key, t);
     this.net.on('revision_published', m => { void this.onPublished(m).catch(error => this.failReplay(m.revision, error)); });
     this.net.on('planning_opened', m => {
-      if(this.preview && m.revision<this.preview.revision)this.onReplayProgress(null);
+      if(this.preview && m.revision<this.preview.revision)this.clearPreview();
       if (this.phase?.round !== m.round) this.planningSince = performance.now();
       this.phase = m;
       this.round = m.round;
@@ -168,6 +170,7 @@ export class Game {
       this.net.send({kind:'get_replay_progress'});
     });
     this.net.on('match_archived', () => {
+      this.clearPreview();
       this.finished = 'Match stopped and archived (unfinished).';
       this.updatePanels();
     });
@@ -182,11 +185,11 @@ export class Game {
   onReplayProgress(frontier: ReplayFrontier | null): void {
     if (frontier && frontier.revision <= this.latest) return;
     if (!frontier) {
-      if(!this.preview)return;
-      if (this.viewingPreview) this.current = this.latest;
-      this.preview = null; this.previewView = null; this.previewCoverage.clear();
-      this.exact = null; this.updatePanels(); this.requestExact(); return;
+      // Completion may precede durable publication: retain the viewed frame during that handoff.
+      if(this.preview){this.previewSourceReady=false;this.updatePreviewStatus();}
+      return;
     }
+    this.previewSourceReady=true;
     if(this.preview?.generation===frontier.generation && frontier.through_tick<this.preview.through_tick)return;
     const fresh = this.preview?.generation !== frontier.generation;
     this.preview = frontier;
@@ -198,16 +201,26 @@ export class Game {
         timeline:[],score:null,dictionary:[],samples:new Map(),events:[],chunks:new Set(),loading:new Set()};
       this.current = frontier.revision; this.exact = null; this.exactPending = null;
       this.clearDraft(); $('toast').classList.remove('active');
-      this.playhead = Math.min(this.playhead,frontier.through_tick);
+      this.previewFollowTick ??= this.playhead;
+      this.playhead = Math.min(this.previewFollowTick,frontier.through_tick);
       this.view = {t0:0,t1:Math.max(1,frontier.end_tick)};
     }
     this.previewView!.outcome.terminal_state_tick = frontier.through_tick;
+    if(this.viewingPreview && this.previewFollowTick!==null && frontier.through_tick>=this.previewFollowTick){this.playhead=this.previewFollowTick;this.previewFollowTick=null;}
     if (this.viewingPreview) { void this.loadPreview(); if(fresh)this.updatePanels();else {this.updateTop();this.updatePreviewStatus();} }
+  }
+
+  clearPreview(): void {
+    if(!this.preview)return;
+    if(this.viewingPreview)this.current=this.latest;
+    this.preview=null;this.previewView=null;this.previewCoverage.clear();
+    if(this.previewFollowTick!==null){this.playhead=Math.min(this.previewFollowTick,this.rev()?.outcome.terminal_state_tick??0);this.previewFollowTick=null;}
+    this.exact=null;this.updatePanels();this.requestExact();
   }
 
   async loadPreview(): Promise<void> {
     const frontier = this.preview, rev = this.previewView;
-    if (!frontier || !rev || !this.viewingPreview || this.previewBusy || !this.net.connected) return;
+    if (!frontier || !rev || !this.previewSourceReady || !this.viewingPreview || this.previewBusy || !this.net.connected) return;
     const tick = Math.min(Math.floor(this.playhead),frontier.through_tick);
     const k = Math.floor(tick/CHUNK), from = k*CHUNK, to = Math.min(from+CHUNK-1,frontier.through_tick);
     const loaded = (this.previewCoverage.get(k) ?? -1) >= to;
@@ -222,7 +235,7 @@ export class Game {
       for(const sample of m.samples) rev.samples.set(sample.tick,sample);
       if(!loaded) { rev.events=rev.events.filter(e=>e.tick<from||e.tick>to).concat(m.events);this.previewCoverage.set(k,to); }
       while(this.previewCoverage.size>8){const old=this.previewCoverage.keys().next().value!;this.previewCoverage.delete(old);for(const t of rev.samples.keys())if(Math.floor(t/CHUNK)===old)rev.samples.delete(t);rev.events=rev.events.filter(e=>Math.floor(e.tick/CHUNK)!==old);}
-      if(!this.terrain){this.terrain=m.snapshot.terrain;this.initialOre=m.snapshot.ore;this.renderer.fit();}
+      if(!this.terrain){this.terrain=m.snapshot.terrain;this.initialOre=m.snapshot.ore;this.renderer.fit();const own=m.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
       const changed=this.exact?.revision!==m.revision || this.exact.tick!==tick;
       if(this.viewingPreview && Math.floor(this.playhead)===tick) this.exact={revision:m.revision,tick,state:m.snapshot};
       if(changed)this.updatePanels();else this.updatePreviewStatus();
@@ -233,8 +246,9 @@ export class Game {
   }
 
   async onPublished(m: ServerMessage & { kind: 'revision_published' }): Promise<void> {
-    if (this.revisions.has(m.revision) && this.terrain) { this.latest = Math.max(this.latest,m.revision); return; }
+    if (this.revisions.has(m.revision)) { this.latest = Math.max(this.latest,m.revision); return; }
     const finishingPreview = this.preview?.revision === m.revision;
+    if (finishingPreview && this.previewFollowTick!==null){this.playhead=this.previewFollowTick;this.previewFollowTick=null;}
     if (finishingPreview) { this.preview=null;this.previewView=null;this.previewCoverage.clear(); }
     const wasFull = finishingPreview || this.view.t0 === 0 && this.view.t1 === this.rev()?.outcome.terminal_state_tick;
     const view: RevisionView = {
@@ -251,17 +265,19 @@ export class Game {
     this.revisions.set(m.revision, view);
     this.latest = Math.max(this.latest, m.revision);
     const previous = this.current;
-    this.current = m.revision;
-    this.progress = null;
+    if(!this.preview || m.revision>=this.preview.revision)this.current = m.revision;
+    if(!this.viewingPreview)this.progress = null;
     if (!this.terrain) {
       const t0 = performance.now();
       const exact = await this.net.request({ kind: 'get_exact_state', revision: m.revision, tick: 0 }, 'exact_state', e => e.tick === 0 && e.revision === m.revision);
+      const needsFit = !this.terrain;
       this.terrain = exact.snapshot.terrain;
       this.initialOre = exact.snapshot.ore;
-      this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
+      if(this.current===m.revision && !this.viewingPreview)this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
       console.log(`initial exact state in ${Math.round(performance.now() - t0)} ms`);
-      if (!this.renderer.fit() && this.player !== null) this.renderer.centerOn(this.startTile(this.player).x, this.startTile(this.player).y);
+      if(needsFit){this.renderer.fit();const own=exact.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
     }
+    if(this.current!==m.revision || this.viewingPreview){void this.experience.loadRound(m.revision);return;}
     if (previous < 0 || wasFull) this.view = { t0:0,t1:Math.max(1,m.outcome.terminal_state_tick) };
     else this.panTimeline(0);
     $('toast').classList.remove('active');
@@ -506,6 +522,7 @@ export class Game {
   }
 
   seek(tick: number): void {
+    this.previewFollowTick=null;
     const rev = this.rev();
     if (!rev) return;
     this.playhead = Math.max(0, Math.min(Math.floor(tick), rev.outcome.terminal_state_tick));
@@ -790,6 +807,7 @@ export class Game {
   }
 
   togglePlay(): void {
+    this.previewFollowTick=null;
     const rev = this.rev();
     if (!rev) return;
     if (!this.viewingPreview && !this.playing && this.playhead >= rev.outcome.terminal_state_tick) this.playhead = 0;
@@ -1064,7 +1082,7 @@ export class Game {
 
   updatePreviewStatus(): void {
     if(this.viewingPreview){
-      const banner=$('outcome-banner');banner.dataset.outcome='preview';banner.textContent=`SIMULATING · Replay available through tick ${this.preview!.through_tick} · Result pending`;
+      const banner=$('outcome-banner');banner.dataset.outcome='preview';banner.textContent=`${this.previewSourceReady?'SIMULATING':'FINALIZING REPLAY'} · Replay available through tick ${this.preview!.through_tick} · Result pending`;
       $('result').textContent='Read-only preview. Orders unlock after the complete replay is verified.';
       $('timeline-info').textContent=`Available 0–${this.preview!.through_tick}; simulation continues`;
     }
