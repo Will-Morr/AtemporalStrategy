@@ -1,15 +1,18 @@
-//! Deterministic cave map and genesis world: seeded blob rooms on a jittered lattice joined by
-//! wandering corridors with loops, start clearings, pocket removal, start access validation and
-//! ore clusters of one to nine tiles grown along room walls, weighted toward small deposits.
+//! Deterministic cave map and genesis world: seeded cellular-automaton caverns with coarse
+//! density variation, caves carved into over-thick rock, start clearings, pocket removal, start
+//! access validation and ore clusters of one to nine tiles grown along cavern walls.
 //! Symmetric maps are invariant under 180° rotation (2 players) or 90° rotation (4 players);
 //! asymmetric mode keeps the same start layout with unmirrored rock.
 use crate::tick::chebyshev;
 use crate::*;
 use std::collections::VecDeque;
 
-/// Share of lattice cells that hold a room, and of redundant lattice edges kept as loops.
-const ROOM_PERCENT: u64 = 90;
-const LOOP_PERCENT: u64 = 45;
+const FILL_PERCENT: u64 = 50;
+/// How far the coarse density field pushes the fill threshold up or down.
+const DENSITY_SWING: f64 = 14.0;
+const SMOOTHING_PASSES: usize = 4;
+/// Rock thicker than this (Chebyshev distance to floor) gets a cave carved into it.
+const MAX_ROCK: u16 = 4;
 /// Radius of the round open clearing around each start anchor.
 const START_CLEARING: i32 = 7;
 /// Chebyshev radius within which each start is guaranteed a first ore cluster.
@@ -210,129 +213,83 @@ impl Grid {
     }
 }
 
-/// Cave rooms on a jittered lattice: seeded blob rooms in most lattice cells, a random
-/// spanning tree of corridors between lattice neighbours plus extra loop corridors, then
-/// rotational union, start clearings, border walls and pocket removal.
-/// Deterministic for (seed, size, players, symmetric) and independent of content.
+/// Cellular-automaton cave: seeded noise whose density varies at a coarse scale so distinct
+/// caverns form, smoothed into rounded walls; any rock mass thicker than `MAX_ROCK` gets a
+/// cave carved into it. Then rotational union, start clearings, border walls and pocket
+/// removal. Deterministic for (seed, size, players, symmetric) and independent of content.
 pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
     let size = config.map_size;
     let n = usize::from(size);
     let turns = symmetry_turns(config);
     let seed = config.seed.get();
-    let mut draw = 0u64;
-    let mut next = |salt: u64| {
-        draw += 1;
-        mix(seed, draw, salt)
-    };
     let mut floor = vec![false; n * n];
-    let carve = |floor: &mut Vec<bool>, x: i32, y: i32| {
-        if x > 0 && y > 0 && x < i32::from(size) - 1 && y < i32::from(size) - 1 {
-            floor[y as usize * n + x as usize] = true;
-        }
+    // Coarse density field: each patch leans open or dense, bilinearly blended.
+    let patch = f64::from((i32::from(size) / 5).clamp(6, 12));
+    let density = |x: u16, y: u16| {
+        let (fx, fy) = (f64::from(x) / patch, f64::from(y) / patch);
+        let (ix, iy) = (fx.floor(), fy.floor());
+        let (tx, ty) = (fx - ix, fy - iy);
+        let corner = |dx: f64, dy: f64| {
+            (mix(seed ^ 0xA5A5, (ix + dx) as u64, (iy + dy) as u64) % 100) as f64
+        };
+        let top = corner(0.0, 0.0) * (1.0 - tx) + corner(1.0, 0.0) * tx;
+        let bottom = corner(0.0, 1.0) * (1.0 - tx) + corner(1.0, 1.0) * tx;
+        top * (1.0 - ty) + bottom * ty
     };
-    // Lattice of cells; every start anchor lies in a room cell.
-    let cell = (i32::from(size) / 4).clamp(8, 16);
-    let cols = (i32::from(size) / cell).max(2);
-    let pitch = i32::from(size) as f64 / f64::from(cols);
-    let mut rooms: Vec<Option<(i32, i32)>> = vec![];
-    for cy in 0..cols {
-        for cx in 0..cols {
-            let holds_start = starts.iter().any(|s| {
-                (f64::from(s.anchor.x) / pitch) as i32 == cx
-                    && (f64::from(s.anchor.y) / pitch) as i32 == cy
-            });
-            if !holds_start && next(1) % 100 >= ROOM_PERCENT {
-                rooms.push(None);
-                continue;
-            }
-            let jitter = (pitch * 0.15) as u64 * 2 + 1;
-            let x = (f64::from(cx) * pitch + pitch / 2.0) as i32 + (next(2) % jitter) as i32
-                - (jitter / 2) as i32;
-            let y = (f64::from(cy) * pitch + pitch / 2.0) as i32 + (next(3) % jitter) as i32
-                - (jitter / 2) as i32;
-            rooms.push(Some((x, y)));
+    // Noise is sampled at each tile's canonical rotation so the field is symmetric already.
+    for y in 0..size {
+        for x in 0..size {
+            let c = turns
+                .iter()
+                .map(|q| rotate(Tile { x, y }, size, *q))
+                .min()
+                .unwrap();
+            let threshold = FILL_PERCENT as f64 + DENSITY_SWING * (density(c.x, c.y) - 50.0) / 50.0;
+            floor[usize::from(y) * n + usize::from(x)] =
+                (mix(seed, u64::from(c.x), u64::from(c.y)) % 100) as f64 >= threshold;
         }
     }
-    for room in &rooms {
-        let Some((x0, y0)) = *room else { continue };
-        let rx = pitch * (0.28 + 0.14 * (next(4) % 100) as f64 / 100.0);
-        let ry = pitch * (0.28 + 0.14 * (next(5) % 100) as f64 / 100.0);
-        let blob = next(6);
-        let r = rx.max(ry).ceil() as i32 + 1;
+    let at = |floor: &[bool], x: i32, y: i32| {
+        x >= 0
+            && y >= 0
+            && x < i32::from(size)
+            && y < i32::from(size)
+            && floor[y as usize * n + x as usize]
+    };
+    for _ in 0..SMOOTHING_PASSES {
+        let mut next = floor.clone();
+        for y in 0..i32::from(size) {
+            for x in 0..i32::from(size) {
+                let open = (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+                    .filter(|(dx, dy)| at(&floor, x + dx, y + dy))
+                    .count();
+                next[y as usize * n + x as usize] = open >= 5;
+            }
+        }
+        floor = next;
+    }
+    // Catch: while some rock cell is farther than MAX_ROCK from any floor, carve a cave there.
+    loop {
+        let dist = floor_distance(&floor, size);
+        let Some((d, i)) = dist.iter().enumerate().map(|(i, d)| (*d, i)).max() else {
+            break;
+        };
+        if d <= MAX_ROCK {
+            break;
+        }
+        let (x0, y0) = ((i % n) as i32, (i / n) as i32);
+        let r = i32::from(d) - 1;
+        let blob = mix(seed ^ 0xC4E, x0 as u64, y0 as u64);
         for dy in -r..=r {
             for dx in -r..=r {
-                let nx = f64::from(dx) / rx;
-                let ny = f64::from(dy) / ry;
                 let rough = (mix(blob, (dx + r) as u64, (dy + r) as u64) % 100) as f64 / 100.0;
-                if nx * nx + ny * ny < 1.0 - 0.35 * rough {
-                    carve(&mut floor, x0 + dx, y0 + dy);
-                }
-            }
-        }
-    }
-    // Corridors: random spanning tree over lattice neighbours, then extra edges for loops.
-    let mut edges: Vec<(u64, usize, usize)> = vec![];
-    for cy in 0..cols {
-        for cx in 0..cols {
-            let a = (cy * cols + cx) as usize;
-            if rooms[a].is_none() {
-                continue;
-            }
-            for (nx, ny) in [(cx + 1, cy), (cx, cy + 1)] {
-                if nx < cols && ny < cols {
-                    let b = (ny * cols + nx) as usize;
-                    if rooms[b].is_some() {
-                        edges.push((next(7), a, b));
+                let norm = f64::from(dx * dx + dy * dy) / f64::from(r * r);
+                if norm < 1.0 - 0.4 * rough {
+                    let (x, y) = (x0 + dx, y0 + dy);
+                    if x > 0 && y > 0 && x < i32::from(size) - 1 && y < i32::from(size) - 1 {
+                        floor[y as usize * n + x as usize] = true;
                     }
-                }
-            }
-        }
-    }
-    edges.sort();
-    let mut parent: Vec<usize> = (0..rooms.len()).collect();
-    fn find(parent: &mut [usize], i: usize) -> usize {
-        let mut i = i;
-        while parent[i] != i {
-            parent[i] = parent[parent[i]];
-            i = parent[i];
-        }
-        i
-    }
-    for (_, a, b) in edges {
-        let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
-        if ra != rb {
-            parent[ra] = rb;
-        } else if next(8) % 100 >= LOOP_PERCENT {
-            continue;
-        }
-        let (ax, ay) = rooms[a].unwrap();
-        let (bx, by) = rooms[b].unwrap();
-        // Bend through a random waypoint so corridors wander instead of running straight.
-        let wx = ax + (bx - ax) * (25 + (next(9) % 50) as i32) / 100 + (next(10) % 5) as i32 - 2;
-        let wy = ay + (by - ay) * (25 + (next(11) % 50) as i32) / 100 + (next(12) % 5) as i32 - 2;
-        let wide = next(13) % 3 == 0;
-        for (from, to) in [((ax, ay), (wx, wy)), ((wx, wy), (bx, by))] {
-            // Straight line at any angle; the 2×2 stamp keeps diagonal legs walkable.
-            let (dx, dy) = (to.0 - from.0, to.1 - from.1);
-            let count = dx.abs().max(dy.abs());
-            let steps: Vec<(i32, i32)> = (0..=count)
-                .map(|k| {
-                    let along = |d: i32| {
-                        if count == 0 {
-                            0
-                        } else {
-                            (d * k + count / 2).div_euclid(count)
-                        }
-                    };
-                    (from.0 + along(dx), from.1 + along(dy))
-                })
-                .collect();
-            for (x, y) in steps {
-                for (ox, oy) in [(0, 0), (1, 0), (0, 1)] {
-                    carve(&mut floor, x + ox, y + oy);
-                }
-                if wide {
-                    carve(&mut floor, x + 1, y + 1);
                 }
             }
         }
@@ -394,6 +351,36 @@ pub fn terrain(config: &MatchConfig, starts: &[Start]) -> Result<Terrain> {
         height: size,
         cells: grid.cells,
     })
+}
+
+/// Chebyshev distance from each cell to the nearest floor cell (floor is 0).
+fn floor_distance(floor: &[bool], size: u16) -> Vec<u16> {
+    let n = usize::from(size);
+    let mut dist = vec![u16::MAX; n * n];
+    let mut queue = VecDeque::new();
+    for (i, open) in floor.iter().enumerate() {
+        if *open {
+            dist[i] = 0;
+            queue.push_back(i);
+        }
+    }
+    while let Some(i) = queue.pop_front() {
+        let (x, y) = ((i % n) as i32, (i / n) as i32);
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx < 0 || ny < 0 || nx >= i32::from(size) || ny >= i32::from(size) {
+                    continue;
+                }
+                let j = ny as usize * n + nx as usize;
+                if dist[j] == u16::MAX {
+                    dist[j] = dist[i] + 1;
+                    queue.push_back(j);
+                }
+            }
+        }
+    }
+    dist
 }
 
 /// Chebyshev distance from each floor cell to the nearest wall (walls and the border are 0).

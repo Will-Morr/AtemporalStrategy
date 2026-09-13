@@ -228,19 +228,32 @@ fn miner_factory_grunt_attack_opening() {
         &identity::queue_item(&identity::command_id(2, 0, 1), 0, 0).unwrap(),
         0,
     );
-    let attacks: Vec<_> = partial_events
+    // Which worker is nearest on arrival depends on the cave layout around the enemy base.
+    let enemy_constructor = identity::genesis(1, 1).unwrap();
+    let attacks: Vec<(Tick, EntityId)> = partial_events
         .iter()
-        .filter(|e| matches!(&e.event, PresentationEvent::Attack { attacker_id, target_id, .. } if *attacker_id == grunt && *target_id == enemy_miner))
+        .filter_map(|e| match &e.event {
+            PresentationEvent::Attack {
+                attacker_id,
+                target_id,
+                ..
+            } if *attacker_id == grunt
+                && (*target_id == enemy_miner || *target_id == enemy_constructor) =>
+            {
+                Some((e.tick, target_id.clone()))
+            }
+            _ => None,
+        })
         .collect();
     assert!(
         !attacks.is_empty(),
-        "the produced grunt attacked the enemy miner"
+        "the produced grunt attacked an enemy worker"
     );
-    let first_attack = attacks[0].tick;
+    let (first_attack, target) = attacks[0].clone();
     let before = reconstruct(&full, first_attack).unwrap();
     let after = reconstruct(&full, first_attack + 1).unwrap();
-    let hp = |s: &WorldState| s.entities.iter().find(|e| e.id == enemy_miner).unwrap().hp;
-    assert!(hp(&after) < hp(&before), "miner took damage");
+    let hp = |s: &WorldState| s.entities.iter().find(|e| e.id == target).unwrap().hp;
+    assert!(hp(&after) < hp(&before), "worker took damage");
     assert!(full_result.outcome.terminal_state_tick > first_attack);
     let turret_damage = partial_events
         .iter()
