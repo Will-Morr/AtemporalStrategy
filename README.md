@@ -1,8 +1,14 @@
 # Atemporal Strategy
 
-A small browser-based robot RTS where players rewrite orders in the past and inspect the resulting future. The simulation and server will be written in Rust.
+A small browser-based robot RTS where players rewrite orders in the past and inspect the resulting future, with a deterministic Rust simulation and server.
 
-The vertical slice is implemented: a deterministic Rust simulation, a server that runs it on a dedicated thread with durable turns and results, and a browser client that plays the opening, commits simultaneous turns, seeks any tick and rewrites history. It is an engineering milestone (Gate 2), not the complete planned game; breadth work on the roster, variants, graphs, replay and the peripheral continues before the first playtest. Launch it with the commands in [development](docs/development.md). The original request is [user_spec/core_prompt.md](user_spec/core_prompt.md).
+With Rust/rustup, Node 22.23.2 and npm 10.9.8 installed, build and launch the default 1v1 game:
+
+```sh
+./quickstart.sh
+```
+
+Open `http://127.0.0.1:8080/` in two tabs, claim one slot per tab, and press **Start match**. Stop the server with **Ctrl+C**. Use `./quickstart.sh --port 8090` for another port. The script installs locked browser dependencies, builds the client and release server, and uses `config/game.yaml`; Rust's pinned toolchain is selected by `rust-toolchain.toml`. See [development](docs/development.md) for configuration, multiplayer, peripheral and archive usage, and the [review checklist](docs/implementation.md#remaining-review-coverage) for remaining coverage. The original request is [user_spec/core_prompt.md](user_spec/core_prompt.md).
 
 Read the plan in this order:
 

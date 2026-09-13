@@ -4,6 +4,10 @@ The browser game is implemented: a deterministic simulation library, a server th
 
 ## Launch
 
+Run `./quickstart.sh` from the repository root to install locked browser dependencies, build the client and release server, and launch the default 1v1 configuration. It requires the tools listed above and can also be invoked by its absolute path from another directory. Additional arguments go to the server, for example `./quickstart.sh --port 8090`. Relative argument paths resolve from the repository root. Stop it with Ctrl+C. Each ordinary launch starts a fresh match; use `--resume <match-id>` to resume an archive.
+
+The equivalent manual steps are:
+
 ```sh
 npm ci --prefix client            # once
 npm run build --prefix client     # regenerates schema/types and bundles client/dist

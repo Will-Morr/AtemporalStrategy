@@ -68,6 +68,8 @@ The original request's optional time-based score penalty remains in scope. Team 
 
 The game process must accept a command-line port argument. Restarting it on the same port should let all players return by refreshing their existing browser tab. Startup/restore behavior should preserve that stable address; specific CLI naming and default port remain implementation choices.
 
+Provide a quickstart script that builds and launches the default 1v1 server.
+
 ## Allied traffic and deadlocks
 
 The user expects a very simple mechanism to resolve unit deadlocks, such as allowing a unit to enter a teammate bot's occupied tile and moving the displaced bot by swapping positions or pseudorandomly placing it on an adjacent tile. Prefer such lightweight mechanics over a complex crowd/pathfinding system. Exact displacement precedence, legal moves and deterministic arbitration remain implementation proposals.
