@@ -4,6 +4,8 @@ A robot strategy game where you can change the past and watch a different future
 
 Build factories, mine resources, and send units into battle. Each round, everyone studies the same timeline and chooses a moment to add orders. Once all players commit, the game reruns from the earliest change. A factory built sooner—or a retreat ordered before an ambush—can change the entire battle.
 
+You can watch and scrub completed ticks while the rest of a replay is still being simulated. The timeline shows how far you can view; planning opens when the full result is ready.
+
 The default game is 1v1, with simultaneous planning and a race to five points. There are also three- and four-player free-for-all games, teams, and a timed mode that gradually locks the past.
 
 ## Quick start

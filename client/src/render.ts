@@ -393,6 +393,12 @@ export class Renderer {
     g.fillStyle='#c2a2ff';
     for(const tick of ticks){g.fillRect(x(tick)-2,0,4,height-14);g.beginPath();g.moveTo(x(tick)-5,0);g.lineTo(x(tick)+5,0);g.lineTo(x(tick),7);g.fill();}
     this.timeline.dataset.orderTicks=[...ticks].sort((a,b)=>a-b).join(',');
+    if(this.game.viewingPreview){
+      const frontier=x(this.game.preview!.through_tick);
+      g.fillStyle='#05080bd9';g.fillRect(Math.max(gutter,frontier),0,Math.max(0,width-Math.max(gutter,frontier)),height-14);
+      g.fillStyle='#5eead4';g.fillRect(Math.max(gutter,frontier)-1,0,2,height-14);
+      this.timeline.dataset.availableThrough=String(this.game.preview!.through_tick);
+    } else delete this.timeline.dataset.availableThrough;
     // Draft marker and playhead.
     if (this.game.draft.tick !== null) {
       g.fillStyle = '#ffca28';

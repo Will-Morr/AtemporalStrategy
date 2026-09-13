@@ -632,6 +632,12 @@ choices!(Phase {
 });
 record!(GuideManifest { schema_version: Version, content_hash: String, rules_build: String, locale: String,
     generated_files: BTreeMap<String, String> });
+record!(ReplayFrontier {
+    revision: Revision,
+    generation: String,
+    through_tick: Tick,
+    end_tick: Tick
+});
 record!(PreviewInterval {
     after_tick: Tick,
     through_tick: Tick
@@ -639,6 +645,14 @@ record!(PreviewInterval {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
+    GetReplayProgress {},
+    GetReplayPreview {
+        request_id: String,
+        generation: String,
+        tick: Tick,
+        from_tick: Tick,
+        to_tick: Tick,
+    },
     Hello {
         protocol_version: Version,
         last_revision: Option<Revision>,
@@ -723,6 +737,19 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ServerMessage {
+    ReplayProgress {
+        preview: Option<ReplayFrontier>,
+    },
+    ReplayPreview {
+        request_id: String,
+        generation: String,
+        revision: Revision,
+        through_tick: Tick,
+        snapshot: Box<WorldState>,
+        entity_dictionary: Vec<EntityRef>,
+        samples: Vec<Sample>,
+        events: Vec<WorldEvent>,
+    },
     MatchArchived {
         archive: ArchiveRecord,
     },

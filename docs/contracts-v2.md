@@ -47,3 +47,12 @@ Normal direct/group action delivery to a factory sets its newborn template, inst
 `get_events.effects_only` is an optional boolean (omitted/false preserves complete diagnostics). The browser sets it to receive attack, impact and destruction effects, since snapshot interpolation already renders movement. Filtering preserves authoritative event ticks and sequence numbers.
 
 `Objective::Hybrid` combines `ScoreboardRules` with a positive `lock_ticks_per_round`. It uses the scoreboard result and winner while advancing the fixed-history boundary using `TimedAdjudication`; it does not permanently exclude players on a timed loss. Exhausting the history cap without a scoreboard winner is unfinished. This eligibility behavior is the implementation interpretation of the hybrid request.
+
+
+## Progressive replay
+
+`replay_progress{preview}` advertises a read-only completed prefix; `preview` contains `revision`, opaque `generation`, `through_tick` and `end_tick`, or is null when no preview exists. `get_replay_progress` retrieves the current frontier after joining or reconnecting. A worker generation is separate from final revision identity and is replaced on retry. The frontier never grants planning access or supplies a final outcome.
+
+`get_replay_preview{request_id,generation,tick,from_tick,to_tick}` returns `replay_preview` with the same request ID/generation, revision, available tick, exact `snapshot`, entity dictionary, samples and effect events in the requested range. All requested ticks must already be complete; ranges span at most 2,000 ticks. Exact reconstruction uses a completed checkpoint and the fixed ledger, services the request between simulation ticks, and rechecks generation before responding. Expired queries receive a correlated rejection. These data are not installed in published exact-state caches or archives.
+
+All players' fixed `round_inputs` are delivered when a round starts, before its final reference hash. The peripheral can therefore reproduce immediately, serve its own provisional prefix, and retain that preview while awaiting the controller's reference. Final publication and planning still wait for hash verification. The controller remains inputs-only on peripheral connections: preview world-state queries are answered locally by the runner. Failed/mismatching jobs cannot publish a verified revision; reconnect and worker retry cannot reuse another generation's preview data.

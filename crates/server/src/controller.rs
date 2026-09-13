@@ -642,12 +642,66 @@ impl Controller {
         self.running = Some((request.job_id.clone(), cancel.clone()));
         self.pending = Some(data);
         self.phase = Phase::Simulating;
+        if let Some(inputs) = self.preview_inputs() {
+            self.send(inputs);
+        }
+        self.send(self.replay_progress());
         self.sim.submit(Job::Run {
             request: Box::new(request),
             cancel,
             out: tx,
         });
         Ok(rx)
+    }
+
+    pub fn replay_progress(&self) -> ServerMessage {
+        ServerMessage::ReplayProgress {
+            preview: self
+                .pending
+                .as_ref()
+                .zip(self.running.as_ref())
+                .map(|(d, (id, _))| crate::preview::frontier(d, id, self.config.max_tick)),
+        }
+    }
+
+    pub fn preview_inputs(&self) -> Option<ServerMessage> {
+        self.pending
+            .as_ref()
+            .and_then(|d| self.round_inputs(d.revision).ok())
+    }
+
+    pub fn preview_is_current(&self, generation: &str) -> bool {
+        self.pending.is_some()
+            && self
+                .running
+                .as_ref()
+                .is_some_and(|(id, _)| id == generation)
+    }
+
+    pub fn preview_request(
+        &self,
+        generation: &str,
+        request_id: String,
+        tick: Tick,
+        from: Tick,
+        to: Tick,
+    ) -> Result<(ServerMessage, SimRequest)> {
+        if !self.preview_is_current(generation) {
+            return Err("preview generation expired".into());
+        }
+        let data = self.pending.as_ref().ok_or("preview finished")?;
+        let message = crate::preview::response(data, generation, request_id, tick, from, to)?;
+        let ServerMessage::ReplayPreview { snapshot, .. } = &message else {
+            unreachable!()
+        };
+        let request = self.build_request(
+            data.revision,
+            (**snapshot).clone(),
+            data.turns.clone(),
+            data.precedence.clone(),
+            0,
+        );
+        Ok((message, request))
     }
 
     pub fn on_batch(&mut self, message: WorkerMessage) -> bool {
@@ -692,6 +746,7 @@ impl Controller {
                 if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
                     return false;
                 }
+                self.send(self.replay_progress());
                 self.send(ServerMessage::SimulationProgress {
                     revision,
                     tick,
@@ -751,6 +806,7 @@ impl Controller {
             return;
         }
         eprintln!("simulation job {job_id} failed: {message}");
+        self.send(ServerMessage::ReplayProgress { preview: None });
         self.running = None;
         self.pending = None;
         self.reopen_round();
@@ -1371,7 +1427,12 @@ impl Controller {
     /// The turns a revision's round added and the lock boundary its job ran under, which is the
     /// parent's timed boundary (0 without one) and fixes `minimum_end_tick` for reproduction.
     pub fn round_inputs(&self, revision: Revision) -> Result<ServerMessage> {
-        let data = self.revision(revision)?;
+        let data = self
+            .pending
+            .as_ref()
+            .filter(|d| d.revision == revision)
+            .map(Ok)
+            .unwrap_or_else(|| self.revision(revision))?;
         let round = data.round;
         let previous_boundary = data
             .parent
@@ -2880,5 +2941,66 @@ pub(crate) mod tests {
             panic!()
         };
         assert!(events.is_empty());
+    }
+    #[test]
+    fn progressive_prefix_is_exact_bounded_and_invalidated_on_retry() {
+        let mut c = started(false, |s| {
+            s.match_defaults.max_tick = 1000;
+            s.match_defaults.stall_ticks = 1000;
+        });
+        let mut rx = c.start_job(1, vec![], vec![]).unwrap();
+        loop {
+            let m = rx.blocking_recv().unwrap();
+            let ready = matches!(m,WorkerMessage::Progress {tick,..} if tick>=100);
+            c.on_batch(m);
+            if ready {
+                break;
+            }
+        }
+        let ServerMessage::ReplayProgress {
+            preview: Some(frontier),
+        } = c.replay_progress()
+        else {
+            panic!()
+        };
+        assert_eq!(c.phase, Phase::Simulating);
+        assert!(c.revision_published(1).is_none());
+        let (_, request) = c
+            .preview_request(&frontier.generation, "preview".into(), 73, 0, 100)
+            .unwrap();
+        let provisional = atemporal_sim::reconstruct(&request, 73).unwrap();
+        assert_eq!(
+            provisional,
+            atemporal_sim::reconstruct(&c.exact_request(0, 73).unwrap(), 73).unwrap()
+        );
+        assert!(
+            c.preview_request(
+                &frontier.generation,
+                "future".into(),
+                frontier.through_tick + 1,
+                0,
+                100
+            )
+            .is_err()
+        );
+        let next = c.retry_worker_panic(&frontier.generation).unwrap().unwrap();
+        assert!(
+            c.preview_request(&frontier.generation, "stale".into(), 73, 0, 100)
+                .is_err()
+        );
+        drop(rx);
+        run_round(&mut c, next);
+        assert_eq!(
+            provisional,
+            atemporal_sim::reconstruct(&c.exact_request(1, 73).unwrap(), 73).unwrap()
+        );
+        assert!(matches!(
+            c.replay_progress(),
+            ServerMessage::ReplayProgress { preview: None }
+        ));
+        assert!(
+            c.preview_request(&frontier.generation, "published".into(), 73, 0, 100)
+                .is_err()
+        );
     }
 }

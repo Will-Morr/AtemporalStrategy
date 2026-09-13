@@ -37,6 +37,7 @@ pub struct Store {
     pub content: Content,
     pub revisions: BTreeMap<Revision, Local>,
     pub memory_budget: u64,
+    pub preview: Option<(String, SimRequest, RevisionData)>,
     use_counter: u64,
     exact_cache: VecDeque<((Revision, Tick), WorldState)>,
     pub evictions: u64,
@@ -90,6 +91,7 @@ impl Store {
             content,
             revisions,
             memory_budget,
+            preview: None,
             use_counter: 0,
             exact_cache: VecDeque::new(),
             evictions: 0,
@@ -135,10 +137,39 @@ impl Store {
             reference: None,
             status: Status::Pending,
         });
-        if entry.inputs.is_none() {
-            entry.data.round = precedence.round;
-            entry.inputs = Some((turns, precedence, editable_from));
+        let incoming = (turns, precedence, editable_from);
+        if entry.reference.is_none()
+            && (entry.inputs.as_ref() != Some(&incoming)
+                || matches!(entry.status, Status::Mismatch(_)))
+        {
+            if self
+                .preview
+                .as_ref()
+                .is_some_and(|(_, _, d)| d.revision == revision)
+            {
+                self.preview = None;
+            }
+            entry.data.round = incoming.1.round;
+            entry.status = Status::Pending;
+            entry.inputs = Some(incoming);
         }
+    }
+
+    /// A failed publication reopens the parent's planning round. Drop its unverified successors.
+    pub fn discard_unpublished_after(&mut self, revision: Revision) -> bool {
+        let discard = self.preview.as_ref().is_some_and(|(_, _, d)| {
+            d.revision > revision
+                && self
+                    .revisions
+                    .get(&d.revision)
+                    .is_some_and(|l| l.reference.is_none())
+        });
+        if discard {
+            self.preview = None;
+        }
+        self.revisions
+            .retain(|r, l| *r <= revision || l.reference.is_some());
+        discard
     }
 
     pub fn accept_reference(&mut self, revision: Revision, tick: Tick, hash: String) {
@@ -167,7 +198,6 @@ impl Store {
             .find(|(r, l)| {
                 l.status == Status::Pending
                     && l.inputs.is_some()
-                    && l.reference.is_some()
                     && self
                         .revisions
                         .range(..**r)
@@ -357,6 +387,8 @@ impl Store {
             )),
             None => Status::Pending,
         };
+        data.score = entry.data.score.clone();
+        data.timed = entry.data.timed.clone();
         data.timeline_index = timeline_index(&data.timeline, self.config.player_count);
         data.bytes = data.estimate_bytes();
         data.last_used = stamp;
@@ -631,7 +663,7 @@ impl Peripheral {
             let Some(store) = store.as_mut() else { return };
             store.start(revision)
         };
-        let (request, mut data) = match prepared {
+        let (request, data) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => {
                 if let Some(store) = self.store.lock().unwrap().as_mut() {
@@ -643,13 +675,29 @@ impl Peripheral {
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, mut rx) = mpsc::channel(OUT_CAPACITY);
         let end_tick = request.end_tick_exclusive;
+        let generation = request.job_id.clone();
+        if let Some(store) = self.store.lock().unwrap().as_mut() {
+            store.preview = Some((generation.clone(), request.clone(), data));
+        }
+        let _ = self.local.send(self.replay_progress());
         self.sim.submit(Job::Run {
             request: Box::new(request),
-            cancel,
+            cancel: cancel.clone(),
             out: tx,
         });
         let mut done = false;
         while let Some(message) = rx.recv().await {
+            if self
+                .store
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|s| s.preview.as_ref())
+                .is_none_or(|(g, _, _)| g != &generation)
+            {
+                cancel.store(true, Ordering::Relaxed);
+                return;
+            }
             match message {
                 WorkerMessage::Batch {
                     dictionary,
@@ -660,6 +708,8 @@ impl Peripheral {
                     timeline,
                     ..
                 } => {
+                    let mut guard = self.store.lock().unwrap();
+                    let (_, _, data) = guard.as_mut().unwrap().preview.as_mut().unwrap();
                     data.dictionary.extend(dictionary);
                     for s in samples {
                         data.samples.insert(s.tick, s);
@@ -674,6 +724,7 @@ impl Peripheral {
                     data.timeline.extend(timeline);
                 }
                 WorkerMessage::Progress { tick, .. } => {
+                    let _ = self.local.send(self.replay_progress());
                     let _ = self.local.send(ServerMessage::SimulationProgress {
                         revision,
                         tick,
@@ -687,16 +738,41 @@ impl Peripheral {
                     command_outcomes,
                     ..
                 } => {
+                    let _ = self.local.send(self.replay_progress());
+                    // Keep the completed preview queryable while waiting for controller verification.
+                    let mut changed = self.changed.subscribe();
+                    loop {
+                        let ready = {
+                            let guard = self.store.lock().unwrap();
+                            let Some(store) = guard.as_ref() else { return };
+                            if store
+                                .preview
+                                .as_ref()
+                                .is_none_or(|(g, _, _)| g != &generation)
+                            {
+                                return;
+                            }
+                            store
+                                .revisions
+                                .get(&revision)
+                                .is_some_and(|l| l.reference.is_some())
+                        };
+                        if ready {
+                            break;
+                        }
+                        if changed.changed().await.is_err() {
+                            return;
+                        }
+                    }
+                    let mut guard = self.store.lock().unwrap();
+                    let store = guard.as_mut().unwrap();
+                    let (_, _, mut data) = store.preview.take().unwrap();
                     data.outcome = Some(outcome);
                     data.final_hash = final_hash;
                     data.sim_duration_ms = sim_duration_ms.get();
                     data.command_outcomes.extend(command_outcomes);
-                    let status = self.store.lock().unwrap().as_mut().map(|s| {
-                        s.finish(
-                            revision,
-                            std::mem::replace(&mut data, RevisionData::new(revision, 0, None, 0)),
-                        )
-                    });
+                    let status = Some(store.finish(revision, data));
+                    drop(guard);
                     match status {
                         Some(Status::Verified) => println!(
                             "revision {revision}: reproduced and verified in {:?}",
@@ -709,8 +785,12 @@ impl Peripheral {
                 }
                 WorkerMessage::Failed { message, .. } => {
                     if let Some(store) = self.store.lock().unwrap().as_mut() {
+                        store.preview = None;
                         store.fail(revision, message.clone());
                     }
+                    let _ = self
+                        .local
+                        .send(ServerMessage::ReplayProgress { preview: None });
                     eprintln!("revision {revision}: local simulation failed: {message}");
                     done = true;
                 }
@@ -763,9 +843,67 @@ impl Peripheral {
         Ok(state)
     }
 
+    pub fn replay_progress(&self) -> ServerMessage {
+        let guard = self.store.lock().unwrap();
+        ServerMessage::ReplayProgress {
+            preview: guard
+                .as_ref()
+                .and_then(|s| s.preview.as_ref())
+                .map(|(g, r, d)| atemporal_server::preview::frontier(d, g, r.end_tick_exclusive)),
+        }
+    }
+
+    pub async fn preview_answer(
+        &self,
+        request_id: String,
+        generation: String,
+        tick: Tick,
+        from: Tick,
+        to: Tick,
+    ) -> Result<ServerMessage> {
+        let (mut response, mut request) = {
+            let guard = self.store.lock().unwrap();
+            let (g, r, d) = guard
+                .as_ref()
+                .and_then(|s| s.preview.as_ref())
+                .ok_or("preview finished")?;
+            if g != &generation {
+                return Err("preview generation expired".into());
+            }
+            (
+                atemporal_server::preview::response(d, g, request_id, tick, from, to)?,
+                r.clone(),
+            )
+        };
+        if let ServerMessage::ReplayPreview { snapshot, .. } = &mut response {
+            request.checkpoint = (**snapshot).clone();
+            **snapshot = self.sim.exact(request, tick).await?;
+        }
+        let guard = self.store.lock().unwrap();
+        if guard
+            .as_ref()
+            .and_then(|s| s.preview.as_ref())
+            .is_none_or(|(g, _, _)| g != &generation)
+        {
+            return Err("preview generation expired".into());
+        }
+        Ok(response)
+    }
+
     /// Answer a world-state or inputs query from the local store.
     pub async fn answer(&self, client: ClientMessage) -> Result<ServerMessage> {
         match client {
+            ClientMessage::GetReplayProgress {} => Ok(self.replay_progress()),
+            ClientMessage::GetReplayPreview {
+                request_id,
+                generation,
+                tick,
+                from_tick,
+                to_tick,
+            } => {
+                self.preview_answer(request_id, generation, tick, from_tick, to_tick)
+                    .await
+            }
             ClientMessage::GetSnapshotRange {
                 revision,
                 from_tick,
@@ -862,7 +1000,9 @@ impl Peripheral {
 pub fn is_local_query(client: &ClientMessage) -> bool {
     matches!(
         client,
-        ClientMessage::GetSnapshotRange { .. }
+        ClientMessage::GetReplayProgress { .. }
+            | ClientMessage::GetReplayPreview { .. }
+            | ClientMessage::GetSnapshotRange { .. }
             | ClientMessage::GetExactState { .. }
             | ClientMessage::GetStats { .. }
             | ClientMessage::GetEvents { .. }
@@ -870,4 +1010,61 @@ pub fn is_local_query(client: &ClientMessage) -> bool {
             | ClientMessage::GetRound { .. }
             | ClientMessage::GetControlGroups { .. }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unpublished_inputs_can_be_replaced_and_reopened_without_reusing_a_preview() {
+        let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))
+            .unwrap()
+            .match_defaults;
+        config.seed = 42u64.try_into().unwrap();
+        let content = load_content(include_str!("../../../config/content.yaml")).unwrap();
+        let initial = atemporal_sim::map::generate(&config, &content).unwrap();
+        let mut store = Store::new(
+            "test".into(),
+            fingerprint(&config, &content).unwrap(),
+            config,
+            content,
+            initial,
+            1 << 26,
+        )
+        .unwrap();
+        store.revisions.get_mut(&0).unwrap().status = Status::Verified;
+        let precedence = RoundPrecedence {
+            round: 1,
+            players: vec![0, 1],
+        };
+        let turns = vec![AcceptedTurn {
+            player: 0,
+            round: 1,
+            tick: 0,
+            commands: vec![],
+            duration_ms: 0u64.try_into().unwrap(),
+        }];
+        store.accept_inputs(1, turns.clone(), precedence.clone(), 0);
+        assert_eq!(store.next_runnable(), Some(1));
+        let (request, data) = store.start(1).unwrap();
+        store.preview = Some((request.job_id.clone(), request, data));
+        store.accept_inputs(1, turns.clone(), precedence.clone(), 0);
+        assert!(
+            store.preview.is_some(),
+            "duplicate input delivery preserves the running generation"
+        );
+        let mut replacement = turns;
+        replacement[0].tick = 73;
+        store.accept_inputs(1, replacement.clone(), precedence.clone(), 0);
+        assert!(store.preview.is_none());
+        assert_eq!(store.next_runnable(), Some(1));
+        let (request, data) = store.start(1).unwrap();
+        assert_eq!(request.events, replacement);
+        store.preview = Some((request.job_id.clone(), request, data));
+        assert!(store.discard_unpublished_after(0));
+        assert!(!store.revisions.contains_key(&1));
+        assert!(store.preview.is_none());
+        store.accept_inputs(1, replacement, precedence, 0);
+        assert_eq!(store.next_runnable(), Some(1));
+    }
 }

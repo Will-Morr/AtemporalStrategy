@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
-export async function isolatedServer(testInfo, edit = () => {}, editContent = () => {}, serverArgs = []) {
+export async function isolatedServer(testInfo, edit = () => {}, editContent = () => {}, serverArgs = [], env = {}) {
   const root = new URL('../../../', import.meta.url).pathname;
   const config = JSON.parse(await readFile(`${root}config/game.yaml`, 'utf8'));
   config.match_defaults.seed = 42;
@@ -16,7 +16,7 @@ export async function isolatedServer(testInfo, edit = () => {}, editContent = ()
   const port = probe.address().port; await new Promise(r=>probe.close(r));
   let child;
   const start = async (extra=[]) => {
-    child=spawn(`${root}target/release/atemporal-server`,['--port',String(port),'--config',configPath,'--content',contentPath,'--replays',`${dir}/replays`,...serverArgs,...extra],{cwd:root,stdio:['ignore','pipe','pipe']});
+    child=spawn(`${root}target/release/atemporal-server`,['--port',String(port),'--config',configPath,'--content',contentPath,'--replays',`${dir}/replays`,...serverArgs,...extra],{cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,...env}});
     await new Promise((resolve,reject)=>{
       const timeout=setTimeout(()=>reject(new Error('Server startup timeout')),15000);
       child.stdout.on('data',d=>{void appendFile(`${dir}/server.log`,d);if(String(d).includes('listening on')){clearTimeout(timeout);resolve();}});
@@ -37,7 +37,7 @@ export async function players(review,url,count=2,teams=false) {
     await expect(p.locator('#status')).toContainText(`You hold slot ${slot}`);pages.push(p);
   }return pages;
 }
-export async function revision(p,n){await expect.poll(()=>p.evaluate(()=>window.atemporal?.current),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.revision),{timeout:30000}).toBe(n);}
+export async function revision(p,n){await expect.poll(()=>p.evaluate(()=>!window.atemporal?.preview && window.atemporal?.latest),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal?.current),{timeout:60000}).toBe(n);await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.revision),{timeout:30000}).toBe(n);}
 export async function seek(p,t){await p.fill('#tick-input',String(t));await p.locator('#tick-input').press('Enter');await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.tick)).toBe(t);await p.keyboard.press('Escape');}
 export async function tile(p,t){const point=await p.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5);},t);await p.mouse.click(...point);}
 export async function area(p,t){const point=await p.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5);},t);await p.mouse.move(...point);await p.mouse.down();await p.mouse.up();}
@@ -45,7 +45,7 @@ export async function area(p,t){const point=await p.evaluate(t=>{const r=window.
 
 // Exercise the same real input scenario through inputs-only replication when requested.
 export async function isolatedPeripheral(testInfo, edit = () => {}, env = {}) {
-  const controller = await isolatedServer(testInfo, edit, () => {}, ['--inputs-only']);
+  const controller = await isolatedServer(testInfo, edit, () => {}, ['--inputs-only'], env);
   const root = new URL('../../../', import.meta.url).pathname;
   const probe = createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r));
   const port = probe.address().port; await new Promise(r => probe.close(r));

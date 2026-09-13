@@ -127,3 +127,8 @@ Fog currently uses Euclidean vision radius from completed friendly units/buildin
 Players can uncommit while waiting for other players. The commit button becomes “Uncommit · edit my moves”; successful withdrawal restores the submitted draft, including local blueprint and queue references. The final commit closes the turn immediately. Each browser tab stores its own player token; a saved-player chooser supports explicit rejoin and switching without overwriting another tab’s identity.
 
 The command deck is approximately 30% shorter. A single selection shows unit stats and selection icons; factory output takes priority over detailed stats. Factory blueprints and construction sites expose the same queue/loop/priority controls, with explicit cancellation. Enemy unfunded blueprints stay hidden during seeks. Narrow panels retain scrolling for secondary controls.
+
+
+## Replay while simulation runs
+
+The browser keeps provisional data apart from published revision views. It shows a turquoise available frontier and shades the unfinished remainder, clamps seeking to completed ticks, and lets playback wait at the frontier. The result is explicitly pending; orders stay disabled. Progress updates preserve typed tick input and open inspection controls. Final publication preserves the inspected tick and replaces provisional samples with the verified replay. Refresh queries the current frontier; generation checks discard stale responses after retry or publication. Sample buffers remain bounded to eight chunks, and playback reuses samples instead of repeatedly reconstructing exact states.

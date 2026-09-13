@@ -6,6 +6,17 @@
  */
 export type ClientMessage =
   | {
+      kind: "get_replay_progress";
+    }
+  | {
+      from_tick: number;
+      generation: string;
+      kind: "get_replay_preview";
+      request_id: string;
+      tick: number;
+      to_tick: number;
+    }
+  | {
       kind: "hello";
       last_revision?: number | null;
       protocol_version: Version;
@@ -516,6 +527,21 @@ export type AwardReason = "survival" | "draw" | "none";
  */
 export type ServerMessage =
   | {
+      kind: "replay_progress";
+      preview?: ReplayFrontier | null;
+    }
+  | {
+      entity_dictionary: EntityRef[];
+      events: WorldEvent[];
+      generation: string;
+      kind: "replay_preview";
+      request_id: string;
+      revision: number;
+      samples: Sample[];
+      snapshot: WorldState;
+      through_tick: number;
+    }
+  | {
       archive: ArchiveRecord;
       kind: "match_archived";
     }
@@ -665,31 +691,6 @@ export type ServerMessage =
     };
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "ArchiveReason".
- */
-export type ArchiveReason = "manual_stop" | "history_exhausted";
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "ArchiveStatus".
- */
-export type ArchiveStatus = "unfinished";
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "Phase".
- */
-export type Phase = "lobby" | "planning" | "simulating" | "finished" | "archived";
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "TimedStatus".
- */
-export type TimedStatus = "planning" | "finished" | "history_exhausted";
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "Activity".
- */
-export type Activity = "combat" | "construction" | "mining" | "movement" | "idle";
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "PresentationEvent".
  */
 export type PresentationEvent =
@@ -732,6 +733,31 @@ export type PresentationEvent =
       kind: "survival";
       transition: SurvivalTransition;
     };
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Activity".
+ */
+export type Activity = "combat" | "construction" | "mining" | "movement" | "idle";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ArchiveReason".
+ */
+export type ArchiveReason = "manual_stop" | "history_exhausted";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ArchiveStatus".
+ */
+export type ArchiveStatus = "unfinished";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Phase".
+ */
+export type Phase = "lobby" | "planning" | "simulating" | "finished" | "archived";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "TimedStatus".
+ */
+export type TimedStatus = "planning" | "finished" | "history_exhausted";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "WorkerMessage".
@@ -1395,6 +1421,65 @@ export interface ServerEnvelope {
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "ReplayFrontier".
+ */
+export interface ReplayFrontier {
+  end_tick: number;
+  generation: string;
+  revision: number;
+  through_tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "WorldEvent".
+ */
+export interface WorldEvent {
+  event: PresentationEvent;
+  sequence: number;
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "Sample".
+ */
+export interface Sample {
+  entities: SampleEntity[];
+  ore: OreCell[];
+  players: SamplePlayer[];
+  tick: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SampleEntity".
+ */
+export interface SampleEntity {
+  activity: Activity;
+  engaged?: number | null;
+  facing: Direction;
+  hp: number;
+  index: number;
+  lifecycle: Lifecycle;
+  tile: Tile;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "OreCell".
+ */
+export interface OreCell {
+  index: number;
+  remaining: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SamplePlayer".
+ */
+export interface SamplePlayer {
+  bank: number;
+  currently_eliminated: boolean;
+  player_id: number;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "ArchiveRecord".
  */
 export interface ArchiveRecord {
@@ -1483,55 +1568,6 @@ export interface TimelineBucket {
   player_id: number;
   severity: number;
   to_tick_exclusive: number;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "Sample".
- */
-export interface Sample {
-  entities: SampleEntity[];
-  ore: OreCell[];
-  players: SamplePlayer[];
-  tick: number;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "SampleEntity".
- */
-export interface SampleEntity {
-  activity: Activity;
-  engaged?: number | null;
-  facing: Direction;
-  hp: number;
-  index: number;
-  lifecycle: Lifecycle;
-  tile: Tile;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "OreCell".
- */
-export interface OreCell {
-  index: number;
-  remaining: number;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "SamplePlayer".
- */
-export interface SamplePlayer {
-  bank: number;
-  currently_eliminated: boolean;
-  player_id: number;
-}
-/**
- * This interface was referenced by `ContractCatalog`'s JSON-Schema
- * via the `definition` "WorldEvent".
- */
-export interface WorldEvent {
-  event: PresentationEvent;
-  sequence: number;
-  tick: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema

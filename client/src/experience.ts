@@ -60,7 +60,7 @@ export class Experience {
     replay.innerHTML = '<summary>Rounds, inputs and rewrite results</summary><label>Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
     $('game').append(replay);
     replay.addEventListener('toggle',()=>{if(replay.open)this.loadComparison();});
-    $('return-live').onclick = () => void this.selectRound(g.latest);
+    $('return-live').onclick = () => { if(g.preview){g.current=g.preview.revision;g.view={t0:0,t1:g.preview.end_tick};g.seek(g.playhead);}else void this.selectRound(g.latest); };
     ($('round-picker') as HTMLSelectElement).onchange = e => void this.selectRound(Number((e.target as HTMLSelectElement).value));
     const speedLabel=document.createElement('label');speedLabel.className='speed-control';speedLabel.textContent='Replay speed ';
     const rates = document.createElement('select'); rates.id = 'speed'; rates.setAttribute('aria-label', 'Playback speed');
@@ -93,6 +93,7 @@ export class Experience {
     window.addEventListener('blur', () => { g.renderer.keys = { w:false,a:false,s:false,d:false }; g.renderer.dragPan = null; });
   }
   loadRound(revision: number): Promise<void> {
+    if(this.g.preview?.revision===revision)return Promise.resolve();
     if (this.loading.has(revision)) return this.loading.get(revision)!;
     if (this.stats.has(revision) && this.turns.has(revision) && this.destructions.has(revision)) return Promise.resolve();
     const task = (async () => {
@@ -130,7 +131,7 @@ export class Experience {
     await this.loadRound(revision);
     if (!this.g.revisions.has(revision)) return;
     const old = this.g.rev();
-    if (old && old.revision !== revision) { old.samples.clear();old.events=[];old.chunks.clear(); }
+    if (old && !this.g.viewingPreview && old.revision !== revision) { old.samples.clear();old.events=[];old.chunks.clear(); }
     this.g.playing = false; this.g.current = revision; this.g.exact = null;
     this.g.selection.clear(); this.g.recalledGroup = null;
     this.g.view = { t0:0,t1:Math.max(1,this.g.rev()!.outcome.terminal_state_tick) };

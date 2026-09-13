@@ -111,6 +111,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
       render();
     };
     spectate.onclick = () => resolve({ session, lobby });
+    net.on('replay_progress', m => { if(m.preview && session.slot !== null) resolve({session,lobby}); });
     net.on('revision_published', () => { if(session.slot !== null) resolve({ session, lobby }); });
     if (phase !== 'lobby' && session.slot !== null) resolve({ session, lobby });
   });

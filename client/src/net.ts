@@ -79,7 +79,7 @@ export class Net {
     if (!this.connected) return Promise.reject(new Error('Disconnected'));
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
-        test: m => (m.kind === kind && test(m as Of<K>)) || m.kind === 'commit_rejected',
+        test: m => (m.kind === kind && test(m as Of<K>)) || (m.kind === 'commit_rejected' && ('request_id' in message ? m.request_id === message.request_id : message.kind === 'commit' ? m.request_id === message.request.request_id : !m.request_id)),
         resolve: m => {
           clearTimeout(timer);
           if (m.kind === kind) resolve(m as Of<K>);

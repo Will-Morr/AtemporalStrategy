@@ -145,6 +145,7 @@ pub async fn sync_loop(p: Arc<Peripheral>, controller: String, guide: Arc<Guide>
                     if let Some(store) = p.store.lock().unwrap().as_mut() {
                         store.accept_inputs(revision, turns, precedence, editable_from);
                     }
+                    p.bump();
                     p.schedule();
                 }
                 ServerMessage::ReferenceHash {
@@ -154,8 +155,23 @@ pub async fn sync_loop(p: Arc<Peripheral>, controller: String, guide: Arc<Guide>
                 } => {
                     if let Some(store) = p.store.lock().unwrap().as_mut() {
                         store.accept_reference(revision, tick, hash);
+                        p.bump();
                     }
                     p.schedule();
+                }
+                ServerMessage::PlanningOpened { revision, .. } => {
+                    let discarded = p
+                        .store
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .is_some_and(|s| s.discard_unpublished_after(revision));
+                    if discarded {
+                        let _ = p
+                            .local
+                            .send(ServerMessage::ReplayProgress { preview: None });
+                        p.bump();
+                    }
                 }
                 ServerMessage::RevisionPublished {
                     revision,
@@ -222,10 +238,19 @@ pub async fn relay(p: Arc<Peripheral>, controller: String, mut socket: WebSocket
 
     let progress = {
         let mut local = p.local.subscribe();
+        let p = p.clone();
         let out = out_tx.clone();
         let instance = instance.clone();
         tokio::spawn(async move {
-            while let Ok(message) = local.recv().await {
+            loop {
+                let message = match local.recv().await {
+                    Ok(ServerMessage::ReplayProgress { .. })
+                    | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        p.replay_progress()
+                    }
+                    Ok(message) => message,
+                    Err(_) => break,
+                };
                 let id = instance.lock().unwrap().clone();
                 if !id.is_empty() && out.send(server_json(&id, message)).is_err() {
                     break;
@@ -256,10 +281,20 @@ pub async fn relay(p: Arc<Peripheral>, controller: String, mut socket: WebSocket
                 };
                 *instance.lock().unwrap() = envelope.server_instance_id.clone();
                 match &envelope.message {
-                    ServerMessage::RevisionPublished { revision, .. } => {
+                    ServerMessage::ReplayProgress { .. }
+                    | ServerMessage::SimulationProgress { .. } => continue,
+                    ServerMessage::RevisionPublished {
+                        revision,
+                        score,
+                        timed,
+                        ..
+                    } => {
                         // Loading: the browser sees this revision only once it exists locally.
                         if let Status::Mismatch(m) = p.wait_settled(*revision).await {
                             eprintln!("{m}");
+                        }
+                        if let Some(store) = p.store.lock().unwrap().as_mut() {
+                            store.accept_published(*revision, score.clone(), timed.clone());
                         }
                     }
                     ServerMessage::PlanningOpened { revision, .. }
@@ -298,10 +333,16 @@ pub async fn relay(p: Arc<Peripheral>, controller: String, mut socket: WebSocket
                     let out = out.clone();
                     let instance = instance.clone();
                     tokio::spawn(async move {
+                        let preview_request_id = match &envelope.message {
+                            ClientMessage::GetReplayPreview { request_id, .. } => {
+                                request_id.clone()
+                            }
+                            _ => String::new(),
+                        };
                         let message = match p.answer(envelope.message).await {
                             Ok(message) => message,
                             Err(message) => ServerMessage::CommitRejected {
-                                request_id: String::new(),
+                                request_id: preview_request_id,
                                 code: "query_failed".into(),
                                 message,
                             },

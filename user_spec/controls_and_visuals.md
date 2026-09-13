@@ -62,6 +62,6 @@ Refresh/rejoin must visibly identify the player and preserve independent identit
 H adds the selection to a group; provide an explicit clear-group action. This supersedes the previous H-replace/Shift+H-add gesture.
 
 
-## Queued feature: replay during simulation
+## Replay during simulation
 
-Allow players to view and scrub the completed portion of a replay while the simulation is still running. The early ticks they want to inspect may finish within half a second even when the long tail takes several more seconds. Queue this feature alongside the ongoing playtest work.
+Allow players to view and scrub the completed portion of a replay while the simulation is still running. The early ticks they want to inspect may finish within half a second even when the long tail takes several more seconds. The user subsequently requested implementing this feature.

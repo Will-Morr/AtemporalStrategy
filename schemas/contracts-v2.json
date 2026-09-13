@@ -324,6 +324,61 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
+              "const": "get_replay_progress",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "from_tick": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generation": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "get_replay_preview",
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "tick": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "to_tick": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "request_id",
+            "generation",
+            "tick",
+            "from_tick",
+            "to_tick"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
               "const": "hello",
               "type": "string"
             },
@@ -3422,6 +3477,39 @@
       ],
       "type": "object"
     },
+    "ReplayFrontier": {
+      "additionalProperties": false,
+      "properties": {
+        "end_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generation": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "through_tick": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "revision",
+        "generation",
+        "through_tick",
+        "end_tick"
+      ],
+      "type": "object"
+    },
     "RoundPrecedence": {
       "additionalProperties": false,
       "properties": {
@@ -3715,6 +3803,89 @@
     },
     "ServerMessage": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "replay_progress",
+              "type": "string"
+            },
+            "preview": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ReplayFrontier"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "entity_dictionary": {
+              "items": {
+                "$ref": "#/$defs/EntityRef"
+              },
+              "type": "array"
+            },
+            "events": {
+              "items": {
+                "$ref": "#/$defs/WorldEvent"
+              },
+              "type": "array"
+            },
+            "generation": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "replay_preview",
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "samples": {
+              "items": {
+                "$ref": "#/$defs/Sample"
+              },
+              "type": "array"
+            },
+            "snapshot": {
+              "$ref": "#/$defs/WorldState"
+            },
+            "through_tick": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "request_id",
+            "generation",
+            "revision",
+            "through_tick",
+            "snapshot",
+            "entity_dictionary",
+            "samples",
+            "events"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {

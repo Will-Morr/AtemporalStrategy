@@ -5,3 +5,5 @@ pub mod adapter;
 pub mod archive;
 pub mod controller;
 pub mod ws;
+
+pub mod preview;

@@ -156,7 +156,26 @@ async fn connection(app: App, socket: WebSocket, peripheral: bool) {
                     ServerMessage::Welcome { .. } => {
                         let current = writer_app.controller.lock().unwrap().current;
                         batch = peripheral_sync(&writer_app, &mut synced, current);
+                        let pending_inputs = writer_app.controller.lock().unwrap().preview_inputs();
+                        if let Some(inputs) = pending_inputs {
+                            if synced.is_none()
+                                && let Ok(bootstrap) =
+                                    writer_app.controller.lock().unwrap().replay_bootstrap()
+                            {
+                                batch.push(bootstrap);
+                            }
+                            batch.push(inputs);
+                        }
                         batch.insert(0, message);
+                    }
+                    ServerMessage::RoundInputs { .. } => {
+                        if synced.is_none()
+                            && let Ok(bootstrap) =
+                                writer_app.controller.lock().unwrap().replay_bootstrap()
+                        {
+                            batch.push(bootstrap);
+                        }
+                        batch.push(message);
                     }
                     ServerMessage::RevisionPublished { revision, .. } => {
                         batch = peripheral_sync(&writer_app, &mut synced, *revision);
@@ -200,7 +219,10 @@ async fn connection(app: App, socket: WebSocket, peripheral: bool) {
         if (peripheral || app.inputs_only) && streams_world_state(&client) {
             reject(
                 &direct_tx,
-                "",
+                match &client {
+                    ClientMessage::GetReplayPreview { request_id, .. } => request_id.as_str(),
+                    _ => "",
+                },
                 "query_failed",
                 "this server shares inputs only; world state is served by a peripheral".into(),
             );
@@ -217,7 +239,8 @@ async fn connection(app: App, socket: WebSocket, peripheral: bool) {
 fn streams_world_state(client: &ClientMessage) -> bool {
     matches!(
         client,
-        ClientMessage::GetSnapshotRange { .. }
+        ClientMessage::GetReplayPreview { .. }
+            | ClientMessage::GetSnapshotRange { .. }
             | ClientMessage::GetExactState { .. }
             | ClientMessage::GetStats { .. }
             | ClientMessage::GetEvents { .. }
@@ -257,6 +280,9 @@ async fn handle(
                 });
             }
             let _ = tx.send(c.welcome());
+            if let Some(inputs) = c.preview_inputs() {
+                let _ = tx.send(inputs);
+            }
             if c.phase != Phase::Lobby {
                 if let Some(m) = c.revision_published(c.current) {
                     let _ = tx.send(m);
@@ -431,6 +457,48 @@ async fn handle(
                     }
                 }
                 Err(message) => reject(tx, &request_id, "rejected", message),
+            }
+        }
+        ClientMessage::GetReplayProgress {} => {
+            respond(tx, Ok(app.controller.lock().unwrap().replay_progress()))
+        }
+        ClientMessage::GetReplayPreview {
+            request_id,
+            generation,
+            tick,
+            from_tick,
+            to_tick,
+        } => {
+            let prepared = app.controller.lock().unwrap().preview_request(
+                &generation,
+                request_id.clone(),
+                tick,
+                from_tick,
+                to_tick,
+            );
+            let result = async {
+                let (mut message, request) = prepared?;
+                let sim = app.controller.lock().unwrap().sim.clone();
+                let state = sim.exact(request, tick).await?;
+                if !app
+                    .controller
+                    .lock()
+                    .unwrap()
+                    .preview_is_current(&generation)
+                {
+                    return Err("preview generation expired".into());
+                }
+                if let ServerMessage::ReplayPreview { snapshot, .. } = &mut message {
+                    **snapshot = state;
+                }
+                Ok(message)
+            }
+            .await;
+            match result {
+                Ok(m) => {
+                    let _ = tx.send(m);
+                }
+                Err(e) => reject(tx, &request_id, "preview_expired", e),
             }
         }
         ClientMessage::GetSnapshotRange {

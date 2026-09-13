@@ -246,6 +246,12 @@ fn run_job(
     let revision = request.revision;
     let mut batch = Batch::new();
     let mut last_flush = request.checkpoint.tick;
+    let mut flushed_at = std::time::Instant::now();
+    let preview_delay = std::env::var("ATEMPORAL_PREVIEW_TEST_DELAY_MS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0)
+        .min(1000);
     let mut closed = false;
     static INJECTED: AtomicBool = AtomicBool::new(false);
     let inject_panic = request.revision == 2
@@ -267,8 +273,10 @@ fn run_job(
                 if inject_panic
                     || tick.saturating_sub(last_flush) >= BATCH_TICKS
                     || batch.bytes >= BATCH_BYTES
+                    || flushed_at.elapsed() >= std::time::Duration::from_millis(100)
                 {
                     last_flush = tick;
+                    flushed_at = std::time::Instant::now();
                     // A slow consumer throttles the simulation, never the IO loop.
                     if !send(&out, batch.message(&job_id, revision), &cancel)
                         || !send(
@@ -284,6 +292,9 @@ fn run_job(
                     {
                         closed = true;
                         cancel.store(true, Ordering::Relaxed);
+                    }
+                    if preview_delay > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(preview_delay));
                     }
                     if inject_panic {
                         panic!("injected recoverable worker panic after partial output");
