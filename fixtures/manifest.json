@@ -32,6 +32,10 @@
     "type": "ClientEnvelope"
   },
   {
+    "file": "fixtures/protocol/get-round.json",
+    "type": "ClientEnvelope"
+  },
+  {
     "file": "fixtures/protocol/hello.json",
     "type": "ClientEnvelope"
   },
@@ -49,6 +53,10 @@
   },
   {
     "file": "fixtures/protocol/revision-published.json",
+    "type": "ServerEnvelope"
+  },
+  {
+    "file": "fixtures/protocol/round-result.json",
     "type": "ServerEnvelope"
   },
   {

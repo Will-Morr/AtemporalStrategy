@@ -609,6 +609,26 @@
         {
           "additionalProperties": false,
           "properties": {
+            "kind": {
+              "const": "get_round",
+              "type": "string"
+            },
+            "revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "revision"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "from_tick": {
               "format": "uint32",
               "maximum": 4294967295,
@@ -4052,6 +4072,91 @@
             "kind",
             "revision",
             "turns"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "command_outcomes": {
+              "items": {
+                "$ref": "#/$defs/CommandOutcome"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "round_result",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/Outcome"
+            },
+            "parent_revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "round": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "score": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RoundScore"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sim_duration_ms": {
+              "$ref": "#/$defs/SafeInt"
+            },
+            "time_totals": {
+              "items": {
+                "$ref": "#/$defs/PlayerTime"
+              },
+              "type": "array"
+            },
+            "timed": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TimedAdjudication"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "timeline_index": {
+              "items": {
+                "$ref": "#/$defs/TimelineBucket"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "revision",
+            "round",
+            "outcome",
+            "timeline_index",
+            "time_totals",
+            "sim_duration_ms",
+            "command_outcomes"
           ],
           "type": "object"
         },

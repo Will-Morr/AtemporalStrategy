@@ -36,3 +36,7 @@ The user also requested a repeatable browser UI review harness and an interactiv
 ## Browser automation
 
 The user requested an agent-neutral Playwright/MCP harness with useful screenshots, traces and failure artifacts. Verify the existing scaffold honestly and enable gameplay scenarios as real controls become available. Keep this work scoped to automation and browser-review documentation; coordinate package changes with the slice agent. Work in a new worktree and branch based on `main`, commit and push cohesive chunks, and integrate the completed work into `main` after local checks pass as the next agent in the merge queue. The latest instruction supersedes the earlier CI request: keep checks local, with no hosted jobs or automatic push triggers. See [browser testing](../docs/browser-testing.md) for the current workflow and explicit coverage limits.
+
+## Complete browser implementation
+
+The user requested the complete browser checklist on `agent/client` in `../atemporal-client`, cohesive commits and pushes, real-server Playwright input scenarios with screenshot inspection, and `scripts/check.sh`. Client ownership includes guide prose. The user subsequently authorized the necessary replay protocol/server change so historical results and authoritative skipped reasons can be inspected. Keep that change separate and ready to rebase onto another agent’s in-flight server work.

@@ -70,6 +70,10 @@ export type ClientMessage =
       to_tick: number;
     }
   | {
+      kind: "get_round";
+      revision: number;
+    }
+  | {
       from_tick: number;
       kind: "get_events";
       revision: number;
@@ -585,6 +589,19 @@ export type ServerMessage =
       kind: "commands";
       revision: number;
       turns: AcceptedTurn[];
+    }
+  | {
+      command_outcomes: CommandOutcome[];
+      kind: "round_result";
+      outcome: Outcome;
+      parent_revision?: number | null;
+      revision: number;
+      round: number;
+      score?: RoundScore | null;
+      sim_duration_ms: SafeInt;
+      time_totals: PlayerTime[];
+      timed?: TimedAdjudication | null;
+      timeline_index: TimelineBucket[];
     }
   | {
       groups: ControlGroupState[];
