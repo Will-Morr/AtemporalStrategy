@@ -61,6 +61,14 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
                 )
             },
         );
+        let healing = if let Some(h) = &t.self_repair {
+            format!(
+                "Automatic self-repair: {} HP/matter; {} matter/tick",
+                h.hp_per_matter, h.rate
+            )
+        } else {
+            healing
+        };
         let values = vec![
             t.key.clone(),
             format!("{:?}", t.kind),

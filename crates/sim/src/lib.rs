@@ -13,6 +13,9 @@ mod world;
 pub use output::{Output, RunResult};
 pub use world::Sim;
 
+/// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
+pub const RULES_VERSION: u32 = 3;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Run a job from its checkpoint to the horizon or inactivity, emitting samples/checkpoints/events.

@@ -385,9 +385,12 @@ fn queue_edits_loops_and_distinct_ids_per_factory() {
                     item_ids: vec![item(&append, 0, 1)],
                 },
             },
-            Command::SetQueueLoop {
+            Command::EditProduction {
                 factories: vec![f1.clone()],
-                enabled: true,
+                edit: ProductionEdit::SetItemLoop {
+                    item_ids: vec![item(&append, 0, 0)],
+                    enabled: true,
+                },
             },
             Command::EditProduction {
                 factories: vec![f2.clone()],
@@ -1193,6 +1196,7 @@ fn configured_ghost_starts_production_and_inherited_order_on_completion() {
             Command::ConfigureBlueprints {
                 blueprint_ids: vec![factory.clone()],
                 settings: BlueprintSettings {
+                    queue_loop_flags: vec![],
                     queue: vec!["grunt".into()],
                     order: order.clone(),
                     priority: Priority::High,

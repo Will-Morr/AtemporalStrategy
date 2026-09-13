@@ -4,7 +4,7 @@
 
 Implemented in `agent/ui-feedback` on main's central-clearing map baseline (`702f57c`), then rebased without conflicts onto the subsequently published side-lane map change (`af1a223`). Every unfinished structure has a visible cancellation action. Newly placed blueprints can be configured and cancelled in one draft; deleting their placement removes dependent settings. Rebased drafts check blueprint availability locally and preserve the draft with an actionable explanation before submission.
 
-Selection priority, orders and factory looping distinguish shared and mixed values. Draft group membership is visible immediately; ungrouped units have no number badge. Constructor H/M/L badges expose priority, with the panel explicitly explaining that building priority controls construction funding. Ore is yellow until exhausted, then light gray; walls retain their dark gray through fog. Miners use their owner's color. Statistics add a five-sample local slope with signed axes and responsive labels.
+Selection priority, orders and factory looping distinguish shared and mixed values. Draft group membership is visible immediately; ungrouped units have no number badge. A shared bottom-panel priority dropdown replaces battlefield priority badges; the panel explains that building priority controls construction funding and Off pauses constructor spending. Ore is yellow until exhausted, then light gray; walls retain their dark gray through fog. Miners use their owner's color. Statistics add a five-sample local slope with signed axes and responsive labels.
 
 Verification:
 

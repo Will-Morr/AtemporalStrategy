@@ -6,7 +6,7 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   const server=await (process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral:isolatedServer)(testInfo,c=>{c.match_defaults.max_tick=1200;});review.afterClose(server.stop);
   const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
   const units=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0).map(e=>({type:e.type_key,x:e.x,y:e.y})));
-  const constructor=units.find(e=>e.type==='constructor'),miner=units.find(e=>e.type==='miner');
+  const constructor=units.find(e=>e.type==='constructor'),miner=units.find(e=>e.type==='turret');
   await tile(a,constructor);await expect(a.locator('#selection-groups')).toHaveCount(0);
   await a.keyboard.press('h');await a.keyboard.press('3');await expect(a.locator('#selection-groups')).toHaveText('Groups: 3');
   await a.keyboard.press('Control+z');await expect(a.locator('#selection-groups')).toHaveCount(0);await a.keyboard.press('Control+u');
@@ -34,7 +34,7 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   expect(await a.evaluate(()=>window.atemporal.draft.commands.some(d=>d.command.kind==='configure_blueprints'&&d.command.blueprint_ids.some(r=>r.kind==='draft'&&!window.atemporal.draft.commands.some(p=>p.local_id===r.local_id))))).toBe(false);
   await a.keyboard.press('Control+z');await a.locator('#commit').click();await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');await b.locator('#commit').click();await revision(a,1);
   await seek(a,1);
-  expect(await a.evaluate(()=>window.atemporal.exact.state.entities.filter(e=>e.owner===0&&['constructor','miner'].includes(e.type_key)).map(e=>e.priority))).toEqual(['low','low']);
+  expect(await a.evaluate(()=>window.atemporal.exact.state.entities.filter(e=>e.owner===0&&['constructor','turret'].includes(e.type_key)).map(e=>e.priority))).toEqual(['low','low']);
   expect(await a.evaluate(()=>window.atemporal.experience.groups().find(g=>g.id.owner===0&&g.id.slot===3)?.members.length)).toBe(1);
   await tile(a,spots[2]);await expect(a.locator('#cancel-blueprints')).toBeVisible();
   expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0).length)).toBe(1);

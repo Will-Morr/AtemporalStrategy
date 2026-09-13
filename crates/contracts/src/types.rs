@@ -103,10 +103,10 @@ impl From<GroupSlot> for u8 {
 }
 
 macro_rules! record {
-    ($name:ident { $($field:ident : $ty:ty),* $(,)? }) => {
+    ($name:ident { $($(#[$attr:meta])* $field:ident : $ty:ty),* $(,)? }) => {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
         #[serde(deny_unknown_fields)]
-        pub struct $name { $(pub $field: $ty),* }
+        pub struct $name { $($(#[$attr])* pub $field: $ty),* }
     };
 }
 macro_rules! choices {
@@ -140,7 +140,12 @@ pub enum SideId {
     Player { player_id: PlayerId },
     Team { team_id: TeamId },
 }
-choices!(Priority { High, Medium, Low });
+choices!(Priority {
+    High,
+    Medium,
+    Low,
+    Off
+});
 choices!(Reason {
     NoActiveBuilding,
     NoBuildAbility
@@ -271,9 +276,13 @@ record!(Healing {
     demand: f64,
     cooldown: Tick
 });
+record!(SelfRepair {
+    hp_per_matter: f64,
+    rate: f64
+});
 record!(TypeDefinition { key: TypeKey, kind: TypeKind, shape: Shape, matter_cost: f64, max_hp: f64,
     counts_for_survival: bool, provides_build_ability: bool, movement: Option<Movement>, vision: f64,
-    weapon: Option<Weapon>, mining: Option<WorkRate>, construction: Option<WorkRate>, production: Option<ProductionCapability>, healing: Option<Healing> });
+    weapon: Option<Weapon>, mining: Option<WorkRate>, construction: Option<WorkRate>, production: Option<ProductionCapability>, healing: Option<Healing>, #[serde(default, skip_serializing_if = "Option::is_none")] self_repair: Option<SelfRepair> });
 record!(Content { schema_version: Version, types: Vec<TypeDefinition>, starting_roster: Vec<TypeKey> });
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -300,9 +309,19 @@ pub enum MemberEdit {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProductionEdit<Reference = QueueItemId> {
-    Append { items: Vec<TypeKey> },
-    ReplacePending { items: Vec<TypeKey> },
-    RemovePending { item_ids: Vec<Reference> },
+    Append {
+        items: Vec<TypeKey>,
+    },
+    ReplacePending {
+        items: Vec<TypeKey>,
+    },
+    RemovePending {
+        item_ids: Vec<Reference>,
+    },
+    SetItemLoop {
+        item_ids: Vec<Reference>,
+        enabled: bool,
+    },
     CancelActive {},
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -406,14 +425,18 @@ choices!(Direction {
 });
 record!(QueueItem {
     item_id: QueueItemId,
-    type_key: TypeKey
+    type_key: TypeKey,
+    #[serde(default)]
+    loop_enabled: bool
 });
 record!(ActiveItem {
     item_id: QueueItemId,
     occurrence: u32,
     type_key: TypeKey,
     paid_matter: f64,
-    awaiting_output: bool
+    awaiting_output: bool,
+    #[serde(default)]
+    loop_enabled: bool
 });
 record!(OccurrenceCounter {
     item_id: QueueItemId,
@@ -425,7 +448,7 @@ record!(EntityState { id: EntityId, owner: PlayerId, type_key: TypeKey, tile: Ti
     hp: f64, paid_matter: f64, lifecycle: Lifecycle, blueprint_id: Option<BlueprintId>, action: Order, priority: Priority,
     next_action_tick: Tick, next_move_tick: Tick, production: Option<Production>, support_target: Option<EntityId>,
     engaged_target: Option<EntityId>, resolved_destination: Option<Tile>, failed_move_attempts: u8, blocked_step: Option<Tile>, born_at_tick: Option<Tick>, order_locks: Vec<OrderLock>, goal_settled: bool, local_detour: Vec<Tile> });
-record!(BlueprintSettings { queue: Vec<TypeKey>, order: Order, priority: Priority, loop_enabled: bool });
+record!(BlueprintSettings { queue: Vec<TypeKey>, #[serde(default)] queue_loop_flags: Vec<bool>, order: Order, priority: Priority, loop_enabled: bool });
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Blueprint {

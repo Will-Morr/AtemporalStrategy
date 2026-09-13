@@ -69,3 +69,11 @@ Ore should be yellow; fully depleted deposits should become light gray, distinct
 ## Replay during simulation
 
 Allow players to view and scrub the completed portion of a replay while the simulation is still running. The early ticks they want to inspect may finish within half a second even when the long tail takes several more seconds. The user subsequently requested implementing this feature.
+
+## Production and spending controls
+
+Factory looping is per queue item. The loop switch controls additions: units queued while enabled retain a loop flag and rejoin the tail when completed. Existing items keep their flags when the switch changes. Show and allow editing each item's loop status, including blueprint queues. Shift-clicking a unit build button adds five.
+
+Use one shared priority dropdown in the bottom selection UI for all eligible entities, including constructors, factories and turrets. Display common or mixed values. Never draw matter priority on the battlefield. Off disables spending.
+
+Terrain gray values must be darkest for walls, medium for unseen floor, and lightest for seen floor. Miners must have a blocky silhouette and clear owner coloring. These replace earlier shading and miner presentation.

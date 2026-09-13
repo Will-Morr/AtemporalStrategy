@@ -455,7 +455,7 @@ export class Game {
   configureGhosts(change: (s: BlueprintSettings) => void): boolean {
     const ghosts = this.selectedViews().filter(v => v.blueprint && this.ownSelectable(v));
     for (const v of ghosts) {
-      const settings = structuredClone(v.settings!); change(settings);
+      const settings = structuredClone(v.settings!); settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false); change(settings);
       this.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});
     }
     return ghosts.length > 0;
@@ -494,7 +494,7 @@ export class Game {
         const blueprint_ids=c.blueprint_ids.filter(ref=>ref.kind!=='draft'||ref.local_id!==removed.local_id);
         return blueprint_ids.length ? [{...d,command:{...c,blueprint_ids}}] : [];
       }
-      if(c.kind==='edit_production' && c.edit.kind==='remove_pending') {
+      if(c.kind==='edit_production' && (c.edit.kind==='remove_pending'||c.edit.kind==='set_item_loop')) {
         const item_ids=c.edit.item_ids.filter(ref=>ref.kind!=='draft'||ref.local_id!==removed.local_id);
         return item_ids.length ? [{...d,command:{...c,edit:{...c.edit,item_ids}}}] : [];
       }
@@ -981,7 +981,7 @@ export class Game {
       return;
     }
     if (/^[0-9]$/.test(k)) {
-      this.digit(Number(k));
+      this.digit(Number(k),e.shiftKey);
       return;
     }
     switch (k) {
@@ -1046,7 +1046,16 @@ export class Game {
     this.updateMode();
   }
 
-  digit(n: number): void {
+  priorityEligible(v: EntityView): boolean {
+    const t=this.types.get(v.type_key);
+    return !!t && (!!t.construction || !!t.production || !!t.self_repair || !!t.healing || v.lifecycle!=='complete');
+  }
+  setSelectionPriority(priority: Priority): void {
+    this.configureGhosts(s=>{s.priority=priority;});
+    const entities=this.selectedViews().filter(v=>this.ownSelectable(v)&&!v.blueprint&&this.priorityEligible(v)).map(v=>v.id);
+    if(entities.length)this.stage({kind:'set_priority',entities,priority});
+  }
+  digit(n: number, five = false): void {
     const mode = this.mode;
     if (mode.kind === 'membership') {
       if (this.player !== null) this.stage({ kind: 'edit_group_members', group: { owner: this.player, slot: n }, edit: { kind: mode.add ? 'add' : 'replace', entities: mode.add ? this.selectedIds() : [] } });
@@ -1060,15 +1069,13 @@ export class Game {
     } else if (mode.kind === 'recipe') {
       const key = this.producible()[n - 1];
       const factories = this.selectedIds(t => !!t.production);
-      const ghosts = key ? this.configureGhosts(s => { s.queue.push(key); }) : false;
-      if (key && factories.length) this.stage({ kind: 'edit_production', factories, edit: { kind: 'append', items: [key] } });
+      const ghosts = key ? this.configureGhosts(s => { s.queue_loop_flags ??= s.queue.map(()=>false);s.queue.push(...Array(five?5:1).fill(key));s.queue_loop_flags.push(...Array(five?5:1).fill(s.loop_enabled)); }) : false;
+      if (key && factories.length) this.stage({ kind: 'edit_production', factories, edit: { kind: 'append', items: Array(five?5:1).fill(key) } });
       else if (!ghosts) this.toast(key ? 'Select a factory first.' : 'No such recipe.');
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'priority') {
-      const priority = (['high', 'medium', 'low'] as Priority[])[n - 1];
-      if (priority) this.configureGhosts(s => { s.priority = priority; });
-      const entities = this.selectedViews().filter(v=>this.ownSelectable(v) && !v.blueprint).map(v=>v.id);
-      if (priority && entities.length) this.stage({ kind: 'set_priority', entities, priority });
+      const priority = (['high', 'medium', 'low', 'off'] as Priority[])[n - 1];
+      if (priority) this.setSelectionPriority(priority);
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'stored') {
       this.mode = { kind: 'none' };
@@ -1100,7 +1107,7 @@ export class Game {
         case 'build': return `Build: ${this.structures().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
         case 'place': return `Place ${this.mode.type_key}: click a floor tile${this.types.get(this.mode.type_key)?.production ? ` (output ${this.renderer.outputDirection.toUpperCase()}, R rotates)` : ''}`;
         case 'recipe': return `Queue: ${this.producible().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
-        case 'priority': return 'Priority: 1=high 2=medium 3=low';
+        case 'priority': return 'Priority: 1=high 2=medium 3=low 4=off';
         case 'membership': return `${this.mode.add ? 'Add selection to' : 'Clear'} group: 0–9`;
         case 'binding': return 'Factory output group: 0–9, Backspace clears';
         case 'stored': return 'Stored order: F destination, G ally, M mine area, C construct area, X idle';
@@ -1193,24 +1200,32 @@ export class Game {
         if(t.weapon)values.push(['Damage',`${t.weapon.damage} / ${t.weapon.cooldown} ticks`],['Range',`${t.weapon.range} tiles`]);
         if(t.movement)values.push(['Move',`1 tile / ${t.movement.cooldown} ticks`]);
         if(t.mining)values.push(['Mining',`${t.mining.rate} / ${t.mining.cooldown} ticks`]);
+        if(t.self_repair)values.push(['Repair',`${t.self_repair.rate*t.self_repair.hp_per_matter} HP / tick · ${t.self_repair.hp_per_matter} HP / matter`]);
         if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
         for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}if(t.production){const details=document.createElement('details');details.innerHTML='<summary>Unit stats</summary>';details.append(stats);body.append(details);}else { body.append(stats); const order=document.createElement('div');order.className='unit-order';order.textContent=`Order: ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order); }
       } else {const label=document.createElement('strong');label.textContent=`${views.length} units selected`;body.append(label);}
-      const priorities=new Set(views.map(v=>this.effectivePriority(v)));
+      const eligible=views.filter(v=>this.priorityEligible(v));
+      const priorities=new Set(eligible.map(v=>this.effectivePriority(v)));
       const priority=document.createElement('div');priority.id='selection-priority';priority.className='selection-value';
       priority.dataset.value=priorities.size===1?[...priorities][0]:'mixed';
-      priority.title=[...priorities].join(' / ');priority.textContent=`Priority: ${priorities.size===1?[...priorities][0]:'Mixed'}`;body.insertBefore(priority,icons.nextSibling);
+      priority.hidden=!eligible.length;
+      const label=document.createElement('label');label.textContent='Matter priority ';
+      const select=document.createElement('select');select.setAttribute('aria-label','Selection priority');
+      if(priorities.size!==1){const mixed=new Option('Mixed','mixed');mixed.disabled=true;select.add(mixed);}
+      for(const value of ['high','medium','low','off'])select.add(new Option(value==='off'?'Off · no spending':value[0].toUpperCase()+value.slice(1),value));
+      select.value=priority.dataset.value;select.disabled=!this.canStage().ok||!eligible.some(v=>this.ownSelectable(v));select.onchange=()=>this.setSelectionPriority(select.value as Priority);
+      label.append(select);priority.append(label);body.insertBefore(priority,icons.nextSibling);
       if(views.length>1){
         const orders=views.map(v=>this.effectiveOrder(v)??{kind:'idle'} as Order);
         const summary=document.createElement('div');summary.id='selection-orders';summary.className='selection-value';
         summary.textContent=`Orders: ${new Set(orders.map(o=>JSON.stringify(o))).size===1?orderLabel(orders[0]):'Mixed'}`;body.insertBefore(summary,priority.nextSibling);
         const factories=views.filter(v=>!!this.types.get(v.type_key)?.production);
-        if(factories.length>1){const loops=new Set(factories.map(v=>factoryPlan(this,v).loop));const loop=document.createElement('div');loop.className='selection-value';loop.textContent=`Factory loop: ${loops.size>1?'Mixed':[...loops][0]?'On':'Off'}`;body.insertBefore(loop,summary.nextSibling);}
+        if(factories.length>1){const loops=new Set(factories.map(v=>factoryPlan(this,v).loop));const loop=document.createElement('div');loop.className='selection-value';loop.textContent=`Loop new items: ${loops.size>1?'Mixed':[...loops][0]?'On':'Off'}`;body.insertBefore(loop,summary.nextSibling);}
       }
       const groups=this.experience.groups();
       const memberships=views.map(v=>groups.filter(g=>g.members.some(id=>idKey(id)===idKey(v.id))).map(g=>g.id.slot).sort().join(', '));
       if(memberships.some(Boolean)){const group=document.createElement('div');group.id='selection-groups';group.className='selection-value';group.title=[...new Set(memberships)].map(s=>s||'ungrouped').join(' / ');group.textContent=`Groups: ${new Set(memberships).size===1?memberships[0]:'Mixed'}`;body.insertBefore(group,priority.nextSibling);}
-      if(views.some(v=>!!this.types.get(v.type_key)?.construction)){const note=document.createElement('small');note.textContent='Construction funding uses the target building’s priority.';body.append(note);}
+      if(views.some(v=>!!this.types.get(v.type_key)?.construction)){const note=document.createElement('small');note.textContent='Construction uses the building’s priority; Off pauses this constructor’s spending.';body.append(note);}
       const cancellable=views.filter(v=>this.ownSelectable(v)&&this.blueprintRef(v));
       if(cancellable.length){const cancel=document.createElement('button');cancel.id='cancel-blueprints';cancel.textContent=cancellable.some(v=>v.lifecycle==='site')?'Cancel selected construction':'Delete selected blueprints';cancel.title='Remove these plans and unfinished buildings; invested matter is lost. Undo restores an uncommitted change.';cancel.disabled=!this.canStage().ok;cancel.onclick=()=>this.cancelSelectedBlueprints();body.insertBefore(cancel,priority.nextSibling);}
     }

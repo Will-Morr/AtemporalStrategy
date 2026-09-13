@@ -1,0 +1,46 @@
+import {test,expect} from './fixtures.mjs';
+import {isolatedServer,isolatedPeripheral,players,revision,tile,seek,area} from './game-helpers.mjs';
+
+test('per-item loops, five-unit additions and shared spending controls survive construction',async({review},testInfo)=>{
+  test.setTimeout(120000);
+  const server=await(process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral:isolatedServer)(testInfo,c=>{c.match_defaults.max_tick=600;c.match_defaults.starting_matter=2000;});review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const units=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0).map(e=>({type:e.type_key,x:e.x,y:e.y})));
+  const constructor=units.find(e=>e.type==='constructor'),turret=units.find(e=>e.type==='turret');
+  await tile(a,turret);await expect(a.locator('#selection-body')).toContainText('Repair: 0.5 HP / tick · 1 HP / matter');
+  await a.getByRole('combobox',{name:'Selection priority'}).selectOption('off');
+  await expect(a.locator('#selection-priority')).toHaveAttribute('data-value','off');await review.capture('turret-repair-off-and-terrain',a);
+  const point=await a.evaluate(t=>window.atemporal.renderer.screen(t.x+.5,t.y+.5),constructor);await a.keyboard.down('Shift');await a.mouse.click(...point);await a.keyboard.up('Shift');
+  await expect(a.getByRole('combobox',{name:'Selection priority'})).toHaveValue('mixed');await review.capture('shared-mixed-spending-dropdown',a);
+  await a.getByRole('combobox',{name:'Selection priority'}).selectOption('medium');
+  await tile(a,units.find(e=>e.type==='miner'));await expect(a.getByRole('combobox',{name:'Selection priority'})).toBeHidden();await review.capture('blocky-player-miner',a);
+  await tile(a,constructor);
+  const build=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},true))return{x,y};});
+  await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'factory'}).click();await tile(a,build);await tile(a,build);
+  await a.getByRole('button',{name:'↻ Loop new items: Off',exact:true}).click();
+  await a.getByRole('button',{name:'Queue grunt',exact:true}).click({modifiers:['Shift']});
+  await expect(a.locator('.queue-icons')).toContainText('grunt ×5');await expect(a.getByRole('button',{name:'Loop queued grunt',exact:true})).toHaveAttribute('aria-pressed','true');
+  await a.getByRole('button',{name:'↻ Loop new items: On',exact:true}).click();
+  await a.getByRole('button',{name:'Queue scout',exact:true}).click();
+  await expect(a.getByRole('button',{name:'Loop queued scout',exact:true})).toHaveAttribute('aria-pressed','false');
+  await expect(a.getByRole('button',{name:'Loop queued grunt',exact:true})).toHaveAttribute('aria-pressed','true');
+  await a.getByRole('button',{name:'Remove one queued grunt',exact:true}).click();await expect(a.locator('.queue-icons')).toContainText('grunt ×4');
+  await a.getByRole('button',{name:'Loop queued grunt',exact:true}).click();await expect(a.getByRole('button',{name:'Loop queued grunt',exact:true})).toHaveAttribute('aria-pressed','false');
+  await a.keyboard.press('Control+z');await expect(a.getByRole('button',{name:'Loop queued grunt',exact:true})).toHaveAttribute('aria-pressed','true');
+  await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');
+  await a.keyboard.press('f');await tile(a,{x:constructor.x+4,y:constructor.y+2});await review.capture('blueprint-mixed-loop-queue',a);
+  await tile(a,constructor);await a.keyboard.press('c');await area(a,build);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await seek(a,10);await tile(a,build);
+  expect(await a.evaluate(()=>window.atemporal.selectedViews()[0].exact.production.pending_items.map(i=>[i.type_key,i.loop_enabled]))).toEqual([['grunt',true],['grunt',true],['grunt',true],['grunt',true],['scout',false]]);
+  await review.capture('construction-preserves-item-loops',a);
+  // Live entity queues resolve local item references as well as blueprint settings.
+  await a.getByRole('button',{name:'Queue miner',exact:true}).click({modifiers:['Shift']});await expect(a.locator('.queue-icons')).toContainText('miner ×5');
+  await a.getByRole('button',{name:'Loop queued miner',exact:true}).click();await a.getByRole('button',{name:'Remove one queued miner',exact:true}).click();
+  await a.getByRole('combobox',{name:'Selection priority'}).selectOption('off');
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,50);await tile(a,build);
+  const stopped=await a.evaluate(()=>{const v=window.atemporal.selectedViews()[0];return{paid:v.exact.paid_matter,priority:v.exact.priority,miners:v.exact.production.pending_items.filter(i=>i.type_key==='miner').map(i=>i.loop_enabled)}});
+  expect(stopped.priority).toBe('off');expect(stopped.miners).toEqual([true,true,true,true]);
+  await seek(a,80);await tile(a,build);expect(await a.evaluate(()=>window.atemporal.selectedViews()[0].exact.paid_matter)).toBe(stopped.paid);
+  await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,3);await seek(a,210);await tile(a,build);
+  expect(await a.evaluate(()=>window.atemporal.selectedViews()[0].lifecycle)).toBe('complete');await review.capture('completed-factory-item-loops',a);
+});

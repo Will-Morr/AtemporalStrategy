@@ -220,7 +220,11 @@
       "mining": null,
       "construction": null,
       "production": null,
-      "healing": null
+      "healing": null,
+      "self_repair": {
+        "hp_per_matter": 1.0,
+        "rate": 0.5
+      }
     },
     {
       "key": "wall",

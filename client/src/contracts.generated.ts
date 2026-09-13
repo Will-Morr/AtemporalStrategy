@@ -229,7 +229,7 @@ export type MemberEdit =
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "Priority".
  */
-export type Priority = "high" | "medium" | "low";
+export type Priority = "high" | "medium" | "low" | "off";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "CardinalDirection".
@@ -265,6 +265,11 @@ export type ProductionEdit =
   | {
       item_ids: DraftItemRef2[];
       kind: "remove_pending";
+    }
+  | {
+      enabled: boolean;
+      item_ids: DraftItemRef2[];
+      kind: "set_item_loop";
     }
   | {
       kind: "cancel_active";
@@ -512,6 +517,11 @@ export type ProductionEdit2 =
   | {
       item_ids: QueueItemId[];
       kind: "remove_pending";
+    }
+  | {
+      enabled: boolean;
+      item_ids: QueueItemId[];
+      kind: "set_item_loop";
     }
   | {
       kind: "cancel_active";
@@ -902,6 +912,7 @@ export interface BlueprintSettings {
   order: Order;
   priority: Priority;
   queue: string[];
+  queue_loop_flags?: boolean[];
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
@@ -1146,6 +1157,7 @@ export interface Production {
 export interface ActiveItem {
   awaiting_output: boolean;
   item_id: QueueItemId;
+  loop_enabled?: boolean;
   occurrence: number;
   paid_matter: number;
   type_key: string;
@@ -1164,6 +1176,7 @@ export interface OccurrenceCounter {
  */
 export interface QueueItem {
   item_id: QueueItemId;
+  loop_enabled?: boolean;
   type_key: string;
 }
 /**
@@ -1276,6 +1289,7 @@ export interface TypeDefinition {
   movement?: Movement | null;
   production?: ProductionCapability | null;
   provides_build_ability: boolean;
+  self_repair?: SelfRepair | null;
   shape: Shape;
   vision: number;
   weapon?: Weapon | null;
@@ -1313,6 +1327,14 @@ export interface Movement {
 export interface ProductionCapability {
   rate: number;
   recipes: string[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "SelfRepair".
+ */
+export interface SelfRepair {
+  hp_per_matter: number;
+  rate: number;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema

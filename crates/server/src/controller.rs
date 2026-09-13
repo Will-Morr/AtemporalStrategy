@@ -113,7 +113,11 @@ pub struct Controller {
 pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprint> {
     Ok(Fingerprint {
         schema_version: Version::default(),
-        sim_build: format!("atemporal-sim {}", env!("CARGO_PKG_VERSION")),
+        sim_build: format!(
+            "atemporal-sim {} rules {}",
+            env!("CARGO_PKG_VERSION"),
+            atemporal_sim::RULES_VERSION
+        ),
         target: std::env::consts::ARCH.to_string() + "-" + std::env::consts::OS,
         config_hash: identity::canonical_hash(config)?,
         content_hash: atemporal_content::content_hash(content)?,
@@ -1162,6 +1166,11 @@ impl Controller {
                 } => {
                     if settings.queue.len() > 65536 {
                         return Err("too many queued recipes".into());
+                    }
+                    if !settings.queue_loop_flags.is_empty()
+                        && settings.queue_loop_flags.len() != settings.queue.len()
+                    {
+                        return Err("queue loop flags must match the queued recipe count".into());
                     }
                     for id in blueprint_ids {
                         let key = state
@@ -2763,6 +2772,29 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn resume_refuses_previous_simulation_rules() {
+        let mut c = started(false, |_| {});
+        let token = c.tokens[0].clone().unwrap();
+        c.stop_and_archive(&token, "stop".into(), 0).unwrap();
+        let (archive, mut loaded) = Archive::open(&c.replay_root, &c.match_id).unwrap();
+        loaded.manifest.fingerprint.sim_build = "atemporal-sim 0.1.0".into();
+        let setup = atemporal_content::load_setup(&loaded.config_yaml).unwrap();
+        let err = Controller::resume(
+            setup,
+            c.content.clone(),
+            "/guide/".into(),
+            c.replay_root.clone(),
+            SimThread::spawn(),
+            c.match_id.clone(),
+            archive,
+            loaded,
+        )
+        .err()
+        .unwrap();
+        assert!(err.contains("build"), "{err}");
+    }
+
+    #[test]
     fn budgets_evict_regenerable_bodies_only_and_regenerate_on_demand() {
         let mut c = started(false, |_| {});
         c.memory_budget = 1;
@@ -2983,6 +3015,7 @@ pub(crate) mod tests {
         let configure = Command::ConfigureBlueprints {
             blueprint_ids: vec![id.clone()],
             settings: BlueprintSettings {
+                queue_loop_flags: vec![],
                 queue: vec![],
                 order: Order::Idle {},
                 priority: Priority::High,

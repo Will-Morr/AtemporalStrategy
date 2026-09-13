@@ -11,7 +11,7 @@
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "e498164407c1b0145c18148eb5271fe0d7dffa5f8e6de2e12d16a293fed6928a",
-      "content_hash": "790009b81e758ef5ffdceed077e2f6c3827ec2b103b82a59235dc2e28525f995"
+      "content_hash": "4c88251acfb053ebd5218a4d27c41258a1ab61d21a145c2ce37e8d2ec528f569"
     },
     "config": {
       "schema_version": 2,
@@ -236,7 +236,11 @@
           "mining": null,
           "construction": null,
           "production": null,
-          "healing": null
+          "healing": null,
+          "self_repair": {
+            "hp_per_matter": 1.0,
+            "rate": 0.5
+          }
         },
         {
           "key": "wall",

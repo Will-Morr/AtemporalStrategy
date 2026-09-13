@@ -136,8 +136,11 @@ The coordinator retains shared content/contracts and merges changes sequentially
 - [x] Integrate current main, pass the final 30-scenario browser suite and focused timeline scenarios, manually inspect full game frames and record actual verification limits.
 
 - [x] Consistent deletion for queued blueprints and unfinished structures, local validation for rebased blueprint drafts, and cancellation of newly placed blueprints in the same turn.
-- [x] Immediate group/priority/order feedback, mixed-selection summaries, ungrouped defaults without labels, constructor priority badges, yellow ore/gray depletion, floor-only fog and player-colored miners.
+- [x] Immediate group/priority/order feedback, mixed-selection summaries, ungrouped defaults without labels, bottom-panel shared priority controls, yellow ore/gray depletion, floor-only fog and player-colored miners.
 - [x] Smoothed slope plots with signed axes, readable narrow layouts and derivative regression checks.
+
+- [x] Per-item queue looping, five-unit Shift-click additions, shared High/Medium/Low/Off priority dropdown, and turret self-repair at half construction efficiency.
+- [x] Darkest walls / medium unseen floor / lightest seen floor, no battlefield priority badges, and blocky player-colored miners.
 
 ## Progressive replay
 

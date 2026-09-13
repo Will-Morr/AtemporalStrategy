@@ -394,11 +394,12 @@ impl Sim {
                     };
                     let ty = self.type_index(&self.state.blueprints[b].type_key)?;
                     let def = &self.content.types[ty];
-                    if !settings.queue.is_empty()
-                        && def
-                            .production
-                            .as_ref()
-                            .is_none_or(|p| settings.queue.iter().any(|k| !p.recipes.contains(k)))
+                    if (!settings.queue_loop_flags.is_empty()
+                        && settings.queue_loop_flags.len() != settings.queue.len())
+                        || !settings.queue.is_empty()
+                            && def.production.as_ref().is_none_or(|p| {
+                                settings.queue.iter().any(|k| !p.recipes.contains(k))
+                            })
                     {
                         outcome
                             .skipped
@@ -484,6 +485,7 @@ impl Sim {
                                     item_index as u32,
                                 )?,
                                 type_key: key.clone(),
+                                loop_enabled: p.loop_enabled,
                             });
                         }
                         Ok(out)
@@ -509,6 +511,18 @@ impl Sim {
                         },
                         ProductionEdit::RemovePending { item_ids } => {
                             p.pending_items.retain(|q| !item_ids.contains(&q.item_id));
+                        }
+                        ProductionEdit::SetItemLoop { item_ids, enabled } => {
+                            for item in &mut p.pending_items {
+                                if item_ids.contains(&item.item_id) {
+                                    item.loop_enabled = *enabled;
+                                }
+                            }
+                            if let Some(item) = &mut p.active_item
+                                && item_ids.contains(&item.item_id)
+                            {
+                                item.loop_enabled = *enabled;
+                            }
                         }
                         ProductionEdit::CancelActive {} => {
                             if let Some(active) = p.active_item.take() {

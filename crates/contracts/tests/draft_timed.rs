@@ -233,3 +233,30 @@ fn hybrid_advances_history_without_timed_elimination() {
         TimedStatus::HistoryExhausted
     );
 }
+
+#[test]
+fn blueprint_loop_flags_require_one_flag_per_recipe_or_an_empty_default() {
+    let mut draft = local_draft();
+    draft.commands[1].command = Command::ConfigureBlueprints {
+        blueprint_ids: vec![DraftItemRef::Draft {
+            local_id: "place".into(),
+            item_index: 0,
+        }],
+        settings: BlueprintSettings {
+            queue: vec!["grunt".into(), "scout".into()],
+            queue_loop_flags: vec![true],
+            order: Order::Idle {},
+            priority: Priority::Off,
+            loop_enabled: false,
+        },
+    };
+    assert!(resolve_local_references(&draft, 2, 0).is_err());
+    if let Command::ConfigureBlueprints { settings, .. } = &mut draft.commands[1].command {
+        settings.queue_loop_flags = vec![true, false];
+    }
+    assert!(resolve_local_references(&draft, 2, 0).is_ok());
+    if let Command::ConfigureBlueprints { settings, .. } = &mut draft.commands[1].command {
+        settings.queue_loop_flags.clear();
+    }
+    assert!(resolve_local_references(&draft, 2, 0).is_ok());
+}

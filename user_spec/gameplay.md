@@ -88,3 +88,7 @@ Constructors must not remain parked on a factory output indefinitely blocking pr
 ## Uncommitting while waiting
 
 Players may uncommit a submitted turn while waiting for the other players, recover their moves for editing, and commit again. The turn still closes immediately when all players commit; uncommit is unavailable once simulation starts. This should encourage early commitment without penalizing someone who immediately notices a missing action.
+
+## Turret repair and spending
+
+Turrets heal more slowly than they are constructed. Repair efficiency is half construction HP per matter (twice the matter cost per HP), as explicitly confirmed by the user. Turrets, factories and constructors all support priority, including Off to disable spending. Automatic self-repair is the current implementation interpretation of turret healing.

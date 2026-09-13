@@ -49,6 +49,10 @@
         "item_id": {
           "$ref": "#/$defs/QueueItemId"
         },
+        "loop_enabled": {
+          "default": false,
+          "type": "boolean"
+        },
         "occurrence": {
           "format": "uint32",
           "maximum": 4294967295,
@@ -281,6 +285,13 @@
         "queue": {
           "items": {
             "type": "string"
+          },
+          "type": "array"
+        },
+        "queue_loop_flags": {
+          "default": [],
+          "items": {
+            "type": "boolean"
           },
           "type": "array"
         }
@@ -3183,7 +3194,8 @@
       "enum": [
         "high",
         "medium",
-        "low"
+        "low",
+        "off"
       ],
       "type": "string"
     },
@@ -3330,6 +3342,30 @@
         {
           "additionalProperties": false,
           "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "item_ids": {
+              "items": {
+                "$ref": "#/$defs/DraftItemRef2"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "set_item_loop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "item_ids",
+            "enabled"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "kind": {
               "const": "cancel_active",
               "type": "string"
@@ -3407,6 +3443,30 @@
         {
           "additionalProperties": false,
           "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "item_ids": {
+              "items": {
+                "$ref": "#/$defs/QueueItemId"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "set_item_loop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "item_ids",
+            "enabled"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "kind": {
               "const": "cancel_active",
               "type": "string"
@@ -3424,6 +3484,10 @@
       "properties": {
         "item_id": {
           "$ref": "#/$defs/QueueItemId"
+        },
+        "loop_enabled": {
+          "default": false,
+          "type": "boolean"
         },
         "type_key": {
           "type": "string"
@@ -3778,6 +3842,24 @@
         "tie_policy",
         "draw_scoring",
         "time_penalty"
+      ],
+      "type": "object"
+    },
+    "SelfRepair": {
+      "additionalProperties": false,
+      "properties": {
+        "hp_per_matter": {
+          "format": "double",
+          "type": "number"
+        },
+        "rate": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "hp_per_matter",
+        "rate"
       ],
       "type": "object"
     },
@@ -5308,6 +5390,16 @@
         },
         "provides_build_ability": {
           "type": "boolean"
+        },
+        "self_repair": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SelfRepair"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "shape": {
           "$ref": "#/$defs/Shape"

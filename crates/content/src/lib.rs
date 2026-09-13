@@ -85,6 +85,10 @@ pub fn normalize_content(mut content: Content) -> Result<Content> {
                 return Err("duplicate recipe".into());
             }
         }
+        if let Some(h) = &t.self_repair {
+            positive(h.hp_per_matter, "self-repair efficiency")?;
+            nonnegative(h.rate, "self-repair rate")?;
+        }
         if let Some(h) = &t.healing {
             nonnegative(h.range, "healing range")?;
             positive(h.hp_per_matter, "healing efficiency")?;

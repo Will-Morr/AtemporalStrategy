@@ -128,7 +128,7 @@ export class Renderer {
     const g = c.getContext('2d')!;
     for (let y = 0; y < t.height; y++)
       for (let x = 0; x < t.width; x++) {
-        g.fillStyle = t.cells[y * t.width + x] === 'wall' ? '#2a2a2e' : '#5c5c62';
+        g.fillStyle = t.cells[y * t.width + x] === 'wall' ? '#25262b' : '#74747a';
         g.fillRect(x, y, 1, 1);
       }
     this.terrainCanvas = c;
@@ -163,7 +163,7 @@ export class Renderer {
     const visible = this.game.visibility();
     const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
     const cornerA=this.worldAt(0,64),cornerB=this.worldAt(width,height);
-    if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#080b10ed';ctx.fillRect(px,py,s+.5,s+.5); }
+    if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
     const views = this.game.entities();
     const byIndex = new Map(views.map(v => [v.index, v]));
     // Combat effects from events near the playhead (presentation only).
@@ -281,14 +281,13 @@ export class Renderer {
       box(-.39,-.32,.18,.69);box(.21,-.32,.18,.69);box(-.24,-.29,.48,.6);
       ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,v.type_key==='artillery'?-.49:-.39,.12,.43);
     } else if(v.type_key==='constructor') {box(-.28,-.25,.56,.55);ctx.fillStyle='#ffe28a';box(-.36,-.42,.12,.35);box(.24,-.42,.12,.35);box(-.17,-.09,.34,.12);box(-.06,-.2,.12,.34);}
-    else if(v.type_key==='miner') {triangle(.33,.29);box(-.22,-.2,.44,.27);ctx.fillStyle='#e1d9b5';circle(0,.19,.10);}
+    else if(v.type_key==='miner') {box(-.34,-.26,.15,.56);box(.19,-.26,.15,.56);box(-.24,-.25,.48,.52);box(-.32,-.36,.64,.13);ctx.fillStyle='#e1d9b5';box(-.13,-.15,.26,.09);}
     else if(v.type_key==='grinder') {box(-.26,-.12,.52,.5);ctx.fillStyle='#ffb69b';circle(-.2,-.24,.2);circle(.2,-.24,.2);}
     else {box(-.3,.14,.19,.25);box(.11,.14,.19,.25);triangle(.28,.23);ctx.fillStyle='#d7efff';circle(0,-.1,.12);}
     ctx.restore();ctx.globalAlpha=1;
     if(ghost){ctx.strokeStyle=color;ctx.setLineDash([3,2]);ctx.strokeRect(px,py,s,s);ctx.setLineDash([]);}
     const groups=this.groupLabels.get(idKey(v.id));
     if(s>=16 && groups){ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.fillText(groups,px+s-6,py+s+9);}
-    if(def?.construction && s>=20){const priority=this.game.effectivePriority(v);ctx.fillStyle='#15191f';ctx.fillRect(px-9,py,10,12);ctx.fillStyle=priority==='high'?'#ffd36a':priority==='low'?'#bac2ce':'#fff';ctx.font='bold 10px system-ui';ctx.fillText(priority[0].toUpperCase(),px-8,py+10);}
     const frac=Math.max(0,Math.min(1,v.hp/v.maxHp));
     if(v.lifecycle !== 'blueprint' && frac < .999999){ctx.fillStyle='#000b';ctx.fillRect(px,py-4,s,3);ctx.fillStyle=frac>.5?'#79dc9c':frac>.25?'#ffc46b':'#ff6375';ctx.fillRect(px,py-4,s*frac,3);}
     if(v.lifecycle==='site'){ctx.fillStyle='#000b';ctx.fillRect(px,py-8,s,3);ctx.fillStyle='#ffe28a';ctx.fillRect(px,py-8,s*Math.min(1,v.maxHp/(def?.max_hp??1)),3);}
@@ -319,7 +318,7 @@ export class Renderer {
       }
     }
     const visible=this.game.visibility();
-    if(!this.game.spectator) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#080b10ed';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
+    if(!this.game.spectator) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#48484f';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
     for (const v of views) {
       g.fillStyle = this.game.color(v.owner);
       g.fillRect(v.x * sx, v.y * sy, Math.max(2, sx), Math.max(2, sy));

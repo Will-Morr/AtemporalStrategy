@@ -11,7 +11,7 @@
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "4adebcf538f8d6e40083e77314c5de7882f7a0e30ad7a264c08a4bf0a2726cf0",
-      "content_hash": "f5e4aa7c7526dd54c76721c124932876726f37132fe02482638a62bb77300312"
+      "content_hash": "6f1a708c00a89bda2b5bcb91332ddf72226ae6fd6ca5b9a8c3e79e0cd201f5dc"
     },
     "config": {
       "schema_version": 2,
@@ -236,7 +236,11 @@
           "mining": null,
           "construction": null,
           "production": null,
-          "healing": null
+          "healing": null,
+          "self_repair": {
+            "hp_per_matter": 1.0,
+            "rate": 0.5
+          }
         },
         {
           "key": "wall",
@@ -607,7 +611,8 @@
               "occurrence": 0,
               "type_key": "grunt",
               "paid_matter": 15.0,
-              "awaiting_output": true
+              "awaiting_output": true,
+              "loop_enabled": false
             },
             "loop_enabled": false,
             "stored_order": {
@@ -1128,7 +1133,7 @@
     "minimum_end_tick": 0,
     "entity_dictionary": []
   },
-  "initial_hash": "ce3a3005e7c6b4b8ade29827fe28679bfdfa25019a9db5a720d9d38b0df4d843",
+  "initial_hash": "ed610ab537858664d5977dc0481ba1b11a3ed46adf79e1340dafae1562bdfa70",
   "expected": {
     "final_hash": null,
     "outcome": {

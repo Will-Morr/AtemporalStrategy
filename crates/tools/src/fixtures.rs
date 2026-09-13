@@ -595,6 +595,7 @@ pub fn generate() -> Result<()> {
     factory.production = Some(Production {
         pending_items: vec![],
         active_item: Some(ActiveItem {
+            loop_enabled: false,
             item_id: item.clone(),
             occurrence: 0,
             type_key: "grunt".into(),

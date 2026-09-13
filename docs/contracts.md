@@ -155,7 +155,8 @@ WorldState = {
 }
 Production = { pending_items, active_item?, loop_enabled, stored_order,
                output_tile, occurrence_counters, spawn_group: ControlGroupId | null }
-ActiveItem = { item_id, occurrence, type_key, paid_matter, awaiting_output }
+QueueItem = { item_id, type_key, loop_enabled }
+ActiveItem = { item_id, occurrence, type_key, paid_matter, awaiting_output, loop_enabled }
 
 WorkerMessage = Progress{job_id, revision, tick, end_tick}
               | Batch{job_id, revision, snapshots, checkpoints, stats, events}

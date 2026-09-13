@@ -29,6 +29,7 @@ enum ConsumerKind {
     Site(usize),
     Blueprint(usize),
     Factory(usize),
+    SelfRepair(usize),
     Heal { healer: usize, ally: usize },
 }
 struct Consumer {
@@ -473,7 +474,9 @@ impl Sim {
         // Construction: one consumer per blueprint/site with summed legal worker rates.
         let mut by_blueprint: Vec<(usize, Vec<usize>)> = vec![];
         for (i, intent) in intents.iter().enumerate() {
-            if let Some(b) = intent.construct {
+            if let Some(b) = intent.construct
+                && self.state.entities[i].priority != Priority::Off
+            {
                 match by_blueprint.iter_mut().find(|(bp, _)| *bp == b) {
                     Some((_, workers)) => workers.push(i),
                     None => by_blueprint.push((b, vec![i])),
@@ -526,6 +529,25 @@ impl Sim {
                 workers: vec![],
             });
         }
+        // Automatic repair is independent of weapons and order cooldowns.
+        for (i, e) in self.state.entities.iter().enumerate() {
+            if e.lifecycle != Lifecycle::Complete
+                || e.born_at_tick.is_some_and(|t| t >= self.state.tick)
+            {
+                continue;
+            }
+            if let Some(h) = &self.def(i).self_repair {
+                consumers.push(Consumer {
+                    kind: ConsumerKind::SelfRepair(i),
+                    priority: e.priority,
+                    demand: h
+                        .rate
+                        .min((self.def(i).max_hp - e.hp) / h.hp_per_matter)
+                        .max(0.0),
+                    workers: vec![],
+                });
+            }
+        }
         // Production: activate the next pending item, then demand at most the production rate.
         for i in 0..self.state.entities.len() {
             if self.state.entities[i].lifecycle != Lifecycle::Complete {
@@ -554,6 +576,7 @@ impl Sim {
                     type_key: item.type_key,
                     paid_matter: 0.0,
                     awaiting_output: false,
+                    loop_enabled: item.loop_enabled,
                 });
             }
             let Some(active) = prod.active_item.as_ref() else {
@@ -660,6 +683,12 @@ impl Sim {
                             self.state.players[player].counters.unit_spend += give;
                             self.note(player as u8, Activity::Construction);
                         }
+                        ConsumerKind::SelfRepair(i) => {
+                            healing[i] +=
+                                give * self.def(i).self_repair.as_ref().unwrap().hp_per_matter;
+                            self.state.players[player].counters.total_spend += give;
+                            self.note(player as u8, Activity::Construction);
+                        }
                         ConsumerKind::Heal { healer, ally } => {
                             let h = self.def(healer).healing.clone().unwrap();
                             healing[ally] += give * h.hp_per_matter;
@@ -689,6 +718,7 @@ impl Sim {
         match c.kind {
             ConsumerKind::Site(s)
             | ConsumerKind::Factory(s)
+            | ConsumerKind::SelfRepair(s)
             | ConsumerKind::Heal { healer: s, .. } => self.state.entities[s].owner,
             ConsumerKind::Blueprint(b) => self.state.blueprints[b].owner,
         }
@@ -1267,10 +1297,11 @@ impl Sim {
                     next_occurrence: active.occurrence + 1,
                 }),
             }
-            if prod.loop_enabled {
+            if active.loop_enabled {
                 prod.pending_items.push(QueueItem {
                     item_id: active.item_id,
                     type_key: active.type_key,
+                    loop_enabled: true,
                 });
             }
             self.set_occ(out, RESERVED);
@@ -1336,6 +1367,11 @@ impl Sim {
                                         item_index: index as u16,
                                     },
                                     type_key: key.clone(),
+                                    loop_enabled: s
+                                        .queue_loop_flags
+                                        .get(index)
+                                        .copied()
+                                        .unwrap_or(false),
                                 })
                                 .collect()
                         })

@@ -81,9 +81,15 @@ pub fn resolve_local_references(
             blueprint_ids,
             settings,
         } = &entry.command
-            && (blueprint_ids.len() > 65536 || settings.queue.len() > 65536)
         {
-            return Err("too many blueprint targets or recipes".into());
+            if blueprint_ids.len() > 65536 || settings.queue.len() > 65536 {
+                return Err("too many blueprint targets or recipes".into());
+            }
+            if !settings.queue_loop_flags.is_empty()
+                && settings.queue_loop_flags.len() != settings.queue.len()
+            {
+                return Err("queue loop flags must match the queued recipe count".into());
+            }
         }
         let index = u32::try_from(index).map_err(|_| "too many draft commands")?;
         let blueprint_ref = |reference: &DraftItemRef<BlueprintId>| -> Result<BlueprintId> {
@@ -231,6 +237,12 @@ pub fn resolve_local_references(
                     ProductionEdit::RemovePending { item_ids } => ProductionEdit::RemovePending {
                         item_ids: queue_refs(item_ids, factories)?,
                     },
+                    ProductionEdit::SetItemLoop { item_ids, enabled } => {
+                        ProductionEdit::SetItemLoop {
+                            item_ids: queue_refs(item_ids, factories)?,
+                            enabled: *enabled,
+                        }
+                    }
                     ProductionEdit::CancelActive {} => ProductionEdit::CancelActive {},
                 },
             },
