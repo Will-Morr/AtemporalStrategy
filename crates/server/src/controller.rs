@@ -520,6 +520,21 @@ impl Controller {
             .filter(|b| b.to_tick_exclusive <= base_tick)
             .cloned()
             .collect();
+        // Preserve authoritative diagnostics for the unchanged checkpoint prefix.
+        data.command_outcomes = parent
+            .command_outcomes
+            .iter()
+            .filter(|outcome| {
+                parent.turns.iter().any(|turn| {
+                    turn.tick < base_tick
+                        && turn
+                            .commands
+                            .iter()
+                            .any(|command| command.id == outcome.command_id)
+                })
+            })
+            .cloned()
+            .collect();
         data.turns = turns.clone();
         data.precedence = precedence.clone();
         data.started = Some(Instant::now());
@@ -614,7 +629,7 @@ impl Controller {
         data.outcome = Some(outcome);
         data.final_hash = final_hash;
         data.sim_duration_ms = sim_duration_ms;
-        data.command_outcomes = command_outcomes;
+        data.command_outcomes.extend(command_outcomes);
         data.timeline_index = timeline_index(&data.timeline, self.config.player_count);
         Some(data)
     }
@@ -1068,6 +1083,32 @@ impl Controller {
                 .filter(|(t, _)| (**t).is_multiple_of(width) || **t == to)
                 .map(|(_, s)| s.clone())
                 .collect(),
+        })
+    }
+
+    pub fn round_result(&self, revision: Revision) -> Result<ServerMessage> {
+        let data = self.revision(revision)?;
+        let mut totals = BTreeMap::<PlayerId, u64>::new();
+        for turn in &data.turns {
+            *totals.entry(turn.player).or_default() += turn.duration_ms.get();
+        }
+        Ok(ServerMessage::RoundResult {
+            revision,
+            round: data.round,
+            parent_revision: data.parent,
+            outcome: data.outcome.clone().ok_or("revision is not published")?,
+            timeline_index: data.timeline_index.clone(),
+            score: data.score.clone(),
+            timed: data.timed.clone(),
+            time_totals: totals
+                .into_iter()
+                .map(|(player_id, duration_ms)| PlayerTime {
+                    player_id,
+                    total_ms: duration_ms.try_into().unwrap_or_default(),
+                })
+                .collect(),
+            sim_duration_ms: data.sim_duration_ms.try_into().unwrap_or_default(),
+            command_outcomes: data.command_outcomes.clone(),
         })
     }
 

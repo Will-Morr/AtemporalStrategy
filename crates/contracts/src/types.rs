@@ -661,6 +661,9 @@ pub enum ClientMessage {
         from_tick: Tick,
         to_tick: Tick,
     },
+    GetRound {
+        revision: Revision,
+    },
     GetEvents {
         revision: Revision,
         from_tick: Tick,
@@ -764,6 +767,18 @@ pub enum ServerMessage {
     Commands {
         revision: Revision,
         turns: Vec<AcceptedTurn>,
+    },
+    RoundResult {
+        revision: Revision,
+        round: u32,
+        parent_revision: Option<Revision>,
+        outcome: Outcome,
+        timeline_index: Vec<TimelineBucket>,
+        score: Option<RoundScore>,
+        timed: Option<TimedAdjudication>,
+        time_totals: Vec<PlayerTime>,
+        sim_duration_ms: SafeInt,
+        command_outcomes: Vec<CommandOutcome>,
     },
     ControlGroups {
         revision: Revision,

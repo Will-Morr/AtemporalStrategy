@@ -374,6 +374,10 @@ async fn handle(
             );
             respond(tx, result);
         }
+        ClientMessage::GetRound { revision } => {
+            let result = app.controller.lock().unwrap().round_result(revision);
+            respond(tx, result);
+        }
         ClientMessage::GetCommands {
             revision,
             from_tick,
