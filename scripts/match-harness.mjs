@@ -47,7 +47,7 @@ export class Client {
   constructor(name, url) { this.name = name; this.url = url; this.waiters = []; this.unconsumed = []; this.token = null; }
   async open() {
     this.ws = new WebSocket(this.url);
-    await new Promise((ok, err) => { this.ws.onopen = ok; this.ws.onerror = err; });
+    await new Promise((ok, err) => { this.ws.onopen = ok; this.ws.onerror = e => err(new Error(`${this.name}: websocket ${this.url} failed: ${e.message ?? e.type}`)); });
     this.ws.onmessage = event => {
       const envelope = JSON.parse(event.data);
       this.instance = envelope.server_instance_id;

@@ -25,7 +25,7 @@ Failure injection for Gate 5 checks: `ATEMPORAL_FAIL_AT=after_turn_written|durin
 ```sh
 scripts/check.sh                  # fmt, workspace tests, strict clippy, client build, fixture drift
 node scripts/gate2-check.mjs      # real server + protocol: three rounds, rewrite, seeks, sizes → target/gate2-summary.json
-node scripts/match-check.mjs      # timed lock advancement + mid-match resume + history_exhausted, timed loss, time penalty, stop/archive → target/match-check-summary.json
+node scripts/match-check.mjs      # timed lock advancement + mid-match resume + history_exhausted, timed loss, time penalty, stop/archive, occupied port/routes/restart instance/archived-content guide → target/match-check-summary.json
 node scripts/gate5-check.mjs      # failure injection: kills at four points, duplicate commits, disk-full; each recovers the baseline hash → target/gate5-summary.json
 ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --replays target/ui-replays' \
   npm run ui:review --prefix client -- --grep slice --project=desktop-chromium

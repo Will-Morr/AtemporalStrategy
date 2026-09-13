@@ -172,6 +172,46 @@ const scenarios = {
     again.close(); server.child.kill('SIGTERM'); await server.exited;
     results[name] = { round2_commit_to_publish_ms: publishMs, terminal: rev2.outcome.terminal_state_tick, score: rev2.score.entries.map(e => ({ side: e.side_id, raw: e.raw_total, adjusted: e.adjusted_total })), time_ratios: ratios, stop_from_second_slot: stopFromB ? stopFromB.message : 'no rejection message', archive: archivedS.archive, resumed_phase: welcome.phase, resumed_revision: rev.revision, turns: commands.turns.length, snapshot_interval: cfg.snapshot_interval };
   },
+
+  // CLI port and routes: an occupied port fails instead of moving, assets/guide/WebSocket share
+  // one origin, a restart at the same address is a fresh server instance, and a resumed match
+  // serves the guide generated from its archived content even when the CLI names other content.
+  async port_routes_and_guide() {
+    const name = 'port_routes_and_guide';
+    await rm(`${work}/${name}`, { recursive: true, force: true });
+    const server = await startServer(name, []);
+    const port = server.port;
+    const occupied = await startServer(name, ['--port', port]).then(() => 'started', e => String(e));
+    assert(/cannot bind port/.test(occupied), `occupied port must fail: ${occupied}`);
+    const http = async path => { const r = await fetch(`http://127.0.0.1:${port}${path}`); return { status: r.status, type: r.headers.get('content-type'), body: await r.text() }; };
+    const index = await http('/'), guide = await http('/guide/'), content = await http('/guide/content.json'), manifest = await http('/guide/manifest.json'), missing = await http('/guide/../manifest.json');
+    assert(index.status === 200 && /text\/html/.test(index.type) && /<script/.test(index.body), 'client index served');
+    assert(guide.status === 200 && /text\/html/.test(guide.type), 'guide served');
+    assert(content.status === 200 && manifest.status === 200 && missing.status === 404, 'guide files served, traversal rejected');
+    const { a, b, s, welcome } = await lobby(server.url);
+    assert(welcome.guide_url === '/guide/' && JSON.parse(manifest.body).content_hash === welcome.fingerprint.content_hash, 'guide manifest matches the loaded content');
+    const firstInstance = a.instance;
+    const matchId = readdirSync(`${work}/${name}/replays`)[0];
+    const tokens = [a.token, b.token];
+    for (const c of [a, b, s]) c.close();
+    server.child.kill('SIGTERM'); await server.exited;
+    // Different content on the CLI must not leak into a resumed match or its guide.
+    const other = JSON.parse(await readFile(`${root}config/content.yaml`, 'utf8'));
+    other.types.find(t => t.key === 'grunt').max_hp += 1;
+    await writeFile(`${work}/${name}/other-content.yaml`, JSON.stringify(other));
+    const resumed = await startServer(name, ['--port', port, '--resume', matchId, '--content', `${work}/${name}/other-content.yaml`, '--guide-dir', `${work}/${name}/resumed-guide`]);
+    const again = new Client('A2', `ws://127.0.0.1:${port}/ws`); await again.open();
+    const w2 = await again.hello(tokens[0]);
+    assert(again.instance !== firstInstance, 'restart is a fresh server instance');
+    assert(w2.phase !== 'lobby' && w2.fingerprint.content_hash === welcome.fingerprint.content_hash, 'resumed under the archived content');
+    const manifest2 = JSON.parse((await http('/guide/manifest.json')).body);
+    const content2 = JSON.parse((await http('/guide/content.json')).body);
+    assert(manifest2.content_hash === welcome.fingerprint.content_hash, 'resumed guide generated from archived content');
+    const gruntHp = doc => doc.types.find(t => t.key === 'grunt').max_hp;
+    assert(gruntHp(content2) === gruntHp(JSON.parse(content.body)) && gruntHp(content2) !== gruntHp(other), 'guide stats match the archived content, not the CLI file');
+    again.close(); resumed.child.kill('SIGTERM'); await resumed.exited;
+    results[name] = { port, occupied_port_error: occupied.split('\n').find(l => /cannot bind/.test(l)), routes: { index: index.status, guide: guide.status, content: content.status, traversal: missing.status }, instance_changed: again.instance !== firstInstance, resumed_phase: w2.phase, guide_content_hash: manifest2.content_hash.slice(0, 12) };
+  },
 };
 
 await buildServer();

@@ -38,7 +38,7 @@ After Gate 2, the coordinator owns shared contracts/content/integration and star
   - [ ] Completed-only survival checks with recovery; inactivity/absolute horizon without elimination early-stop.
   - [ ] Compact revision entity dictionaries, events/stats, canonical hashes and full/checkpoint replay equivalence.
   - [ ] Release benchmarks at 100/500/2,000 entities and the full configured cap.
-- [ ] Complete match controller and archive — server agent after Gate 2
+- [x] Complete match controller and archive — server agent after Gate 2
   - [x] Lobby usernames/colors/team selection, live roster, slots/tokens/spectators and stale-start protection.
   - [x] Sim adapter scheduling, bounded channels, exact-state LRU, job errors/cancellation and stale-result rejection.
   - [x] Simultaneous commit validation/idempotency, sequential draft references, control limits and policy validation.
@@ -46,8 +46,8 @@ After Gate 2, the coordinator owns shared contracts/content/integration and star
   - [x] Timed constructor/factory finalization and scoreboard survivor/lead/target/draw/tie/time-penalty reducers (checked end to end by `scripts/match-check.mjs`; the reducers live in `crates/contracts`).
   - [x] No scoreboard round cap; manual stop/archive with no invented result or extra score.
   - [x] Atomic turn/round publication, pending-round recovery, replay/resume CLI and timing persistence.
-  - [ ] CLI port, same-origin routes, stable-address restart and fresh bootstrap/server-instance detection.
-  - [ ] One startup guide-generation invocation using loaded content, also used for archived-content guides.
+  - [x] CLI port, same-origin routes, stable-address restart and fresh bootstrap/server-instance detection (checked by the `port_routes_and_guide` scenario in `scripts/match-check.mjs`).
+  - [x] One startup guide-generation invocation using loaded content, also used for archived-content guides (a resumed match regenerates the guide from its pinned content copy; same scenario).
 - [ ] Complete browser experience — client agent after Gate 2
   - [ ] Landing-page guide link, profile/color/team inputs and full live roster.
   - [ ] Concise guide prose/layout and generated readable unit/building stats.
