@@ -17,7 +17,7 @@ export default defineConfig({
   expect:{timeout:5000},
   reporter:[['list'],['junit',{outputFile:resolve(artifacts,'junit.xml')}],['json',{outputFile:resolve(artifacts,'results.json')}],['html',{outputFolder:resolve(artifacts,'report'),open:'never'}]],
   use:{baseURL:process.env.ATEMPORAL_UI_RESOLVED_URL,headless:true,trace:'on',screenshot:'on',video:'retain-on-failure',locale:'en-US',timezoneId:'UTC',colorScheme:'dark',reducedMotion:'reduce',deviceScaleFactor:1},
-  projects:[{name:'desktop-chromium',use:{browserName:'chromium',viewport:{width:1440,height:1000}}},{name:'narrow-chromium',use:{browserName:'chromium',viewport:{width:390,height:844}}}],
+  projects:[{name:'desktop-chromium',use:{browserName:'chromium',viewport:{width:1920,height:1080}}}],
   webServer:process.env.ATEMPORAL_UI_BASE_URL?undefined:{
     command:process.env.ATEMPORAL_UI_SERVER_COMMAND??'npm run build --prefix client && cargo run --release -q -p atemporal-server -- --seed 42 --replays target/ui-replays',cwd:root,
     url:process.env.ATEMPORAL_UI_RESOLVED_URL,env:{PORT:process.env.ATEMPORAL_UI_PORT},

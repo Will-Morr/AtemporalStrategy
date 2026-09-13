@@ -18,7 +18,7 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
     await expect(row.locator('td').nth(2)).toHaveText(String(type.matter_cost));
     await expect(row.locator('td').nth(3)).toHaveText(type.kind==='missile'?'— (inventory)':String(type.max_hp));
   }
-  // Tables may scroll internally; the page itself must fit a narrow viewport.
+  // Tables may scroll internally; the page itself must fit the desktop viewport.
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await review.capture('guide');
   await page.getByRole('link',{name:'Back to lobby'}).click();await expect(page).toHaveURL(/\/$/);

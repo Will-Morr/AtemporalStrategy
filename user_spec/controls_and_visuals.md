@@ -87,3 +87,7 @@ Show a clear, prominent scoreboard with the current count of timelines won by ea
 Ore locations and remaining values remain visible through fog of war. Enemy-unit visibility still follows normal vision rules.
 
 Provide quick controls to keep only, or remove, a unit/building type from the selection. Late-game players should be able to select their army quickly for an attack order.
+
+## Supported display target
+
+The game targets desktop play. Mobile support is not required; use normal desktop window sizes for the required browser scenarios and full-frame visual review. Earlier narrow/mobile testing was an assistant workflow choice, not a product requirement.

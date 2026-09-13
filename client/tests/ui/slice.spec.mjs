@@ -440,12 +440,10 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
     const popup = a.waitForEvent('popup'); await a.getByRole('link',{name:'Guide',exact:true}).click(); const guide = await popup;
     await expect(guide.getByRole('heading',{name:'Browser controls'})).toBeVisible();
     await review.capture('guide-actual-controls-desktop',guide);
-    await guide.setViewportSize({width:390,height:844});
-    await review.capture('guide-actual-controls-narrow',guide);
     await guide.getByRole('heading',{name:'Browser controls'}).scrollIntoViewIfNeeded();
-    await guide.screenshot({path:testInfo.outputPath('guide-controls-narrow-viewport.png')});
+    await guide.screenshot({path:testInfo.outputPath('guide-controls-desktop-viewport.png')});
     await guide.getByRole('heading',{name:'Graphs, rounds and reconnecting'}).scrollIntoViewIfNeeded();
-    await guide.screenshot({path:testInfo.outputPath('guide-inspection-narrow-viewport.png')});
+    await guide.screenshot({path:testInfo.outputPath('guide-inspection-desktop-viewport.png')});
     // Keep the existing tabs open at the same address while replacing the actual server.
     await stop(); await start();
     await expect(a.locator('#connection')).toContainText('Server restarted',{timeout:15000});

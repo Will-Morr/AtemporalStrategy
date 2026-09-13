@@ -152,7 +152,7 @@ The coordinator retains shared content/contracts and merges changes sequentially
 
 - [ ] Measure an actual 2,000-live-entity controller/browser workload at non-sample ticks, including peripheral replication, cold seeks and peak memory. The authored simulation benchmark reaches 2,000; the previously recorded end-to-end congestion scenario reached 1,264, so it does not close this scale-specific review item.
 
-The browser feature, multiplayer/single-order/recovery, and peripheral implementation checklists are complete. Gate 3 evidence combines the release engine one/four-thread and cold/warm/evicted-flow-cache test with real peripheral checkpoint replay, restart and revision-body eviction/regeneration. A full high-population peripheral matrix is part of the scale check above. Firefox/WebKit, touchscreen-only input and WAN conditions remain optional coverage extensions, not verified capabilities. See [integration verification](integration-verification.md) for actual checks and limits.
+The browser feature, multiplayer/single-order/recovery, and peripheral implementation checklists are complete. Gate 3 evidence combines the release engine one/four-thread and cold/warm/evicted-flow-cache test with real peripheral checkpoint replay, restart and revision-body eviction/regeneration. A full high-population peripheral matrix is part of the scale check above. Firefox/WebKit and WAN conditions remain optional coverage extensions, not verified capabilities. Mobile and touchscreen-only play are outside the required scope. See [integration verification](integration-verification.md) for actual checks and limits.
 
 ## Current playtest follow-up
 

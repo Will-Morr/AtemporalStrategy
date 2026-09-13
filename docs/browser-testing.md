@@ -16,7 +16,7 @@ ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --seed 42 --replays
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.
 
-Every default run allocates a local port, builds the browser assets and starts the real game server (which generates its guide from effective content), runs desktop (1440×1000) and narrow (390×844) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
+Every default run allocates a local port, builds the browser assets and starts the real game server (which generates its guide from effective content), runs desktop (1920×1080) cases, and closes its server/browser. It refuses to reuse an unrelated server on its selected port. Separate worktrees and processes get separate artifact directories and browser profiles. A port collision after allocation is reported as a failed start rather than attaching to another agent's app. Use an explicit port when needed:
 
 ```sh
 ATEMPORAL_UI_PORT=8090 npm run ui:review --prefix client
@@ -34,6 +34,8 @@ npm run ui:review --prefix client -- --headed
 ```
 
 A headed run requires a display. Headless Chromium renders the actual page, executes JavaScript and handles canvas; it is not a DOM-only emulator. Adding Firefox/WebKit projects is optional and requires installing those browsers.
+
+Mobile support is outside the required scope. The browser matrix uses a normal 1080p desktop viewport at device scale 1; older narrow-screen runs in the integration log are historical evidence.
 
 ## Review artifacts and iteration
 
@@ -78,7 +80,7 @@ Add real scenarios to `client/tests/ui/*.spec.mjs` as their controls land; norma
 
 | Scenario | Evidence required before claiming coverage | Current state |
 | --- | --- | --- |
-| Landing and guide | Keyboard link activation, generated stats, narrow layout, screenshot inspection | Real lobby and generated guide |
+| Landing and guide | Keyboard link activation, generated stats, desktop layout, screenshot inspection | Real lobby and generated guide |
 | Independent browser identities | Separate storage across reloads and context evidence | Real lobby storage isolation; gameplay scenarios claim slots |
 | Lobby and spectator | Claim actual slots, update username/color/team and observe all clients; spectator restrictions | Real 2–4-player lobbies, profiles and team labels |
 | Timeline and drafts | Pause at exact tick, enter actual orders, undo/replace future orders, capture selection and timeline | Slice and playtest scenarios |
@@ -122,20 +124,20 @@ The desktop app's built-in `@Browser` remains an optional separate connection. N
 
 ## Final browser handoff
 
-See [integration verification](integration-verification.md) for the tested variants, performance workload, manually inspected full-frame evidence and actual limits. `playtest.spec.mjs`, `variants.spec.mjs` and the real-lobby guide tests supplement `slice.spec.mjs`; the narrow gameplay cases exercise a scrolling command deck. Historical round metadata loads without eagerly regenerating old replay bodies; selecting a round or opening its detailed comparison loads those data on demand.
+See [integration verification](integration-verification.md) for the tested variants, performance workload, manually inspected full-frame evidence and actual limits. `playtest.spec.mjs`, `variants.spec.mjs` and the real-lobby guide tests supplement `slice.spec.mjs`; the gameplay cases exercise the desktop command deck. Historical round metadata loads without eagerly regenerating old replay bodies; selecting a round or opening its detailed comparison loads those data on demand.
 
 The playtest-polish scenarios additionally cover shared-browser player identities, explicit rejoin, uncommit with restored undo/redo, factory loop and queue editing during construction, hidden enemy blueprints at visible tiles, hybrid history advancement/recovery, and exact per-player latest-write markers. See the current pass in [integration verification](integration-verification.md); retain earlier failed runs as diagnosis evidence.
 
 
-`progressive.spec.mjs` checks direct-controller and input-only-peripheral previews in both viewports: exact non-sample seeking, typing while progress advances, playback at the frontier, refresh, disabled planning and equality with the final replay. Its isolated processes use `ATEMPORAL_PREVIEW_TEST_DELAY_MS` to keep the long tail observable on fast machines; the production default adds no delay. The project timeout also gives built-in trace finalization up to 120 seconds; the review fixture has its own cleanup budget. Revision helpers wait for publication, so existing scenarios cannot accidentally count a provisional state as a verified result.
+`progressive.spec.mjs` checks direct-controller and input-only-peripheral previews in the desktop viewport: exact non-sample seeking, typing while progress advances, playback at the frontier, refresh, disabled planning and equality with the final replay. Its isolated processes use `ATEMPORAL_PREVIEW_TEST_DELAY_MS` to keep the long tail observable on fast machines; the production default adds no delay. The project timeout also gives built-in trace finalization up to 120 seconds; the review fixture has its own cleanup budget. Revision helpers wait for publication, so existing scenarios cannot accidentally count a provisional state as a verified result.
 
 
 `feedback.spec.mjs` covers factory/turret blueprint deletion, undo/redo and removal of dependent settings, shared/mixed priority and group feedback, rebasing before a blueprint existed without submitting an invalid commit, cancellation of an active turret construction site, exhausted ore and smoothed mining-rate plots. It uses the peripheral when `ATEMPORAL_UI_PERIPHERAL=1`; direct and replicated verification evidence is recorded in the integration log. The pure slope checks run with `npm test --prefix client` and cover irregular spacing, negative/zero rates, missing samples and singleton windows.
 
 ## Production, repair and scoreboard scenarios
 
-`production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real five-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop/narrow viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.
+`production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real five-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.
 
 ## Missile silo scenarios
 
-`missiles.spec.mjs` builds and configures a silo through real inputs, checks all three production recipes, manual launch queues and cancellation, range/impact previews, satellite flight and destination vision, blast results, stockpiling, refresh and replay rewrites. A second scenario supplies automatic targeting with an allied spotter, then rewrites the automatic plan into stored ammunition. Both run through the controller or native peripheral on desktop/narrow Chromium. The tests compare preview flight times with resolved arrivals and play a one-tick satellite flight between compact replay samples. Capture and inspect the full placement, stockpile, targeting and flight frames; a passing control assertion alone does not establish visual quality.
+`missiles.spec.mjs` builds and configures a silo through real inputs, checks all three production recipes, manual launch queues and cancellation, range/impact previews, satellite flight and destination vision, blast results, stockpiling, refresh and replay rewrites. A second scenario supplies automatic targeting with an allied spotter, then rewrites the automatic plan into stored ammunition. Both run through the controller or native peripheral on desktop Chromium. The tests compare preview flight times with resolved arrivals and play a one-tick satellite flight between compact replay samples. Capture and inspect the full placement, stockpile, targeting and flight frames; a passing control assertion alone does not establish visual quality.
