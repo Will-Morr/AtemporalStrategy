@@ -80,7 +80,7 @@ fn melee_reaches_diagonal_neighbors_only() {
     let miner = w.spawn(1, "miner", 2, 2);
     let run = w.run();
     assert_eq!(run.attacks(&grinder)[0], 0);
-    assert_eq!(entity(&w.at(1), &miner).hp, 30.0);
+    assert_eq!(entity(&w.at(1), &miner).hp, 35.0);
 
     let mut far = World::new(&OPEN);
     let grinder = far.spawn(0, "grinder", 1, 1);

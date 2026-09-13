@@ -14,7 +14,7 @@ pub use output::{Output, RunResult};
 pub use world::Sim;
 
 /// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
-pub const RULES_VERSION: u32 = 3;
+pub const RULES_VERSION: u32 = 4;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

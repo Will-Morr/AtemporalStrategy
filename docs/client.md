@@ -147,3 +147,9 @@ Factory queues capture the Loop new items mode when a recipe is added. Each pend
 ## Match scoreboard
 
 A persistent header scoreboard shows each player's completed timeline wins in their chosen color, with large counts, Leading/Winner labels and the configured win target. Totals follow the latest published revision's ancestry and remain stable when seeking past ticks/rounds or watching a running simulation. The visible label states the last counted round (or pending result). Missing ancestry displays a loading count rather than an incorrect zero. Team points, draw awards and time penalties remain distinct from individual timeline wins; leadership/winner labels use authoritative match scores. The camera reserves the actual header height on desktop and narrow layouts so the scoreboard does not hide selectable map tiles.
+
+### Ore and selection helpers
+
+Ore deposits remain yellow through fog and depleted deposits stay gray on both map and minimap. Hover a deposit to read remaining matter at the viewed tick; interpolated replay values are labeled sampled. Enemy entities and combat effects retain vision filtering.
+
+Selection offers All army (all owned completed mobile combat units at the viewed tick, including offscreen units) and All units (owned units, structures and plans). Each type chip keeps only that owner/type when clicked; its × drops that type. Filtering clears recalled-group routing, so subsequent orders affect exactly the retained entities. These helpers do not stage orders.

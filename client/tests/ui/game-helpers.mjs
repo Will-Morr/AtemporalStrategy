@@ -44,8 +44,8 @@ export async function area(p,t){const point=await p.evaluate(t=>{const r=window.
 
 
 // Exercise the same real input scenario through inputs-only replication when requested.
-export async function isolatedPeripheral(testInfo, edit = () => {}, env = {}) {
-  const controller = await isolatedServer(testInfo, edit, () => {}, ['--inputs-only'], env);
+export async function isolatedPeripheral(testInfo, edit = () => {}, env = {}, editContent = () => {}) {
+  const controller = await isolatedServer(testInfo, edit, editContent, ['--inputs-only'], env);
   const root = new URL('../../../', import.meta.url).pathname;
   const probe = createServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r));
   const port = probe.address().port; await new Promise(r => probe.close(r));

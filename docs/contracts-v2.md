@@ -65,4 +65,4 @@ All players' fixed `round_inputs` are delivered when a round starts, before its 
 
 Content may provide `self_repair { hp_per_matter, rate }`, with rate in matter per tick. Complete entities automatically request at most the missing HP divided by efficiency, capped by rate. This consumer shares the owner's matter allocation and priority tiers, is independent of weapon cooldowns, and applies with simultaneous damage. Default turrets restore 0.5 HP/tick at 1 HP/matter, versus construction's 2 HP/matter. Sites grow through construction and do not self-repair.
 
-The simulator rules stamp is now 3. This intentionally rejects archive resume/peripheral replication from the earlier global-loop ruleset instead of silently replaying it with different rules. New archives and replicas share the new stamp; old binaries remain necessary to resume older matches.
+The simulator rules stamp is now 4. This intentionally rejects archive resume/peripheral replication from the earlier work-targeting rulesets instead of silently replaying it with different rules. New archives and replicas share the new stamp; old binaries remain necessary to resume older matches.

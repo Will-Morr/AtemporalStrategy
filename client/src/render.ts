@@ -152,6 +152,10 @@ export class Renderer {
     const [ox, oy] = this.screen(0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(terrain, ox, oy, t.width * s, t.height * s);
+    const visible = this.game.visibility();
+    const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
+    const cornerA=this.worldAt(0,this.headerHeight),cornerB=this.worldAt(width,height);
+    if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
     // Ore stays yellow until exhausted; spent deposits are unambiguously gray.
     for (let i = 0; i < this.game.initialOre.length; i++) {
       const initial = this.game.initialOre[i];
@@ -162,10 +166,17 @@ export class Renderer {
       ctx.fillStyle = remaining <= 0 ? '#85858b' : `rgba(255,205,56,${0.35 + 0.6 * Math.max(0, remaining / initial)})`;
       ctx.fillRect(px + 1, py + 1, s - 2, s - 2);
     }
-    const visible = this.game.visibility();
-    const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
-    const cornerA=this.worldAt(0,this.headerHeight),cornerB=this.worldAt(width,height);
-    if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
+    const h = this.game.hover;
+    const readout = document.getElementById('ore-readout')!;
+    const oreIndex = h ? h.y * t.width + h.x : -1;
+    readout.hidden = !h || !(this.game.initialOre[oreIndex] > 0);
+    if (!readout.hidden && h) {
+      const exact = this.game.exact?.revision === this.game.current && this.game.exact.tick === Math.floor(this.game.playhead);
+      readout.textContent = `Ore: ${this.game.oreAt(oreIndex).toLocaleString(undefined, {maximumFractionDigits: 1})} matter${exact ? '' : ' · sampled'}`;
+      const [px, py] = this.screen(h.x + 1, h.y);
+      readout.style.left = `${Math.max(8, Math.min(width - 240, px + 8))}px`;
+      readout.style.top = `${Math.max(this.headerHeight + 8, Math.min(height - 35, py - 30))}px`;
+    }
     const views = this.game.entities();
     const byIndex = new Map(views.map(v => [v.index, v]));
     // Combat effects from events near the playhead (presentation only).
@@ -313,14 +324,14 @@ export class Renderer {
     g.imageSmoothingEnabled = false;
     g.drawImage(terrain, 0, 0, width, height);
     const sx = width / t.width, sy = height / t.height;
+    const visible=this.game.visibility();
+    if(!this.game.spectator) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#48484f';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
     for (let i = 0; i < this.game.initialOre.length; i++) {
       if (this.game.initialOre[i] > 0) {
         g.fillStyle = this.game.oreAt(i)<=0 ? '#85858b' : '#ffcd38';
         g.fillRect((i % t.width) * sx, Math.floor(i / t.width) * sy, sx, sy);
       }
     }
-    const visible=this.game.visibility();
-    if(!this.game.spectator) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#48484f';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
     for (const v of views) {
       g.fillStyle = this.game.color(v.owner);
       g.fillRect(v.x * sx, v.y * sy, Math.max(2, sx), Math.max(2, sy));

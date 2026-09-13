@@ -82,8 +82,8 @@
       "key": "grinder",
       "kind": "unit",
       "shape": "circle",
-      "matter_cost": 25.0,
-      "max_hp": 65.0,
+      "matter_cost": 100.0,
+      "max_hp": 275.0,
       "counts_for_survival": false,
       "provides_build_ability": false,
       "movement": {
@@ -93,8 +93,8 @@
       "vision": 5.0,
       "weapon": {
         "range": 1.4142135623730951,
-        "damage": 30.0,
-        "cooldown": 3,
+        "damage": 25.0,
+        "cooldown": 5,
         "indirect": false,
         "visual_style": "melee"
       },

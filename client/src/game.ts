@@ -583,6 +583,15 @@ export class Game {
     return this.entities().filter(e => e.id && this.selection.has(idKey(e.id)));
   }
 
+  selectViews(views: EntityView[]): void {
+    this.selection = new Set(views.map(v => idKey(v.id)));
+    this.recalledGroup = null;
+    this.mode = {kind: 'none'};
+    this.updateMode();
+    this.updatePanels();
+    $('map').focus();
+  }
+
   canStage(): { ok: boolean; reason: string } {
     if (this.preview) return {ok:false,reason:'Simulation is still running. Replay is read-only until verification finishes.'};
     if (this.replayErrors.has(this.current)) return {ok: false, reason: 'Replay verification failed. Restart the peripheral and refresh.'};
@@ -771,7 +780,7 @@ export class Game {
       this.drag = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY };
     });
     window.addEventListener('mousemove', e => {
-      if (e.target === map) this.hover = this.renderer.tileAt(e.clientX, e.clientY);
+      this.hover = e.target === map ? this.renderer.tileAt(e.clientX, e.clientY) : null;
       if (this.drag) {
         this.drag.x1 = e.clientX;
         this.drag.y1 = e.clientY;
@@ -1190,7 +1199,16 @@ export class Game {
       const icons=document.createElement('div'); icons.id='selection-icons';
       const counts=new Map<string,{v:EntityView,count:number}>();
       for(const v of views){const key=`${v.owner}:${v.type_key}`;const entry=counts.get(key);if(entry)entry.count++;else counts.set(key,{v,count:1});}
-      for(const {v,count} of counts.values()){const chip=document.createElement('span');chip.className='unit-chip';chip.title=`${count} ${v.type_key}`;chip.append(unitIcon(v.type_key,this.color(v.owner)),document.createTextNode(`×${count}`));icons.append(chip);}
+      for(const {v,count} of counts.values()) {
+        const chip=document.createElement('span'); chip.className='unit-chip';
+        const matches=(e:EntityView)=>e.owner===v.owner && e.type_key===v.type_key;
+        const only=document.createElement('button'); only.setAttribute('aria-label',`Only ${v.type_key}`); only.title=`Keep only ${this.name(v.owner)} ${v.type_key}s selected`;
+        only.append(unitIcon(v.type_key,this.color(v.owner)),document.createTextNode(`${v.type_key} ×${count}`));
+        only.onclick=()=>this.selectViews(this.selectedViews().filter(matches));
+        const remove=document.createElement('button'); remove.textContent='×'; remove.setAttribute('aria-label',`Remove ${v.type_key} from selection`); remove.title=`Drop ${v.type_key}s from selection`;
+        remove.onclick=()=>this.selectViews(this.selectedViews().filter(e=>!matches(e)));
+        chip.append(only,remove); icons.append(chip);
+      }
       body.append(icons);
       if(views.length===1){const v=views[0],t=this.types.get(v.type_key)!;const title=document.createElement('strong');title.textContent=`${v.type_key} · ${v.lifecycle==='site'?'Under construction':v.lifecycle==='blueprint'?'Planned':this.name(v.owner)}`;body.append(title);
         const stats=document.createElement('div');stats.id='unit-stats';stats.className='unit-stats';
@@ -1227,6 +1245,18 @@ export class Game {
       const cancellable=views.filter(v=>this.ownSelectable(v)&&this.blueprintRef(v));
       if(cancellable.length){const cancel=document.createElement('button');cancel.id='cancel-blueprints';cancel.textContent=cancellable.some(v=>v.lifecycle==='site')?'Cancel selected construction':'Delete selected blueprints';cancel.title='Remove these plans and unfinished buildings; invested matter is lost. Undo restores an uncommitted change.';cancel.disabled=!this.canStage().ok;cancel.onclick=()=>this.cancelSelectedBlueprints();body.insertBefore(cancel,priority.nextSibling);}
     }
+    const helpers=document.createElement('div'); helpers.id='selection-helpers';
+    for(const [label,army] of [['All army',true],['All units',false]] as const) {
+      const button=document.createElement('button'); button.textContent=label;
+      button.title=army?'Select all your mobile combat units at this tick, including offscreen units':'Select all your units, buildings and blueprints at this tick';
+      button.disabled=this.player===null || this.spectator;
+      button.onclick=()=>this.selectViews(this.entities().filter(v=>{
+        const t=this.types.get(v.type_key);
+        return this.ownSelectable(v) && (!army || (v.lifecycle==='complete' && !!t?.movement && !!t.weapon && t.weapon.damage>0 && !t.mining && !t.construction));
+      }));
+      helpers.append(button);
+    }
+    body.prepend(helpers);
     // Draft panel.
     const list = $('draft-list');
     list.innerHTML = '';

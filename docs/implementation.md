@@ -153,3 +153,10 @@ The coordinator retains shared content/contracts and merges changes sequentially
 - [ ] Measure an actual 2,000-live-entity controller/browser workload at non-sample ticks, including peripheral replication, cold seeks and peak memory. The authored simulation benchmark reaches 2,000; the previously recorded end-to-end congestion scenario reached 1,264, so it does not close this scale-specific review item.
 
 The browser feature, multiplayer/single-order/recovery, and peripheral implementation checklists are complete. Gate 3 evidence combines the release engine one/four-thread and cold/warm/evicted-flow-cache test with real peripheral checkpoint replay, restart and revision-body eviction/regeneration. A full high-population peripheral matrix is part of the scale check above. Firefox/WebKit, touchscreen-only input and WAN conditions remain optional coverage extensions, not verified capabilities. See [integration verification](integration-verification.md) for actual checks and limits.
+
+## Current playtest follow-up
+
+- [x] Reachable walking-distance selection for ore and construction work positions; unreachable work is skipped and miner claims spread.
+- [x] Tank-priced grinders: 275 HP, 25 damage per five ticks, movement every two ticks, melee range.
+- [x] Fogged ore readouts and owner/type selection filters with All army / All units helpers.
+- [ ] Missile silos: inventory, production/launch queues, automatic/manual targets, three missile effects, flight replay and placement/impact previews.

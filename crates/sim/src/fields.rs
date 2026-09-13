@@ -19,7 +19,7 @@ const CAPACITY: usize = 256;
 pub struct FieldCache {
     version: u32,
     capacity: usize,
-    fields: BTreeMap<(u32, bool), Arc<Vec<u16>>>,
+    fields: BTreeMap<(u32, bool, bool), Arc<Vec<u16>>>,
 }
 impl Default for FieldCache {
     fn default() -> Self {
@@ -40,23 +40,36 @@ impl Sim {
     }
 
     pub(crate) fn field(&mut self, goal: Tile, neighbors: Neighbors) -> Arc<Vec<u16>> {
+        self.goal_field(goal, neighbors, false)
+    }
+
+    /// Distance to any traversable construction position (Chebyshev range one).
+    pub(crate) fn work_field(&mut self, goal: Tile, neighbors: Neighbors) -> Arc<Vec<u16>> {
+        self.goal_field(goal, neighbors, true)
+    }
+
+    fn goal_field(&mut self, goal: Tile, neighbors: Neighbors, adjacent: bool) -> Arc<Vec<u16>> {
         if self.fields.version != self.structure_version {
             self.fields.fields.clear();
             self.fields.version = self.structure_version;
         }
-        let key = (self.idx(goal) as u32, neighbors == Neighbors::Eight);
+        let key = (
+            self.idx(goal) as u32,
+            neighbors == Neighbors::Eight,
+            adjacent,
+        );
         if let Some(f) = self.fields.fields.get(&key) {
             return f.clone();
         }
         if self.fields.fields.len() >= self.fields.capacity {
             self.fields.fields.clear();
         }
-        let field = Arc::new(self.build_field(goal, neighbors));
+        let field = Arc::new(self.build_field(goal, neighbors, adjacent));
         self.fields.fields.insert(key, field.clone());
         field
     }
 
-    fn build_field(&self, goal: Tile, neighbors: Neighbors) -> Vec<u16> {
+    fn build_field(&self, goal: Tile, neighbors: Neighbors, adjacent: bool) -> Vec<u16> {
         let mut dist = vec![UNREACHABLE; self.cells()];
         let mut queue = VecDeque::new();
         let mut seed = |t: Tile, dist: &mut Vec<u16>| {
@@ -66,7 +79,15 @@ impl Sim {
                 queue.push_back(t);
             }
         };
-        if self.traversable(goal) {
+        if adjacent {
+            for (dx, dy, _) in &DIRS {
+                if let Some(t) = self.offset(goal, *dx, *dy)
+                    && self.traversable(t)
+                {
+                    seed(t, &mut dist);
+                }
+            }
+        } else if self.traversable(goal) {
             seed(goal, &mut dist);
         } else {
             let count = if neighbors == Neighbors::Eight { 8 } else { 4 };

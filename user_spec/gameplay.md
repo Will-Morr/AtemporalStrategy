@@ -92,3 +92,17 @@ Players may uncommit a submitted turn while waiting for the other players, recov
 ## Turret repair and spending
 
 Turrets heal more slowly than they are constructed. Repair efficiency is half construction HP per matter (twice the matter cost per HP), as explicitly confirmed by the user. Turrets, factories and constructors all support priority, including Off to disable spending. Automatic self-repair is the current implementation interpretation of turret healing.
+
+## Work-target pathing and grinders
+
+Mining veins and construction sites must be chosen by pathing distance to a usable work position, not straight-line distance or creation age. Units must not take a long route around walls past nearer valid work. Preserve spreading across mining tiles.
+
+Grinders should be comparable to tanks in damage and health, but faster, with slightly more health and their melee limitation. Exact numerical balance remains a tunable implementation choice.
+
+## Missile silos
+
+After the current pathing, ore, grinder and selection changes, add missile silos. Silos queue missile production like factories, spending matter and storing completed missiles as counts by type. Destroying a silo destroys its inventory. Players may build missiles for later use, set automatic targeting, or queue launch orders specifying missile type and target position; queued launches fire as ammunition becomes available.
+
+Three missile types are required: Satellite reveals a large area and reveals terrain throughout flight, creating a moving line of vision; Cluster damages a roughly seven-tile-radius area for about 40% of a tank’s health; Tac nuke completely destroys everything in a roughly four-tile-radius area. Flight time depends on distance and is at most 30 ticks. The final instruction removes launch range limits, superseding the initially suggested range of roughly 75% of the standard map.
+
+Placement previews must show turret and silo reach. Missile launch previews must show ticks to impact and the affected area. The meaning of a silo range preview with unlimited launch distance, automatic acquisition policy, satellite vision persistence after landing, missile costs/build times and friendly-fire details are implementation interpretations, not user-locked defaults.

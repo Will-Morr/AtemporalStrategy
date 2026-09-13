@@ -15,12 +15,14 @@ struct Intent {
     mine: bool,
     construct: Option<usize>,
     goal: Option<(Tile, bool)>,
+    work_goal: bool,
     hold: bool,
 }
 
 /// Results of the serial field-touching prepass, consumed by the read-only intent pass.
 #[derive(Clone, Default)]
 struct Prep {
+    ore: Option<Tile>,
     blueprint: Option<usize>,
 }
 
@@ -149,6 +151,23 @@ impl Sim {
             }
             let def = self.def(i);
             match &e.action {
+                Order::Mine { area } if def.mining.is_some() => {
+                    let area = area.clone();
+                    p.ore = self.ore_target(i, &area);
+                    if let Some(old) = self.state.entities[i].resolved_destination {
+                        let at = self.idx(old);
+                        if Some(old) != p.ore && self.claims[at] == i as u32 {
+                            self.claims[at] = NONE;
+                        }
+                    }
+                    if p.ore.is_none() {
+                        self.state.entities[i].resolved_destination = None;
+                    }
+                    if let Some(target) = p.ore {
+                        let at = self.idx(target);
+                        self.claims[at] = i as u32;
+                    }
+                }
                 Order::Construct { area } if def.construction.is_some() => {
                     let area = area.clone();
                     p.blueprint = self.choose_blueprint(i, &area);
@@ -290,11 +309,11 @@ impl Sim {
         }
         if !intent.hold && intent.goal.is_none() {
             match &e.action {
-                Order::Mine { area } if def.mining.is_some() => {
+                Order::Mine { .. } if def.mining.is_some() => {
                     if self.mines_here(i) {
                         intent.hold = true;
                         intent.mine = ready;
-                    } else if let Some(goal) = self.ore_target(i, area) {
+                    } else if let Some(goal) = prep.ore {
                         intent.goal = Some((goal, false));
                     }
                 }
@@ -308,6 +327,7 @@ impl Sim {
                             }
                         } else {
                             intent.goal = Some((target, true));
+                            intent.work_goal = true;
                         }
                     }
                 }
@@ -372,77 +392,94 @@ impl Sim {
             && !self.claimed_by_other(e.tile, i)
     }
 
-    /// Keep the committed ore tile while it stays valid; otherwise the nearest unclaimed one.
-    fn ore_target(&self, i: usize, area: &Rect) -> Option<Tile> {
-        let e = &self.state.entities[i];
-        e.resolved_destination
-            .filter(|d| {
-                in_rect(*d, area)
-                    && self.state.ore[self.idx(*d)] > 0.0
-                    && self.traversable(*d)
-                    && !self.claimed_by_other(*d, i)
-            })
-            .or_else(|| self.nearest_ore(i, area))
-    }
-
-    fn nearest_ore(&self, i: usize, area: &Rect) -> Option<Tile> {
+    /// Keep a reachable claimed destination; new targets minimize actual walking steps.
+    fn ore_target(&mut self, i: usize, area: &Rect) -> Option<Tile> {
         let from = self.state.entities[i].tile;
-        let mut best: Option<(f64, Tile)> = None;
-        for y in area.min.y..=area.max.y.min(self.state.terrain.height - 1) {
-            for x in area.min.x..=area.max.x.min(self.state.terrain.width - 1) {
-                let t = Tile { x, y };
-                if self.state.ore[self.idx(t)] <= 0.0
-                    || !self.traversable(t)
-                    || self.claimed_by_other(t, i)
-                {
-                    continue;
-                }
-                let d = Self::dist2(from, t);
-                if best.is_none_or(|b| (d, t) < (b.0, b.1)) {
-                    best = Some((d, t));
-                }
-            }
-        }
-        best.map(|b| b.1)
-    }
-
-    /// Oldest reachable eligible owned blueprint inside the area, by creation precedence then ID.
-    fn choose_blueprint(&mut self, i: usize, area: &Rect) -> Option<usize> {
-        let (owner, from) = {
-            let e = &self.state.entities[i];
-            (e.owner, e.tile)
-        };
         let neighbors = self
             .def(i)
             .movement
             .as_ref()
             .map_or(Neighbors::Eight, |m| m.neighbors);
-        let mut candidates: Vec<(EventKey, EntityId, usize)> = self
+        let valid = |sim: &Self, t: Tile| {
+            in_rect(t, area)
+                && sim.state.ore[sim.idx(t)] > 0.0
+                && sim.traversable(t)
+                && !sim.claimed_by_other(t, i)
+        };
+        if valid(self, from) {
+            return Some(from);
+        }
+        if let Some(t) = self.state.entities[i].resolved_destination
+            && valid(self, t)
+            && self.field(t, neighbors)[self.idx(from)] != UNREACHABLE
+        {
+            return Some(t);
+        }
+        // A cached distance grid from the source is symmetric with destination fields. This
+        // search happens only when acquiring/replacing a target, not on every walking tick.
+        let distance = self.field(from, neighbors);
+        let mut best: Option<(u16, Tile)> = None;
+        for y in area.min.y..=area.max.y.min(self.state.terrain.height - 1) {
+            for x in area.min.x..=area.max.x.min(self.state.terrain.width - 1) {
+                let t = Tile { x, y };
+                let d = distance[self.idx(t)];
+                if d != UNREACHABLE && valid(self, t) && best.is_none_or(|old| (d, t) < old) {
+                    best = Some((d, t));
+                }
+            }
+        }
+        best.map(|(_, t)| t)
+    }
+
+    /// Nearest reachable working position; equal paths use creation precedence then identity.
+    fn choose_blueprint(&mut self, i: usize, area: &Rect) -> Option<usize> {
+        let e = &self.state.entities[i];
+        let (owner, from) = (e.owner, e.tile);
+        let neighbors = self
+            .def(i)
+            .movement
+            .as_ref()
+            .map_or(Neighbors::Eight, |m| m.neighbors);
+        let candidates: Vec<_> = self
             .state
             .blueprints
             .iter()
             .enumerate()
             .filter(|(_, b)| b.owner == owner && in_rect(b.tile, area))
-            .map(|(idx, b)| (b.precedence.clone(), b.id.clone(), idx))
+            .map(|(i, b)| {
+                (
+                    i,
+                    b.tile,
+                    b.site_id.is_some(),
+                    b.precedence.clone(),
+                    b.id.clone(),
+                )
+            })
             .collect();
-        candidates.sort();
-        for (_, _, b) in candidates {
-            let bp = &self.state.blueprints[b];
-            let tile = bp.tile;
-            let started = bp.site_id.is_some();
+        // One source field ranks every candidate; only the chosen target needs a work field
+        // for motion. Large blueprint sets therefore cannot churn one BFS per site per worker.
+        let distances = self.field(from, neighbors);
+        let mut best = None;
+        for (b, tile, started, precedence, id) in candidates {
             if !started && self.occ[self.idx(tile)] != NONE {
                 continue;
             }
-            if chebyshev(from, tile) == 1 {
-                return Some(b);
+            let distance = DIRS
+                .iter()
+                .filter_map(|(dx, dy, _)| self.offset(tile, *dx, *dy))
+                .filter(|t| self.traversable(*t))
+                .map(|t| distances[self.idx(t)])
+                .min()
+                .unwrap_or(UNREACHABLE);
+            if distance == UNREACHABLE {
+                continue;
             }
-            let f = self.field(tile, neighbors);
-            let d = f[self.idx(from)];
-            if d != UNREACHABLE && d != 0 {
-                return Some(b);
+            let candidate = (distance, precedence, id, b);
+            if best.as_ref().is_none_or(|old| &candidate < old) {
+                best = Some(candidate);
             }
         }
-        None
+        best.map(|(_, _, _, b)| b)
     }
 
     fn mining(&mut self, intents: &[Intent]) {
@@ -856,6 +893,9 @@ impl Sim {
             };
             let from = e.tile;
             let ready = e.next_move_tick <= t;
+            if self.state.entities[i].resolved_destination != Some(goal) {
+                self.state.entities[i].local_detour.clear();
+            }
             self.state.entities[i].resolved_destination = Some(goal);
             if let Some(next) = self.state.entities[i].local_detour.first().copied() {
                 let (dx, dy) = (
@@ -873,7 +913,11 @@ impl Sim {
                 }
                 self.state.entities[i].local_detour.clear();
             }
-            let field = self.field(goal, m.neighbors);
+            let field = if intent.work_goal {
+                self.work_field(goal, m.neighbors)
+            } else {
+                self.field(goal, m.neighbors)
+            };
             let here = field[self.idx(from)];
             if here == 0 {
                 self.state.entities[i].goal_settled = true;
@@ -939,12 +983,12 @@ impl Sim {
             let cooldown = self.def(i).movement.as_ref().unwrap().cooldown;
             let cross = crossing(from, to);
             if cross.is_some_and(|c| diagonals.contains(&c)) {
-                self.fail_move(i, to);
+                self.fail_move(i, to, intents[i].work_goal);
                 continue;
             }
             let o = self.occ[self.idx(to)];
             if o == RESERVED {
-                self.fail_move(i, to);
+                self.fail_move(i, to, intents[i].work_goal);
                 continue;
             }
             if o == NONE {
@@ -966,7 +1010,7 @@ impl Sim {
                 && !touched[o]
                 && blocker.born_at_tick.is_none_or(|b| b < t);
             if !can_yield {
-                self.fail_move(i, to);
+                self.fail_move(i, to, intents[i].work_goal);
                 continue;
             }
             if self.settled_same_goal(to, i) {
@@ -975,11 +1019,12 @@ impl Sim {
                 self.state.entities[i].local_detour.clear();
                 continue;
             }
-            if (blocker.goal_settled || mining_here) && !self.transits(i, to) {
+            if (blocker.goal_settled || mining_here) && !self.transits(i, to, intents[i].work_goal)
+            {
                 // A settled ally or a miner holding its claimed ore tile yields only to traffic
                 // passing through, never to a mover that would rest on its cell; otherwise two
                 // goals contend for one cell forever.
-                self.fail_move(i, to);
+                self.fail_move(i, to, intents[i].work_goal);
                 continue;
             }
             let b_neighbors = self.def(o).movement.as_ref().unwrap().neighbors;
@@ -1017,7 +1062,7 @@ impl Sim {
                 }
             }
             let Some((bt, bd)) = placed else {
-                self.fail_move(i, to);
+                self.fail_move(i, to, intents[i].work_goal);
                 continue;
             };
             // Apply both moves atomically: vacate, then place mover and blocker.
@@ -1071,12 +1116,16 @@ impl Sim {
     }
 
     /// After stepping onto `to`, the mover could keep descending into a free or yielding cell.
-    fn transits(&mut self, mover: usize, to: Tile) -> bool {
+    fn transits(&mut self, mover: usize, to: Tile, work_goal: bool) -> bool {
         let Some(goal) = self.state.entities[mover].resolved_destination else {
             return false;
         };
         let neighbors = self.def(mover).movement.as_ref().unwrap().neighbors;
-        let field = self.field(goal, neighbors);
+        let field = if work_goal {
+            self.work_field(goal, neighbors)
+        } else {
+            self.field(goal, neighbors)
+        };
         matches!(
             self.descend(&field, to, mover, neighbors),
             Some((_, _, Occupancy::Free | Occupancy::Yielding))
@@ -1118,7 +1167,7 @@ impl Sim {
         self.note(owner, Activity::Movement);
     }
 
-    fn fail_move(&mut self, i: usize, to: Tile) {
+    fn fail_move(&mut self, i: usize, to: Tile, work_goal: bool) {
         let t = self.state.tick;
         let goal = self.state.entities[i].resolved_destination;
         {
@@ -1131,7 +1180,11 @@ impl Sim {
             && let Some(goal) = goal
         {
             let neighbors = self.def(i).movement.as_ref().unwrap().neighbors;
-            let field = self.field(goal, neighbors);
+            let field = if work_goal {
+                self.work_field(goal, neighbors)
+            } else {
+                self.field(goal, neighbors)
+            };
             let from = self.state.entities[i].tile;
             let detour = self.local_detour(&field, from, neighbors);
             let e = &mut self.state.entities[i];
@@ -1196,6 +1249,7 @@ impl Sim {
             {
                 intents[i].hold = false;
                 intents[i].goal = Some((tile, false));
+                intents[i].work_goal = false;
             }
         }
     }

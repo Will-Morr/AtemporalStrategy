@@ -81,3 +81,9 @@ Terrain gray values must be darkest for walls, medium for unseen floor, and ligh
 ## Persistent scoreboard
 
 Show a clear, prominent scoreboard with the current count of timelines won by each player. It must be easy to tell who is leading at any replay tick. Keep player-colored totals visible while inspecting history, distinguish match totals from a single timeline result, and make progress toward match victory readable.
+
+## Ore information and selection helpers
+
+Ore locations and remaining values remain visible through fog of war. Enemy-unit visibility still follows normal vision rules.
+
+Provide quick controls to keep only, or remove, a unit/building type from the selection. Late-game players should be able to select their army quickly for an attack order.

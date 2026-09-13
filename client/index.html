@@ -97,7 +97,10 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 .score-player[data-status=leading]{background:#263329;border-color:#ba9c55;border-top-color:var(--player-color)}.score-player[data-status=leading] .score-status{color:#ffe097;font-weight:800}.score-player[data-status=winner]{background:#264f36;border-color:#9ce5a6}.score-player[data-status=winner] .score-status{color:#aeffbf;font-weight:800}
 #outcome-banner{top:calc(var(--hud-height) + 4px)}#mode{top:calc(var(--hud-height) + 40px)}#result{display:none}#replay{top:calc(var(--hud-height) + 54px)}
 @media(max-width:1000px){#game{--hud-height:142px}#top{padding-right:10px;overflow:visible}#scoreboard{top:64px;left:6px;right:6px;width:auto}.score-name{font-size:11px}.score-count{font-size:28px}.score-player{padding:4px 6px}.scoreboard-heading{font-size:10px}#replay{top:calc(var(--hud-height) + 54px)}}
+#ore-readout{position:absolute;z-index:6;pointer-events:none;padding:5px 9px;border:1px solid #b99a3b;border-radius:4px;background:#25241eee;color:#ffe18a;font-size:12px}
+#selection-helpers{display:flex;gap:5px;margin-bottom:5px}#selection-helpers button{font-size:11px;padding:3px 7px}.unit-chip{padding:0;gap:0}.unit-chip button{display:inline-flex;align-items:center;gap:3px;border:0;background:transparent;font-size:11px;padding:2px 4px}.unit-chip button:hover{background:#405b73}.unit-chip button+button{border-left:1px solid #3d566b;color:#f5c4bd}
 </style></head><body>
+<div id="ore-readout" role="status" hidden></div>
 <section id="lobby">
   <h1>Atemporal Strategy</h1>
   <p><a href="/guide/" id="guide-link" target="_blank">How to play / Unit reference</a></p>
