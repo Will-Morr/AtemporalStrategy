@@ -19,21 +19,21 @@
 <tr><td>F, then click</td><td>Attack-move to the tile.</td></tr>
 <tr><td>G, then click your unit</td><td>Support that unit.</td></tr>
 <tr><td>M / C, then drag</td><td>Mine / construct in a rectangle.</td></tr>
-<tr><td>B, then 1 / 2 / 3</td><td>Place a factory / turret / wall. Click a tile; drag for a connected wall line. Z cycles factory output directions. Red previews are blocked.</td></tr>
+<tr><td>B, then 1 / 2 / 3</td><td>Place a factory / turret / wall. Click a tile; drag for a connected wall line. R rotates factory output directions. Red previews are blocked.</td></tr>
 <tr><td>X</td><td>Idle the selected recipients.</td></tr>
 <tr><td>H, then 0–9 / Shift+H, then 0–9</td><td>Replace / add group membership. Plain 0–9 recalls a group without spending a command. The recipient label distinguishes a group from selected units only.</td></tr>
 <tr><td>J, then 0–9 / Backspace</td><td>Bind / clear selected factories’ output group.</td></tr>
 <tr><td>Q, then recipe number</td><td>Append a unit. The on-screen prompt lists the loaded recipes in number order.</td></tr>
 <tr><td>L / P, then 1–3</td><td>Toggle looping / choose high, medium or low priority.</td></tr>
-<tr><td>R, then F / G / M / C / X</td><td>Set a factory’s stored attack-move, support, mine, construct or idle order using the same target gestures.</td></tr>
+<tr><td>Select factory, then F / G / M / C / X</td><td>Set a factory’s stored attack-move, support, mine, construct or idle order using the same target gestures.</td></tr>
 <tr><td>Delete</td><td>Remove a selected draft entry, or cancel a focused blueprint or queue item. Arrow keys navigate queue buttons. Cancel active and Replace pending (empty) are also available in the factory panel.</td></tr>
 <tr><td>O</td><td>Cycle keep, drop all, and the configured following window. The draft shows a non-authoritative member/slot lock estimate. Actual reasons appear in the round viewer after replay.</td></tr>
-<tr><td>Ctrl+Z / Ctrl+Shift+Z</td><td>Undo / redo the uncommitted draft.</td></tr>
+<tr><td>Ctrl+Z / Ctrl+U</td><td>Undo / redo the uncommitted draft.</td></tr>
 <tr><td>Enter / Escape</td><td>Commit or pass / cancel a gesture, then clear selection. Finish or cancel placement before committing.</td></tr>
 <tr><td>WASD / middle drag / wheel</td><td>Pan / pan / zoom the map around the pointer. Click or drag the minimap to move the camera.</td></tr>
 <tr><td>Space / , / .</td><td>Play or pause / step backward / step forward. Shift steps 100 ticks. Home and End seek the editable boundary and available end.</td></tr>
 <tr><td>[ / ]</td><td>Decrease / increase playback speed from 0.25× to 8×. A speed menu provides the same presets.</td></tr>
-<tr><td>− / = / Shift+[ / Shift+]</td><td>Zoom timeline out / in around the last hovered tick; pan left / right. Wheel zooms the timeline; drag the bottom ruler or use the middle button to pan. Click an event bar to seek; hover for its activity and count.</td></tr>
+<tr><td>− / = / Shift+[ / Shift+]</td><td>Zoom timeline out / in around the last hovered tick; pan left / right. Shift+wheel scrolls the timeline. Wheel zooms the timeline; drag the bottom ruler or use the middle button to pan. Click an event bar to seek; hover for its activity and count.</td></tr>
 <tr><td>V / ?</td><td>Statistics / hotkey help. The guide remains available during play.</td></tr>
 </tbody></table>
 <p>Text fields keep their normal typing keys. Escape leaves a field. Browser shortcuts are not game commands. The timeline’s white line is the playhead, the dashed yellow marker is the draft, and hatched history is immutable. You may inspect history while planning; staging waits for exact state at the chosen tick.</p>
@@ -41,3 +41,5 @@
 <p>Statistics plots bank, mined matter, total spend, living army and infrastructure value, and spend ratio against the selected opponent. Choose players and a full-run or visible-timeline window; hover for sampled values. Thinking-time ratio uses cumulative committed durations by round, not battlefield ticks; a zero opponent duration has no defined ratio. The top bar separates committed time from the live planning timer. Cosmetic combat effects are bounded at fast playback rates.</p>
 <p>Open “Rounds, inputs and rewrite results” to inspect a previous round. Historical rounds are read-only, even if your current draft exists. Return to live to continue planning. Accepted inputs link to their ticks and show the server’s applied counts and skipped reasons. The before/after summary compares outcomes, survivors, spending, entity births (including construction sites), and destruction or cancellation. Survival history records loss reasons and recovery separately from finalized timed losses.</p>
 <p>A connection interruption preserves your view and draft while reconnecting to the same server. If the server instance has changed, use Reload current server for its current match, roster and guide. Team members share a map color; owner numbers preserve individual identity.</p>
+
+<p>Unbuilt blueprints are selectable: configure their unit queue, priority, looping, and starting order before construction. Production begins when construction completes. The matter counter follows the viewed tick. Fog of war uses your units’ vision (shared with allies); spectators see the whole battlefield. Purple timeline markers show every applied command tick for the selection. Green WIN and red LOSS describe the timeline’s final survival result; elimination can reverse during simulation, and match completion is labeled separately.</p>

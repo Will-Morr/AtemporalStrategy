@@ -1,5 +1,5 @@
 import type {
-  Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
+  BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   TypeDefinition, WorldEvent, WorldState,
 } from './contracts.generated';
 import type { Net } from './net';
@@ -37,6 +37,8 @@ export interface EntityView {
   lifecycle: string;
   activity: string;
   engaged: number | null;
+  blueprint?: DraftItemRef;
+  settings?: BlueprintSettings;
   exact?: WorldState['entities'][number];
 }
 
@@ -264,7 +266,7 @@ export class Game {
   }
 
   /** Entities to draw at the playhead: exact state when available, otherwise interpolated samples. */
-  entities(): EntityView[] {
+  rawEntities(): EntityView[] {
     const rev = this.rev();
     if (!rev) return [];
     const tick = this.playhead;
@@ -312,6 +314,57 @@ export class Game {
         engaged: e.engaged ?? null,
       };
     });
+  }
+
+  entities(): EntityView[] {
+    const all = this.rawEntities();
+    const visible = this.visibility(all);
+    const views = all.filter(e => this.spectator || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
+    if (this.exact?.revision === this.current && this.exact.tick === Math.floor(this.playhead)) {
+      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.spectator || visible.has(`${b.tile.x},${b.tile.y}`))) {
+        views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
+      }
+    }
+    if (this.current === this.latest && this.draft.tick === Math.floor(this.playhead)) {
+      this.draft.commands.forEach((d,index) => {
+        const c = d.command;
+        if (c.kind === 'place_blueprints') c.tiles.forEach((tile,item_index) => views.push({index:-1,id:{birth_command:{command:{round:this.round,player:this.player!,index},target_index:0},item_index,occurrence:0},owner:this.player!,type_key:c.type_key,x:tile.x,y:tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'draft',local_id:d.local_id,item_index},settings:{queue:[],order:{kind:'idle'},priority:c.priority,loop_enabled:false}}));
+        if (c.kind === 'configure_blueprints') for (const v of views) if (v.blueprint && c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(v.blueprint))) v.settings = c.settings;
+      });
+    }
+    return views;
+  }
+
+  visibility(all = this.rawEntities()): Set<string> {
+    const visible = new Set<string>();
+    if (this.spectator || !this.terrain) return visible;
+    const team = this.profiles[this.player!]?.profile?.team_id;
+    for (const e of all) {
+      if (e.lifecycle !== 'complete' || (e.owner !== this.player && (!team || this.profiles[e.owner]?.profile?.team_id !== team))) continue;
+      const radius = this.types.get(e.type_key)?.vision ?? 0;
+      for (let y=Math.max(0,Math.ceil(e.y-radius));y<=Math.min(this.terrain.height-1,Math.floor(e.y+radius));y++)
+        for (let x=Math.max(0,Math.ceil(e.x-radius));x<=Math.min(this.terrain.width-1,Math.floor(e.x+radius));x++)
+          if (Math.hypot(x-e.x,y-e.y)<=radius) visible.add(`${x},${y}`);
+    }
+    return visible;
+  }
+
+  configureGhosts(change: (s: BlueprintSettings) => void): boolean {
+    const ghosts = this.selectedViews().filter(v => v.blueprint && this.ownSelectable(v));
+    for (const v of ghosts) {
+      const settings = structuredClone(v.settings!); change(settings);
+      this.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});
+    }
+    return ghosts.length > 0;
+  }
+
+  effectiveOrder(v: EntityView): Order | undefined {
+    let order = v.exact?.production?.stored_order ?? v.exact?.action ?? v.settings?.order;
+    if (this.current === this.latest && this.draft.tick === Math.floor(this.playhead)) for (const d of this.draft.commands) {
+      const c=d.command;
+      if ((c.kind==='assign_order' && c.entities.some(id=>idKey(id)===idKey(v.id))) || (c.kind==='set_stored_order' && c.factories.some(id=>idKey(id)===idKey(v.id))) || (c.kind==='assign_group_order' && this.experience.groups().find(g=>g.id.owner===c.group.owner && g.id.slot===c.group.slot)?.members.some(id=>idKey(id)===idKey(v.id)))) order=c.order;
+    }
+    return order;
   }
 
   maxHp(type_key: string, lifecycle: string, paid: number): number {
@@ -411,6 +464,16 @@ export class Game {
     this.draft.redo = [];
     this.draft.tick = Math.floor(this.playhead);
     $('toast').classList.remove('active');
+    // A later draft assignment replaces the same recipients' earlier action; undo restores it.
+    if (command.kind === 'assign_order' || command.kind === 'set_stored_order') {
+      const ids = command.kind === 'assign_order' ? command.entities : command.factories;
+      this.draft.commands = this.draft.commands.flatMap(d => {
+        const c=d.command;
+        if(c.kind==='assign_order' && command.kind==='assign_order') {const entities=c.entities.filter(id=>!ids.some(v=>idKey(v)===idKey(id)));return entities.length?[{...d,command:{...c,entities}}]:[];}
+        if(c.kind==='set_stored_order' && command.kind==='set_stored_order') {const factories=c.factories.filter(id=>!ids.some(v=>idKey(v)===idKey(id)));return factories.length?[{...d,command:{...c,factories}}]:[];}
+        return [d];
+      });
+    }
     this.draft.commands.push({ local_id: `d${Date.now()}-${this.draft.commands.length}`, command: command as DraftCommand['command'], future_orders: policy });
     this.updatePanels();
   }
@@ -438,25 +501,21 @@ export class Game {
 
   selectedIds(filter?: (t: TypeDefinition) => boolean): EntityId[] {
     return this.selectedViews()
-      .filter(e => this.ownSelectable(e) && e.lifecycle === 'complete' && (!filter || filter(this.types.get(e.type_key)!)))
+      .filter(e => this.ownSelectable(e) && e.lifecycle !== 'blueprint' && (!filter || filter(this.types.get(e.type_key)!)))
       .map(e => e.id)
       .sort((a, b) => idKey(a).localeCompare(idKey(b)));
   }
 
   assign(order: Order, filter: (t: TypeDefinition) => boolean): void {
-    if (this.stored || this.mode.kind === 'stored-target') {
-      const factories = this.selectedIds(t => !!t.production);
-      if (factories.length) this.stage({ kind: 'set_stored_order', factories, order });
-      else this.toast('Select a factory first.');
-      this.stored = false;
-      return;
-    }
+    const ghosts = this.configureGhosts(s => { s.order = order; });
+    this.stored = false;
     if (this.recalledGroup !== null && this.player !== null) {
       this.stage({ kind: 'assign_group_order', group: { owner: this.player, slot: this.recalledGroup }, order }, this.draft.policy);
       return;
     }
-    const entities = this.selectedIds(filter);
+    const entities = this.selectedIds(t => !!t.production || filter(t));
     if (!entities.length) {
+      if (ghosts) return;
       this.toast('No selected unit can take that order.');
       return;
     }
@@ -559,7 +618,8 @@ export class Game {
     });
     map.addEventListener('wheel', e => {
       e.preventDefault();
-      this.renderer.zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      if (e.shiftKey) this.renderer.panBy(-e.deltaX, -e.deltaY);
+      else this.renderer.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * .002));
     }, { passive: false });
     $<HTMLCanvasElement>('minimap').addEventListener('mousemove', e => {
       if (e.buttons !== 1) return;
@@ -592,7 +652,8 @@ export class Game {
     });
     timeline.addEventListener('wheel', e => {
       e.preventDefault();
-      this.zoomTimeline(e.deltaY < 0 ? 0.8 : 1.25, this.renderer.timelineTick(e.clientX));
+      if (e.shiftKey) this.panTimeline((e.deltaX || e.deltaY) / timeline.clientWidth * (this.view.t1-this.view.t0));
+      else this.zoomTimeline(Math.exp(e.deltaY * .002), this.renderer.timelineTick(e.clientX));
     }, { passive: false });
     $('play').onclick = () => this.togglePlay();
     $('step-back').onclick = () => this.seek(this.playhead - 1);
@@ -695,7 +756,7 @@ export class Game {
     if (e.ctrlKey || e.metaKey) {
       if (k.toLowerCase() === 'z' && e.shiftKey) this.redo();
       else if (k.toLowerCase() === 'z') this.undo();
-      else if (k.toLowerCase() === 'y') this.redo();
+      else if (k.toLowerCase() === 'y' || k.toLowerCase() === 'u') this.redo();
       else return;
       e.preventDefault();
       return;
@@ -734,16 +795,17 @@ export class Game {
       case 'b': this.mode = { kind: 'build' }; break;
       case 'q': this.mode = { kind: 'recipe' }; break;
       case 'p': this.mode = { kind: 'priority' }; break;
-      case 'r': this.stored = true; this.mode = { kind: 'stored' }; break;
+      case 'r': if (this.mode.kind === 'place') this.renderer.cycleOutput(); break;
       case 'h': this.mode = { kind: 'membership', add: e.shiftKey }; break;
       case 'j': this.mode = { kind: 'binding' }; break;
       case 'v': this.experience.toggleStats(); break;
       case 'z': if (this.mode.kind === 'place') this.renderer.cycleOutput(); break;
       case 'x': this.assign({ kind: 'idle' }, () => true); this.mode = { kind: 'none' }; break;
       case 'l': {
+        const ghosts = this.configureGhosts(s => { s.loop_enabled = !s.loop_enabled; });
         const factories = this.selectedIds(t => !!t.production);
         if (factories.length) this.stage({ kind: 'set_queue_loop', factories, enabled: !this.selectedViews().filter(v => v.exact?.production).every(v => v.exact?.production?.loop_enabled) });
-        else this.toast('Select a factory first.');
+        else if (!ghosts) this.toast('Select a factory first.');
         break;
       }
       case 'o': {
@@ -801,12 +863,14 @@ export class Game {
     } else if (mode.kind === 'recipe') {
       const key = this.producible()[n - 1];
       const factories = this.selectedIds(t => !!t.production);
+      const ghosts = key ? this.configureGhosts(s => { s.queue.push(key); }) : false;
       if (key && factories.length) this.stage({ kind: 'edit_production', factories, edit: { kind: 'append', items: [key] } });
-      else this.toast(key ? 'Select a factory first.' : 'No such recipe.');
+      else if (!ghosts) this.toast(key ? 'Select a factory first.' : 'No such recipe.');
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'priority') {
       const priority = (['high', 'medium', 'low'] as Priority[])[n - 1];
-      const entities = this.selectedViews().filter(v=>this.ownSelectable(v)).map(v=>v.id);
+      if (priority) this.configureGhosts(s => { s.priority = priority; });
+      const entities = this.selectedViews().filter(v=>this.ownSelectable(v) && !v.blueprint).map(v=>v.id);
       if (priority && entities.length) this.stage({ kind: 'set_priority', entities, priority });
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'stored') {
@@ -837,7 +901,7 @@ export class Game {
         case 'support': return 'Support: click one of your units';
         case 'area': return `${this.mode.order === 'mine' ? 'Mine' : 'Construct'}: drag a rectangle`;
         case 'build': return `Build: ${this.structures().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
-        case 'place': return `Place ${this.mode.type_key}: click a floor tile${this.types.get(this.mode.type_key)?.production ? ` (output ${this.renderer.outputDirection.toUpperCase()}, Z cycles)` : ''}`;
+        case 'place': return `Place ${this.mode.type_key}: click a floor tile${this.types.get(this.mode.type_key)?.production ? ` (output ${this.renderer.outputDirection.toUpperCase()}, R rotates)` : ''}`;
         case 'recipe': return `Queue: ${this.producible().map((k, i) => `${i + 1}=${k}`).join('  ')}`;
         case 'priority': return 'Priority: 1=high 2=medium 3=low';
         case 'membership': return `${this.mode.add ? 'Add to' : 'Replace'} group membership: 0–9`;
@@ -848,6 +912,7 @@ export class Game {
     })();
     el.textContent = `${this.stored && this.mode.kind !== 'stored' ? 'Stored order · ' : ''}${text}`;
     el.classList.toggle('active', text !== '');
+    this.experience?.actions();
   }
 
   updateTop(): void {
@@ -859,7 +924,7 @@ export class Game {
     const banks = this.exact && this.exact.tick === Math.floor(this.playhead) && this.exact.revision === this.current
       ? this.exact.state.players.map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`)
       : sample?.players.map(p => `${this.name(p.player_id)} ${p.bank.toFixed(0)}${p.currently_eliminated ? ' (eliminated)' : ''}`) ?? [];
-    $('top-bank').textContent = `bank: ${banks.join(' · ')}`;
+    $('top-bank').textContent = `MATTER · ${banks.join(' · ')} · tick ${Math.floor(this.playhead)}${this.exact?.tick === Math.floor(this.playhead) ? '' : ' (sampled)'}`;
     const score = rev?.score?.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id} ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · ');
     $('top-score').textContent = score ? `score: ${score}` : '';
     const round = this.experience?.rounds.get(this.current);
@@ -882,6 +947,11 @@ export class Game {
     const result = $('result');
     if (rev) {
       const o = rev.outcome;
+      const verdict = o.kind === 'win' ? this.spectator ? 'WIN' : o.survivors.includes(this.player!) ? 'WIN' : 'LOSS' : o.kind.toUpperCase();
+      result.dataset.outcome = verdict.toLowerCase();
+      const banner = $('outcome-banner');
+      banner.dataset.outcome = verdict.toLowerCase();
+      banner.textContent = `${this.finished ? 'MATCH ENDED · ' : 'TIMELINE RESULT · '}${verdict} · ${this.finished ? 'Replay remains available' : 'Simulation continues after elimination; final survival determines this result'}`;
       const lines = [`<b>Revision ${rev.revision}</b>: ${o.kind} (${o.stop_reason.replace('_', ' ')} at tick ${o.terminal_state_tick}, last progress ${o.last_progress_tick})`];
       lines.push(`survivors: ${o.survivors.map(p => this.name(p)).join(', ') || 'none'}`);
       if (rev.score) lines.push(rev.score.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id}: +${e.raw_delta} → ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · '));
@@ -900,7 +970,7 @@ export class Game {
         let extra = '';
         const e = v.exact;
         if (e) {
-          extra = ` · ${e.action.kind}${e.action.kind === 'attack_move' ? ` → ${e.action.destination.x},${e.action.destination.y}` : ''} · ${e.priority}`;
+          extra = ` · ${this.effectiveOrder(v)?.kind ?? e.action.kind}${e.action.kind === 'attack_move' ? ` → ${e.action.destination.x},${e.action.destination.y}` : ''} · ${e.priority}`;
           if (e.production) {
             const p = e.production;
             const active = p.active_item ? `${p.active_item.type_key} ${p.active_item.paid_matter.toFixed(0)}/${this.types.get(p.active_item.type_key)?.matter_cost}${p.active_item.awaiting_output ? ' (output blocked)' : ''}` : 'idle';
@@ -908,7 +978,7 @@ export class Game {
           }
           if (t?.mining && v.type_key === 'constructor') extra += ' · mines at half rate';
         }
-        return `<div>P${v.owner} <span class="swatch" style="background:${this.color(v.owner)}"></span> ${v.type_key} ${v.lifecycle === 'site' ? '(site)' : ''} hp ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)} @${Math.round(v.x)},${Math.round(v.y)}${extra}</div>`;
+        return `<div>P${v.owner} <span class="swatch" style="background:${this.color(v.owner)}"></span> ${v.type_key} ${v.lifecycle === 'blueprint' ? '(planned)' : `${v.lifecycle === 'site' ? '(site)' : ''} hp ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)}`} @${Math.round(v.x)},${Math.round(v.y)}${extra}</div>`;
       });
       if (views.length > 12) rows.push(`<div class="muted">…and ${views.length - 12} more</div>`);
       if (this.recalledGroup !== null) rows.unshift(`<div><b>Group ${this.recalledGroup}</b>: orders go to current members + future spawns</div>`);
@@ -947,11 +1017,11 @@ export class Game {
 
   buildHelp(): void {
     const rows: [string, string][] = [
-      ['Left click / drag', 'Select / box select (Shift adds)'], ['0–9', 'Recall control group'], ['WASD, middle drag, wheel', 'Pan / zoom'],
+      ['Left click / drag', 'Select / box select (Shift adds)'], ['0–9', 'Recall control group'], ['WASD, middle drag, wheel', 'Pan / zoom; Shift+wheel pans'],
       ['F then click', 'Attack-move'], ['G then click ally', 'Support'], ['M then drag', 'Mine area'], ['C then drag', 'Construct area'],
-      ['B then 1/2/3 then click', 'Place factory / turret / wall (Z cycles output)'], ['X', 'Idle'], ['O', 'Cycle future-order policy'],
+      ['B then 1/2/3 then click', 'Place factory / turret / wall (R rotates output)'], ['X', 'Idle'], ['O', 'Cycle future-order policy'],
       ['P then 1/2/3', 'Priority high / medium / low'], ['Q then 1–7', 'Queue a unit at selected factories'], ['L', 'Toggle factory loop'],
-      ['H / Shift+H then digit', 'Replace / add group members'], ['J then digit / Backspace', 'Bind / clear factory output group'], ['R then F/G/M/C/X', 'Stored order for newborns'], ['V', 'Statistics graphs'], ['- / =, Shift+[ / Shift+]', 'Timeline zoom / pan'], ['Delete', 'Remove selected draft / blueprint / queue item'], ['Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo draft'],
+      ['H / Shift+H then digit', 'Replace / add group members'], ['J then digit / Backspace', 'Bind / clear factory output group'], ['Factory + F/G/M/C/X', 'Starting order for newborns'], ['V', 'Statistics graphs'], ['- / =, Shift+[ / Shift+]', 'Timeline zoom / pan'], ['Delete', 'Remove selected draft / blueprint / queue item'], ['Ctrl+Z / Ctrl+U', 'Undo / redo draft'],
       ['Enter', 'Commit / pass'], ['Space', 'Play / pause'], [', .', 'Step one tick'], ['< >', 'Jump 100 ticks'], ['Home / End', 'Editable start / end'],
       ['[ ]', 'Playback speed'], ['T', 'Return to draft tick'], ['Esc', 'Cancel mode, then clear selection'], ['?', 'This help'],
     ];
@@ -969,6 +1039,7 @@ function describe(c: DraftCommand): string {
     case 'edit_production': return `queue ${cmd.edit.kind}${'items' in cmd.edit ? ` ${cmd.edit.items.join(',')}` : ''} × ${cmd.factories.length}`;
     case 'set_queue_loop': return `loop ${cmd.enabled ? 'on' : 'off'} × ${cmd.factories.length}`;
     case 'set_stored_order': return `stored ${cmd.order.kind} × ${cmd.factories.length}`;
+    case 'configure_blueprints': return `Plan building: ${cmd.settings.priority} · queue ${cmd.settings.queue.join(', ') || 'empty'} · newborn ${cmd.settings.order.kind}`;
     case 'set_priority': return `priority ${cmd.priority} × ${cmd.entities.length}`;
     default: return cmd.kind;
   }

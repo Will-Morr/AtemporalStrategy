@@ -8,6 +8,7 @@ export const test = base.extend({
     const log = [];
     const watched = new Set();
     const owned = [];
+    const cleanups = [];
     const record = entry => log.push({ time: new Date().toISOString(), ...entry });
     const observe = target => {
       if (watched.has(target)) return;
@@ -51,7 +52,7 @@ export const test = base.extend({
     };
     const errors = () => log.filter(item => ['pageerror', 'requestfailed', 'http-error', 'cleanup-error'].includes(item.kind) || item.level === 'error');
     try {
-      await use({ capture, log, observe, newContext });
+      await use({ capture, log, observe, newContext, afterClose: fn => cleanups.push(fn) });
     } finally {
       const failed = testInfo.status !== testInfo.expectedStatus || errors().length > 0;
       if (failed) {
@@ -71,6 +72,7 @@ export const test = base.extend({
           }
         }
       }
+      for (const cleanup of cleanups.reverse()) await cleanup().catch(error => record({kind:'cleanup-error',text:error.message}));
       const path = testInfo.outputPath('browser-log.json');
       await writeFile(path, JSON.stringify(log, null, 2));
       await testInfo.attach('browser-log', { path, contentType: 'application/json' });

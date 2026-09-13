@@ -39,3 +39,15 @@ Link the guide from the landing page where players select teams. Players enter a
 Players must be able to watch the replay starting from any tick and inject orders on any tick. Do not restrict order entry to sampled snapshot ticks; exact state at an arbitrary tick must remain available.
 
 Movement must use a lightweight shared approach instead of per-unit A* searches. Destination flow fields are the accepted implementation proposal. In-process simulation, ore-budget tuning, in-world order locks, an end-to-end slice before parallel subsystem work, and one startup guide-generation path are accepted proposals; they remain implementation choices rather than additional locked gameplay rules.
+
+## Final UI playtest requirements
+
+The battlefield must remain selectable to every map edge, clear of the interface. Shift+wheel/pinch pans the map view and scrolls the timeline under the pointer; ordinary zoom stays anchored under the pointer. R rotates factory placement. Undo and redo use Ctrl+Z and Ctrl+U (native equivalents/compatible additional shortcuts are welcome).
+
+A replacement constructor order must clear the earlier action visually and mechanically. Hide commands incompatible with the selection. Factories receive starting orders through the same gestures as units. Ghost buildings must be selectable and configurable before construction: production queue, priority, and newborn starting order take effect immediately on completion.
+
+Show stored matter clearly at the viewed tick. Timeline markers include every tick with an authoritative applied order affecting any selected unit. Unit vision determines battlefield visibility with fog of war even though timeline inspection may disclose other information.
+
+Hide full-health bars. Use distinct layered geometric silhouettes with readable direction: square factories, circular turrets on square bases, and distinguishable combinations for mobile units. Group related input buttons in left-aligned columns. Emphasize construction/production discovery and key game information over secondary diagnostics. Show unmistakable color-coded win/loss results and clearly explain continued simulation after elimination and playback after match end.
+
+Complete and commit these fixes before implementing multiplayer, single-order, and recovery browser coverage. The user requested a separate implementation branch and worktree, and completion for real players without an intermediate human-playtest gate.

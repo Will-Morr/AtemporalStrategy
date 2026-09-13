@@ -149,6 +149,13 @@ pub fn canonical_world(state: &WorldState) -> Result<WorldState> {
             return Err("duplicate occupancy".into());
         }
     }
+    for b in &state.blueprints {
+        if b.settings.is_some() != b.settings_command.is_some()
+            || b.settings.as_ref().is_some_and(|s| s.queue.len() > 65536)
+        {
+            return Err("invalid blueprint settings identity or queue length".into());
+        }
+    }
     for g in &mut state.control_groups {
         crate::locks::canonicalize(&mut g.order_locks, state.tick)?;
         g.members.sort();

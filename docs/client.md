@@ -40,9 +40,9 @@ All actions have clickable controls and discoverable hotkeys. Keys apply only wh
 | `P`, then `1`/`2`/`3` | High/medium/low priority |
 | `Q`, then roster number `1`–`7` | Append unit recipe to selected factories |
 | `L` | Toggle selected factories' loop state (mixed becomes on) |
-| `R`, then action key and map target | Set selected factories' stored order |
+| Action key and map target with a factory selected | Set newborn starting orders exactly like unit orders |
 | `Delete` | Remove selected draft command or selected blueprint/queue item, depending on panel focus |
-| `Ctrl+Z` / `Ctrl+Shift+Z` | Draft undo / redo |
+| `Ctrl+Z` / `Ctrl+U` | Draft undo / redo |
 | `Escape` | Cancel gesture/action mode; then clear selection |
 | `Enter` | Commit/pass turn |
 | `Space` | Toggle timeline playback |
@@ -106,10 +106,20 @@ Unit tables show readable costs, health, damage/range/vision, tick cooldowns and
 
 Non-action settings always preserve future orders; the future-removal selector is attached only to AssignOrder/AssignGroupOrder. Their all/window preview lists estimated action/setting skips separately. Explain that locks are consequences of executed orders; a rewrite before the issuing action can change whether its lock exists. Draft undo reverses the uncommitted action and policy together.
 
-Factory placement shows a cardinal output arrow and tile, with `Z` cycling valid output directions in placement mode. Missing structural output space makes placement invalid before commit. The guide uses the browser-safe group-edit and timeline-pan chords above; test actual browser navigation and text-input focus rather than depending on Ctrl+digit/Alt+arrow interception.
+Factory placement shows a cardinal output arrow and tile, with `R` rotating valid output directions in placement mode. Missing structural output space makes placement invalid before commit. The guide uses the browser-safe group-edit and timeline-pan chords above; test actual browser navigation and text-input focus rather than depending on Ctrl+digit/Alt+arrow interception.
 
 After each rewrite, show a compact comparison with the previous published result: final outcome/survivors, births/destructions/spend changes, and skipped or removed commands with links to their ticks. These summaries use the published results and require no speculative draft simulation.
 
 Timed UI distinguishes current battlefield elimination/recovery from finalized constructor/factory loss at the immutable boundary. A building-less constructor is still eligible for timed recovery. Scoreboard has no round limit; provide a visible stop-and-archive operation with an unfinished label, preserving scores and results without calling it a battlefield draw.
 
 Any editable tick can be selected for playback and order entry, including ticks between every sampled snapshot. Show interpolated playback immediately if available, with a brief exact-state loading indicator; enable staging as soon as the in-process reconstruction arrives. Do not silently round a selected tick to a sample. Guide content is static after startup generation from actual loaded stats. Lobby rule summary includes the ore-depletion estimate (one uninterrupted dedicated miner per start, no exclusive ownership implied) and hard cap.
+
+## Implemented playtest refinements
+
+The map canvas is measured against the command deck, and camera transforms reserve the top HUD. Initial player zoom focuses the opening at readable unit scale; spectators fit the map. Shift+wheel/pinch pans either the map or the timeline under the pointer. R rotates factory placement; Ctrl+U redoes drafts alongside Ctrl+Shift+Z/Ctrl+Y.
+
+Related commands form left-aligned columns, with capability filtering and clickable recipe/cost choices. Secondary planning tools use a disclosure. A selected factory receives the normal unit order command as its newborn template, including group delivery and replacement locks. Unfunded blueprints accept configuration through stable local blueprint references; queue/priority/loop/template survive site creation and start at completion. This uses an optional checkpointed blueprint setting record; unset fields are omitted to preserve existing archive hashes. Draft order replacement removes superseded direct recipients and projects the effective order in the map/selection.
+
+Matter is emphasized at the inspected tick, with sampled values labeled during playback. Purple timeline ticks come from authoritative applied recipients. The outcome banner distinguishes final timeline WIN/LOSS/DRAW/STALEMATE from match completion and explains post-elimination simulation and retained replay. Full-health bars are hidden; incomplete sites keep a completion bar. Unit silhouettes use layered geometric roles and last-move facing.
+
+Fog currently uses Euclidean vision radius from completed friendly units/buildings and shares vision with configured teammates. This is an implementation interpretation of the vision requirement; terrain remains dimly inspectable and spectators see all. Hidden enemies cannot be selected or drawn; combat effects require visible involved tiles. Timeline and statistical inspection remain available by design.

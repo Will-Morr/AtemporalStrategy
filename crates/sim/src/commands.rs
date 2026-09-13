@@ -57,7 +57,7 @@ impl Sim {
         if e.owner != player {
             return Err(SkipReason::WrongOwner);
         }
-        if e.lifecycle == Lifecycle::Site && !settings_only {
+        if e.lifecycle == Lifecycle::Site && !settings_only && e.production.is_none() {
             return Err(SkipReason::Incompatible);
         }
         if locks::blocks(&e.order_locks, self.state.tick, round) {
@@ -68,6 +68,9 @@ impl Sim {
 
     fn order_compatible(&self, i: usize, order: &Order) -> bool {
         let def = self.def(i);
+        if def.production.is_some() {
+            return true;
+        }
         match order {
             Order::Idle {} => true,
             Order::AttackMove { .. } | Order::Support { .. } => def.movement.is_some(),
@@ -88,7 +91,11 @@ impl Sim {
         let tick = self.state.tick;
         let (window, max_tick) = (self.config.future_orders.window_ticks, self.config.max_tick);
         let e = &mut self.state.entities[i];
-        e.action = order.clone();
+        if let Some(p) = &mut e.production {
+            p.stored_order = order.clone();
+        } else {
+            e.action = order.clone();
+        }
         e.engaged_target = None;
         e.support_target = match order {
             Order::Support { target } => Some(target.clone()),
@@ -358,11 +365,55 @@ impl Sim {
                             command_index: committed.id.index,
                         },
                         site_id: None,
+                        settings: None,
+                        settings_command: None,
                         output_direction: output,
                     });
                     outcome.applied_entities.push(id);
                 }
                 self.state.blueprints.sort_by(|a, b| a.id.cmp(&b.id));
+            }
+            Command::ConfigureBlueprints {
+                blueprint_ids,
+                settings,
+            } => {
+                let mut ids = blueprint_ids.clone();
+                ids.sort();
+                ids.dedup();
+                for (target_index, id) in ids.iter().enumerate() {
+                    let Some(b) = self
+                        .state
+                        .blueprints
+                        .iter()
+                        .position(|b| b.id == *id && b.owner == player && b.site_id.is_none())
+                    else {
+                        outcome
+                            .skipped
+                            .push(self.skip(Some(id.clone()), SkipReason::Absent));
+                        continue;
+                    };
+                    let ty = self.type_index(&self.state.blueprints[b].type_key)?;
+                    let def = &self.content.types[ty];
+                    if !settings.queue.is_empty()
+                        && def
+                            .production
+                            .as_ref()
+                            .is_none_or(|p| settings.queue.iter().any(|k| !p.recipes.contains(k)))
+                    {
+                        outcome
+                            .skipped
+                            .push(self.skip(Some(id.clone()), SkipReason::Incompatible));
+                        continue;
+                    }
+                    self.state.blueprints[b].priority = settings.priority;
+                    self.state.blueprints[b].settings = Some(settings.clone());
+                    self.state.blueprints[b].settings_command = Some(BirthCommandId {
+                        command: committed.id.clone(),
+                        target_index: u16::try_from(target_index)
+                            .map_err(|_| "too many blueprint targets")?,
+                    });
+                    outcome.applied_entities.push(id.clone());
+                }
             }
             Command::CancelBlueprints { blueprint_ids } => {
                 for id in blueprint_ids {

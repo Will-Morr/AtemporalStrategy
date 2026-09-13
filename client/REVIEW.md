@@ -62,3 +62,11 @@ Representative final screenshots (paths relative to this document):
 - [Immutable history and draft marker](../artifacts/ui/2026-09-13T05-39-14.193Z-435917/results/slice-slice-timed-history-guide-and-server-restart-desktop-chromium/draft-marker-versus-playhead.png)
 - [Stale server instance](../artifacts/ui/2026-09-13T05-39-14.193Z-435917/results/slice-slice-timed-history-guide-and-server-restart-desktop-chromium/stale-server-instance.png)
 - [Narrow guide controls](../artifacts/ui/2026-09-13T05-39-14.193Z-435917/results/slice-slice-timed-history-guide-and-server-restart-desktop-chromium/guide-controls-narrow-viewport.png)
+
+## Final UI playtest fixes — 2026-09-13
+
+Implementation branch `agent/ui-final`, worktree `../atemporal-ui-final`. The actual desktop Chromium scenarios pass against the real server: two-player/spectator opening, production, rewrite and historical replay plus timed history/restart (artifact run `2026-09-13T07-23-50.358Z-488743`, 2 tests); focused playtest regressions (run `2026-09-13T07-27-31.646Z-497920`, 1 test). Screenshots inspected include the grouped command deck, ghost configuration, bottom-edge camera, and effective factory orders. Earlier failed runs are retained; they exposed clipped controls and the revised factory command expectation.
+
+The focused test uses seed 42, a 48×48 map, 2,000 starting matter and a 2,000-tick cap; it configures an unfunded factory with a grunt queue, high priority and an attack order using actual buttons/keys, then verifies the completed factory and newborn in authoritative tick 153 state. It checks replacement/undo/Ctrl+U, R rotation, hidden incompatible buttons, fogged enemy omission, matter labels, selected-recipient timeline ticks, and Shift-wheel panning. The simulation regression separately checks immediate production after completion and inherited action, and caught/fixed a causal birth-ID collision. Full workspace tests and strict Clippy pass after fixture regeneration.
+
+This record covers the playtest-fix batch; multiplayer variants, recovery and complete handoff verification follow in a separate batch. Fog is a presentation constraint over inspectable replay data, not server-side information secrecy.

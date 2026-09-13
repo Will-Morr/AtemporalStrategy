@@ -52,6 +52,22 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #result{max-height:4.5rem;overflow:auto;pointer-events:auto}#replay{top:7.5rem}
 #minimap{position:absolute;right:.5rem;bottom:18rem;float:none;width:7.5rem;height:7.5rem;margin:0;border:1px solid var(--edge)}#stop-archive{bottom:26rem}#draft-title{max-height:3rem;overflow:auto}#draft-list{max-height:6rem;overflow:auto}#lock-preview{max-height:3.5rem;overflow:auto}
 @media(max-width:800px){#minimap{bottom:25rem;width:5rem;height:5rem}#stop-archive{bottom:30.5rem}#draft-list{max-height:3rem}#lock-preview{max-height:2rem}}
+
+/* The battlefield has its own measured viewport above the command deck. */
+:root{--bg:#0e141c;--panel:#182330;--edge:#344456;--text:#edf4fa;--dim:#a0afbd;--accent:#86dcff}
+#panels{grid-template-columns:minmax(240px,1fr) minmax(480px,2.4fr) minmax(240px,1fr);padding:8px;background:#0c131d;border-top:2px solid #354f68;gap:8px}
+#panels>div{height:23rem;background:linear-gradient(145deg,#1a2938,#131e2b);border-color:#30475e;border-radius:8px;padding:10px}
+#selection h3,#draft-panel h3{color:#d6e8f8;text-transform:uppercase;letter-spacing:.08em}
+#actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:start}
+.action-group{display:flex;flex-direction:column;gap:4px;text-align:left;min-width:0}.action-group strong{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#92aec8}.action-group button{text-align:left;padding:3px 7px!important;font-size:12px!important;line-height:1.15;background:#24394d;border-color:#405b73}.action-group button:hover{background:#375a75}
+.action-group.production button{border-color:#9f854a;color:#ffe1a0;background:#42371f}
+#actions button[hidden],.action-group[hidden]{display:none}#mode-options{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0}#mode-options button{background:#735c29;color:#fff0be}
+#top{height:64px;background:#0c131df5;align-content:center}#top-bank{font-size:17px;font-weight:750;color:#8ee8f0;background:#18383d;padding:4px 9px;border:1px solid #367780;border-radius:5px}#top-sim{font-size:10px;color:#8fa3b5}#top-score{color:#ffe1a0;font-weight:700}
+#outcome-banner{position:absolute;top:68px;left:12px;max-width:60%;padding:6px 10px;border-left:4px solid #8ea8bd;background:#122230ed;font-size:12px;pointer-events:none}
+[data-outcome=win]{color:#8aefb1;border-color:#45c77a!important}[data-outcome=loss]{color:#ff9eab;border-color:#f36179!important}[data-outcome=draw]{color:#ffd58b;border-color:#e6b755!important}
+#result{top:106px;right:10px;max-width:260px;font-size:11px}#replay{top:180px;right:10px;max-width:260px}#mode{top:104px;background:#634d1bf5;color:#fff0c5;max-width:65%}
+#minimap{bottom:24rem;width:7rem;height:7rem}#stop-archive{bottom:31.5rem}#toast{bottom:24rem}#commit{background:#26764b;border-color:#62bd87;color:white;font-size:15px;padding:12px;box-shadow:0 2px 12px #0004}#draft-list{max-height:10rem}#timeline{height:4.5rem}#lock-preview{font-size:10px}
+@media(max-width:1000px){#panels{grid-template-columns:1fr 1fr}#panels>div{height:12rem}#panels #timeline-wrap{grid-column:1/-1;grid-row:1;height:20rem}#actions{gap:4px}#panels{padding:4px;gap:4px}#minimap{bottom:33.5rem}#stop-archive{bottom:41rem}#toast{bottom:33rem}#result,#replay{display:none}#outcome-banner{max-width:95%;font-size:10px}#top-bank{font-size:12px}#draft-list{max-height:4rem}}
 </style></head><body>
 <section id="lobby">
   <h1>Atemporal Strategy</h1>
@@ -74,7 +90,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 <section id="game">
   <canvas id="map" tabindex="0" aria-label="Battlefield"></canvas>
   <div id="top"><span id="top-phase"></span><span id="top-tick"></span><span id="top-bank"></span><span id="top-score"></span><span id="top-sim"></span><span id="top-exact"></span></div>
-  <div id="mode"></div>
+  <div id="mode"></div><div id="outcome-banner" role="status"></div>
   <div id="result"></div>
   <div id="toast"></div>
   <div id="help"></div>

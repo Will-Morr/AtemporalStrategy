@@ -29,7 +29,8 @@ export class Renderer {
 
   resize(): void {
     this.map.width = window.innerWidth;
-    this.map.height = window.innerHeight;
+    this.map.height = Math.max(100, document.getElementById('panels')!.getBoundingClientRect().top);
+    this.map.style.height = `${this.map.height}px`;
     this.minimap.width = this.minimap.clientWidth || 200;
     this.minimap.height = this.minimap.clientHeight || 200;
     this.timeline.width = this.timeline.clientWidth || 600;
@@ -44,7 +45,7 @@ export class Renderer {
   clamp(): void {
     const t = this.game.terrain;
     if (!t) return;
-    const vw = this.map.width / this.camera.scale, vh = this.map.height / this.camera.scale;
+    const vw = this.map.width / this.camera.scale, vh = (this.map.height - 64) / this.camera.scale;
     const margin = 2;
     const range = (view: number, size: number, value: number) => {
       const a = view / 2 - margin, b = size - view / 2 + margin;
@@ -57,12 +58,13 @@ export class Renderer {
   fit(): boolean {
     const t = this.game.terrain;
     if (!t) return false;
-    const usable = this.map.height - 270;
+    if (!this.game.spectator) {this.camera.scale=26;const e=this.game.rawEntities().find(e=>e.owner===this.game.player);if(e)this.centerOn(e.x,e.y);return true;}
+    const usable = this.map.height - 84;
     this.camera.scale = Math.max(8, Math.min(32, Math.floor(Math.min(usable / t.height, (this.map.width - 40) / t.width))));
     const fits = t.height * this.camera.scale <= usable && t.width * this.camera.scale <= this.map.width;
     if (fits) {
       this.camera.x = t.width / 2;
-      this.camera.y = t.height / 2 + 135 / this.camera.scale;
+      this.camera.y = t.height / 2;
     }
     return fits;
   }
@@ -88,13 +90,11 @@ export class Renderer {
     this.clamp();
   }
   cycleOutput(): void {
-    for (let i=0;i<4;i++) {
-      this.outputDirection = OUTPUTS[(OUTPUTS.indexOf(this.outputDirection) + 1) % OUTPUTS.length];
-      if (!this.game.hover || this.game.validPlacement(this.game.hover,true)) break;
-    }
+    this.outputDirection = OUTPUTS[(OUTPUTS.indexOf(this.outputDirection) + 1) % OUTPUTS.length];
   }
+
   worldAt(px: number, py: number): { x: number; y: number } {
-    return { x: (px - this.map.width / 2) / this.camera.scale + this.camera.x, y: (py - this.map.height / 2) / this.camera.scale + this.camera.y };
+    return { x: (px - this.map.width / 2) / this.camera.scale + this.camera.x, y: (py - (this.map.height + 64) / 2) / this.camera.scale + this.camera.y };
   }
   tileAt(px: number, py: number): Tile {
     const w = this.worldAt(px, py);
@@ -103,7 +103,7 @@ export class Renderer {
     return { x: clamp(w.x, t?.width ?? 1), y: clamp(w.y, t?.height ?? 1) };
   }
   screen(x: number, y: number): [number, number] {
-    return [(x - this.camera.x) * this.camera.scale + this.map.width / 2, (y - this.camera.y) * this.camera.scale + this.map.height / 2];
+    return [(x - this.camera.x) * this.camera.scale + this.map.width / 2, (y - this.camera.y) * this.camera.scale + (this.map.height + 64) / 2];
   }
   minimapTile(px: number, py: number): Tile | null {
     const t = this.game.terrain;
@@ -168,6 +168,9 @@ export class Renderer {
         ctx.setLineDash([]);
       }
     }
+    const visible = this.game.visibility();
+    const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
+    if (!this.game.spectator) for (let y=0;y<t.height;y++) for(let x=0;x<t.width;x++) if(!sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#080b10ed';ctx.fillRect(px,py,s+.5,s+.5); }
     const views = this.game.entities();
     const byIndex = new Map(views.map(v => [v.index, v]));
     // Combat effects from events near the playhead (presentation only).
@@ -176,6 +179,7 @@ export class Renderer {
       const age = tick - e.tick;
       const ev = e.event;
       if (ev.kind === 'attack') {
+        if (!sees(ev.source_tile) || !sees(ev.target_tile)) continue;
         const [ax, ay] = this.screen(ev.source_tile.x + 0.5, ev.source_tile.y + 0.5);
         const [bx, by] = this.screen(ev.target_tile.x + 0.5, ev.target_tile.y + 0.5);
         ctx.strokeStyle = ev.visual_style === 'artillery' ? '#ffd54f' : ev.visual_style === 'melee' ? '#ff7043' : '#ffffff';
@@ -188,6 +192,7 @@ export class Renderer {
         ctx.globalAlpha = 1;
       } else if (ev.kind === 'impact' || ev.kind === 'destroyed') {
         const tile = ev.kind === 'impact' ? ev.target_tile : ev.tile;
+        if (!sees(tile)) continue;
         const [cx, cy] = this.screen(tile.x + 0.5, tile.y + 0.5);
         ctx.strokeStyle = ev.kind === 'destroyed' ? '#ff5252' : '#fff59d';
         ctx.globalAlpha = Math.max(0, 1 - age / 3);
@@ -207,7 +212,7 @@ export class Renderer {
       ctx.lineWidth = 2;
       ctx.strokeRect(px - 1, py - 1, s + 2, s + 2);
       ctx.lineWidth = 1;
-      const a = v.exact?.action;
+      const a = this.game.effectiveOrder(v);
       if (a?.kind === 'attack_move') {
         const [dx, dy] = this.screen(a.destination.x + 0.5, a.destination.y + 0.5);
         ctx.strokeStyle = '#ef5350';
@@ -237,23 +242,9 @@ export class Renderer {
           ctx.font = `${Math.max(8, s * 0.5)}px system-ui`;
           ctx.fillText(cmd.type_key[0].toUpperCase(), px + s * 0.3, py + s * 0.7);
         }
-      } else if (cmd.kind === 'assign_order' || cmd.kind === 'assign_group_order') {
-        const o = cmd.order;
-        if (o.kind === 'attack_move') {
-          const [dx, dy] = this.screen(o.destination.x + 0.5, o.destination.y + 0.5);
-          ctx.strokeStyle = '#ffca28';
-          ctx.beginPath();
-          ctx.arc(dx, dy, s * 0.4, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (o.kind === 'mine' || o.kind === 'construct') {
-          const [rx, ry] = this.screen(o.area.min.x, o.area.min.y);
-          ctx.strokeStyle = '#ffca28';
-          ctx.setLineDash([4, 2]);
-          ctx.strokeRect(rx, ry, (o.area.max.x - o.area.min.x + 1) * s, (o.area.max.y - o.area.min.y + 1) * s);
-          ctx.setLineDash([]);
-        }
       }
     }
+
     // Placement preview with output arrow.
     if (this.game.mode.kind === 'place' && this.game.hover) {
       const h = this.game.hover;
@@ -289,39 +280,36 @@ export class Renderer {
     if (team) { ctx.strokeStyle=color;ctx.strokeRect(px-2,py-2,s+4,s+4); } 
     ctx.fillStyle = color;
     ctx.globalAlpha = v.lifecycle === 'site' ? 0.45 : 1;
+    const ghost = v.lifecycle === 'blueprint' || v.lifecycle === 'site';
+    ctx.globalAlpha = ghost ? .5 : 1;
+    ctx.save();
+    ctx.translate(px+s/2,py+s/2);
+    const [fx,fy]=FACING[v.facing] ?? [0,-1];
+    if (def?.kind !== 'structure') ctx.rotate(Math.atan2(fy,fx)+Math.PI/2);
+    ctx.strokeStyle='#071019';ctx.lineWidth=Math.max(1,s*.06);
+    const box = (x:number,y:number,w:number,h:number) => {ctx.fillRect(x*s,y*s,w*s,h*s);ctx.strokeRect(x*s,y*s,w*s,h*s);};
+    const circle = (x:number,y:number,r:number) => {ctx.beginPath();ctx.arc(x*s,y*s,r*s,0,Math.PI*2);ctx.fill();ctx.stroke();};
+    const triangle = (w:number,h:number) => {ctx.beginPath();ctx.moveTo(0,-h*s);ctx.lineTo(w*s,h*s);ctx.lineTo(-w*s,h*s);ctx.closePath();ctx.fill();ctx.stroke();};
     if (def?.kind === 'structure') {
-      ctx.fillRect(px + s * 0.1, py + s * 0.1, s * 0.8, s * 0.8);
-      ctx.fillStyle = '#000';
-      ctx.font = `${Math.max(7, s * 0.45)}px system-ui`;
-      ctx.fillText(v.type_key[0].toUpperCase(), px + s * 0.32, py + s * 0.68);
-    } else {
-      ctx.beginPath();
-      ctx.arc(px + s / 2, py + s / 2, s * 0.36, 0, Math.PI * 2);
-      ctx.fill();
-      const [fx, fy] = FACING[v.facing] ?? [0, -1];
-      const len = Math.hypot(fx, fy) || 1;
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = Math.max(1, s * 0.08);
-      ctx.beginPath();
-      ctx.moveTo(px + s / 2, py + s / 2);
-      ctx.lineTo(px + s / 2 + (fx / len) * s * 0.36, py + s / 2 + (fy / len) * s * 0.36);
-      ctx.stroke();
-      ctx.lineWidth = 1;
-      ctx.fillStyle = '#000';
-      ctx.font = `${Math.max(6, s * 0.35)}px system-ui`;
-      ctx.fillText(v.type_key[0], px + s * 0.38, py + s * 0.62);
-    }
-    ctx.globalAlpha = 1;
-    if (s >= 10) {ctx.fillStyle='#fff';ctx.font='7px system-ui';ctx.fillText(String(v.owner),px+s-6,py+s-1);}
-    // Health bar: filled versus dim segment; sites show completion instead.
-    const frac = Math.max(0, Math.min(1, v.hp / v.maxHp));
-    ctx.fillStyle = '#0008';
-    ctx.fillRect(px + 1, py - 3, s - 2, 3);
-    ctx.fillStyle = v.lifecycle === 'site' ? '#ffca28' : frac > 0.5 ? '#66bb6a' : frac > 0.25 ? '#ffa726' : '#ef5350';
-    ctx.fillRect(px + 1, py - 3, (s - 2) * (v.lifecycle === 'site' ? Math.min(1, v.maxHp / (def?.max_hp ?? 1)) : frac), 3);
-    if (v.lifecycle === 'site') {
-      ctx.fillStyle='#0008';ctx.fillRect(px+1,py-7,s-2,3);ctx.fillStyle=frac>.5?'#66bb6a':'#ef5350';ctx.fillRect(px+1,py-7,(s-2)*frac,3);
-    }
+      box(-.4,-.4,.8,.8);
+      ctx.fillStyle='#d7efff';
+      if(v.type_key==='turret'){circle(0,0,.25);box(-.06,-.43,.12,.43);}
+      else if(v.type_key==='factory'){box(-.25,-.23,.15,.3);box(.1,-.23,.15,.3);ctx.fillStyle='#071019';box(-.19,.17,.38,.23);}
+      else {ctx.fillStyle='#ffffff55';box(-.36,-.04,.72,.08);}
+    } else if(v.type_key==='scout') {triangle(.29,.4);ctx.fillStyle='#d7efff';triangle(.1,.2);}
+    else if(v.type_key==='tank' || v.type_key==='artillery') {
+      box(-.39,-.32,.18,.69);box(.21,-.32,.18,.69);box(-.24,-.29,.48,.6);
+      ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,v.type_key==='artillery'?-.49:-.39,.12,.43);
+    } else if(v.type_key==='constructor') {box(-.28,-.25,.56,.55);ctx.fillStyle='#ffe28a';box(-.36,-.42,.12,.35);box(.24,-.42,.12,.35);box(-.17,-.09,.34,.12);box(-.06,-.2,.12,.34);}
+    else if(v.type_key==='miner') {triangle(.33,.29);ctx.fillStyle='#82e8ef';box(-.22,-.2,.44,.27);circle(0,.19,.12);}
+    else if(v.type_key==='grinder') {box(-.26,-.12,.52,.5);ctx.fillStyle='#ffb69b';circle(-.2,-.24,.2);circle(.2,-.24,.2);}
+    else {box(-.3,.14,.19,.25);box(.11,.14,.19,.25);triangle(.28,.23);ctx.fillStyle='#d7efff';circle(0,-.1,.12);}
+    ctx.restore();ctx.globalAlpha=1;
+    if(ghost){ctx.strokeStyle=color;ctx.setLineDash([3,2]);ctx.strokeRect(px,py,s,s);ctx.setLineDash([]);}
+    if(s>=16){ctx.fillStyle='#fff';ctx.font='8px system-ui';ctx.fillText(String(v.owner),px+s-6,py+s-1);}
+    const frac=Math.max(0,Math.min(1,v.hp/v.maxHp));
+    if(v.lifecycle !== 'blueprint' && frac < .999999){ctx.fillStyle='#000b';ctx.fillRect(px,py-4,s,3);ctx.fillStyle=frac>.5?'#79dc9c':frac>.25?'#ffc46b':'#ff6375';ctx.fillRect(px,py-4,s*frac,3);}
+    if(v.lifecycle==='site'){ctx.fillStyle='#000b';ctx.fillRect(px,py-8,s,3);ctx.fillStyle='#ffe28a';ctx.fillRect(px,py-8,s*Math.min(1,v.maxHp/(def?.max_hp??1)),3);}
     if (v.engaged !== null && byIndex.has(v.engaged) && s >= 10) {
       const target = byIndex.get(v.engaged)!;
       const [tx, ty] = this.screen(target.x + 0.5, target.y + 0.5);
@@ -348,11 +336,13 @@ export class Renderer {
         g.fillRect((i % t.width) * sx, Math.floor(i / t.width) * sy, sx, sy);
       }
     }
+    const visible=this.game.visibility();
+    if(!this.game.spectator) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(!visible.has(`${x},${y}`)){g.fillStyle='#080b10ed';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
     for (const v of views) {
       g.fillStyle = this.game.color(v.owner);
       g.fillRect(v.x * sx, v.y * sy, Math.max(2, sx), Math.max(2, sy));
     }
-    const vw = this.map.width / this.camera.scale, vh = this.map.height / this.camera.scale;
+    const vw = this.map.width / this.camera.scale, vh = (this.map.height - 64) / this.camera.scale;
     g.strokeStyle = '#fff';
     g.strokeRect((this.camera.x - vw / 2) * sx, (this.camera.y - vh / 2) * sy, vw * sx, vh * sy);
   }
@@ -394,6 +384,17 @@ export class Renderer {
     const span = t1 - t0;
     const step = Math.pow(10, Math.floor(Math.log10(span))) / (span / Math.pow(10, Math.floor(Math.log10(span))) < 3 ? 5 : 1);
     for (let tick = Math.ceil(t0 / step) * step; tick <= t1; tick += step) g.fillText(String(tick), x(tick) + 2, height - 3);
+    // Authoritative delivery ticks, including indirect group recipients and settings.
+    const round=this.game.experience.rounds.get(this.game.current);
+    const turns=this.game.experience.turns.get(this.game.current) ?? [];
+    const ticks = new Set<number>();
+    for(const turn of turns) for(const c of turn.commands) {
+      const outcome=round?.command_outcomes.find(o=>JSON.stringify(o.command_id)===JSON.stringify(c.id));
+      if(outcome?.applied_entities.some(id=>this.game.selection.has(idKey(id)))) ticks.add(turn.tick);
+    }
+    g.fillStyle='#c2a2ff';
+    for(const tick of ticks){g.fillRect(x(tick)-2,0,4,height-14);g.beginPath();g.moveTo(x(tick)-5,0);g.lineTo(x(tick)+5,0);g.lineTo(x(tick),7);g.fill();}
+    this.timeline.dataset.orderTicks=[...ticks].sort((a,b)=>a-b).join(',');
     // Draft marker and playhead.
     if (this.game.draft.tick !== null) {
       g.fillStyle = '#ffca28';

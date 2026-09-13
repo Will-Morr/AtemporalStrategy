@@ -1005,7 +1005,7 @@ impl Controller {
                             Order::Mine { .. } => d.mining.is_some(),
                             Order::Construct { .. } => d.construction.is_some(),
                         };
-                        if !ok {
+                        if !ok && d.production.is_none() {
                             return Err(format!("{} cannot perform that order", e.type_key));
                         }
                     }
@@ -1060,6 +1060,45 @@ impl Controller {
                                 && def(&e.type_key).is_some_and(|d| d.kind == TypeKind::Structure)
                         }) {
                             return Err("tile already holds a structure".into());
+                        }
+                    }
+                }
+                Command::ConfigureBlueprints {
+                    blueprint_ids,
+                    settings,
+                } => {
+                    if settings.queue.len() > 65536 {
+                        return Err("too many queued recipes".into());
+                    }
+                    for id in blueprint_ids {
+                        let key = state
+                            .blueprints
+                            .iter()
+                            .find(|b| b.id == *id && b.owner == player && b.site_id.is_none())
+                            .map(|b| &b.type_key)
+                            .or_else(|| {
+                                commands
+                                    .get(id.birth_command.command.index as usize)
+                                    .and_then(|c| match c {
+                                        Command::PlaceBlueprints {
+                                            type_key, tiles, ..
+                                        } if id.birth_command.command.player == player
+                                            && id.birth_command.command.round == self.round
+                                            && usize::from(id.item_index) < tiles.len() =>
+                                        {
+                                            Some(type_key)
+                                        }
+                                        _ => None,
+                                    })
+                            })
+                            .ok_or("blueprint is not yours or does not exist")?;
+                        let d = def(key).ok_or("unknown structure")?;
+                        if !settings.queue.is_empty()
+                            && d.production.as_ref().is_none_or(|p| {
+                                settings.queue.iter().any(|k| !p.recipes.contains(k))
+                            })
+                        {
+                            return Err("invalid blueprint recipe".into());
                         }
                     }
                 }
