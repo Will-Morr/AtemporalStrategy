@@ -283,6 +283,9 @@ fn battle(count: usize, threads: u16) -> SimRequest {
 fn cap_run(threads: u16) -> SimRequest {
     let (mut config, content) = setup();
     config.simulation_threads = threads;
+    // Exercise the absolute cap even when the opening becomes decided sooner.
+    config.stop_when_decided = false;
+    config.stall_ticks = config.max_tick;
     // Enough ore for three miners' worth of income to outlast the 20,000-tick horizon.
     config.ore_matter_per_start = 80_000.0;
     let world = map::generate(&config, &content).unwrap();

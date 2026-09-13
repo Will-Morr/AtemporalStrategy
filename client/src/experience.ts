@@ -57,6 +57,7 @@ export class Experience {
     const replay = document.createElement('details'); replay.id = 'replay';
     replay.innerHTML = '<summary>Rounds, inputs and rewrite results</summary><label>Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
     $('game').append(replay);
+    replay.addEventListener('toggle',()=>{if(replay.open)this.loadComparison();});
     $('return-live').onclick = () => void this.selectRound(g.latest);
     ($('round-picker') as HTMLSelectElement).onchange = e => void this.selectRound(Number((e.target as HTMLSelectElement).value));
     const rates = document.createElement('select'); rates.id = 'speed'; rates.setAttribute('aria-label', 'Playback speed');
@@ -90,25 +91,36 @@ export class Experience {
   }
   loadRound(revision: number): Promise<void> {
     if (this.loading.has(revision)) return this.loading.get(revision)!;
-    if (this.rounds.has(revision)) return Promise.resolve();
+    if (this.stats.has(revision) && this.turns.has(revision) && this.destructions.has(revision)) return Promise.resolve();
     const task = (async () => {
       try {
-        const r = await this.g.net.request({ kind:'get_round', revision }, 'round_result', m => m.revision === revision);
+        const r = this.rounds.get(revision) ?? await this.g.net.request({ kind:'get_round', revision }, 'round_result', m => m.revision === revision);
         this.rounds.set(revision,r);
         const end = r.outcome.terminal_state_tick;
         const commands = await this.g.net.request({ kind:'get_commands', revision, from_tick:0, to_tick:Math.max(end,this.g.config.max_tick) }, 'commands', m => m.revision === revision);
         this.turns.set(revision,commands.turns);
         const stats = await this.g.net.request({ kind:'get_stats', revision, from_tick:0, to_tick:end, bucket_width:Math.max(this.g.config.snapshot_interval, Math.ceil(end / 1000 / this.g.config.snapshot_interval)*this.g.config.snapshot_interval) }, 'stats_range', m => m.revision === revision);
         this.stats.set(revision,stats.buckets);
-        const events = await this.g.net.request({kind:'get_events',revision,from_tick:0,to_tick:end},'events',m => m.revision === revision);
+        const events = await this.g.net.request({kind:'get_events',revision,from_tick:0,to_tick:end,effects_only:true},'events',m => m.revision === revision);
         this.destructions.set(revision,events.events.filter(e => e.event.kind === 'destroyed').length);
         if (!this.g.revisions.has(revision)) this.g.revisions.set(revision, { revision, outcome:r.outcome, timeline:r.timeline_index, score:r.score ?? null, dictionary:[], samples:new Map(), events:[], chunks:new Set(), loading:new Set() });
-        if (r.parent_revision !== null && r.parent_revision !== undefined) await this.loadRound(r.parent_revision);
+        // Populate the round picker from durable metadata. Loading every ancestor's body
+        // on reconnect would regenerate large evicted replays without a user inspecting them.
+        let parent = r.parent_revision;
+        while (parent !== null && parent !== undefined && !this.rounds.has(parent)) {
+          const ancestor = await this.g.net.request({kind:'get_round',revision:parent},'round_result',m=>m.revision===parent);
+          this.rounds.set(ancestor.revision,ancestor);parent=ancestor.parent_revision;
+        }
+        if (revision === this.g.current && ($('replay') as HTMLDetailsElement).open) this.loadComparison();
         this.g.updatePanels(); this.drawGraph();
       } catch (e) { this.g.toast(`Replay data: ${(e as Error).message}`); }
       finally { this.loading.delete(revision); }
     })();
     this.loading.set(revision,task); return task;
+  }
+  loadComparison(): void {
+    const parent=this.rounds.get(this.g.current)?.parent_revision;
+    if(parent!==null && parent!==undefined)void this.loadRound(parent);
   }
   async selectRound(revision: number): Promise<void> {
     await this.loadRound(revision);
@@ -119,6 +131,7 @@ export class Experience {
     this.g.selection.clear(); this.g.recalledGroup = null;
     this.g.view = { t0:0,t1:Math.max(1,this.g.rev()!.outcome.terminal_state_tick) };
     this.g.seek(Math.min(this.g.playhead,this.g.view.t1));
+    if(($('replay') as HTMLDetailsElement).open)this.loadComparison();
   }
   groups(): ControlGroupState[] {
     const g = this.g;
@@ -213,7 +226,7 @@ export class Experience {
     const has=(cap:'movement'|'mining'|'construction'|'production')=>views.some(v=>!!g.types.get(v.type_key)?.[cap]);
     const factory=has('production');
     const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.length>0,b:has('construction'),q:factory,p:views.length>0,l:factory,r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production,h:views.some(v=>!v.blueprint),H:views.some(v=>!v.blueprint),j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production)};
-    for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || (g.spectator && !['v','?'].includes(b.dataset.key!));
+    for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
     for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden);
     const options=$('mode-options');options.replaceChildren();
     const choices=g.mode.kind==='build'?g.structures():g.mode.kind==='recipe'?g.producible():g.mode.kind==='priority'?['High','Medium','Low']:g.mode.kind==='membership'||g.mode.kind==='binding'?Array.from({length:10},(_,n)=>String(n)):[];

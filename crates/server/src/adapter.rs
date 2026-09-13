@@ -264,7 +264,10 @@ fn run_job(
             Output::Events(e) => batch.events.extend(e),
             Output::Timeline(t) => batch.timeline.extend(t),
             Output::Progress { tick } => {
-                if tick.saturating_sub(last_flush) >= BATCH_TICKS || batch.bytes >= BATCH_BYTES {
+                if inject_panic
+                    || tick.saturating_sub(last_flush) >= BATCH_TICKS
+                    || batch.bytes >= BATCH_BYTES
+                {
                     last_flush = tick;
                     // A slow consumer throttles the simulation, never the IO loop.
                     if !send(&out, batch.message(&job_id, revision), &cancel)

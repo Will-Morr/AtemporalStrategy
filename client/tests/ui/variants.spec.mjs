@@ -57,6 +57,8 @@ for(const variant of [
   for(const p of [...ps,spectator]){await p.reload();await revision(p,2);}
   await seek(a,tick+1);
   expect(await a.evaluate(()=>({round:window.atemporal.round,score:window.atemporal.rev().score,timed:window.atemporal.editableFrom,groups:window.atemporal.exact.state.control_groups}))).toEqual(before);
+  await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.rounds.size)).toBe(3);
+  expect(await a.evaluate(()=>[...window.atemporal.experience.stats.keys()])).toEqual([2]);
   await review.capture('archive-resumed-same-revision',a);
   await a.locator('#replay summary').click();await a.selectOption('#round-picker','0');await revision(a,0);
   await expect(a.locator('#commit')).toBeDisabled();await review.capture('evicted-historical-round-regenerated',a);
