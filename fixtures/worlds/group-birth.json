@@ -11,7 +11,7 @@
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "4adebcf538f8d6e40083e77314c5de7882f7a0e30ad7a264c08a4bf0a2726cf0",
-      "content_hash": "6f1a708c00a89bda2b5bcb91332ddf72226ae6fd6ca5b9a8c3e79e0cd201f5dc"
+      "content_hash": "cff67569a231da2179f1c48ce5b7502310626b9fe21d4d9a68ffda9fa69653b0"
     },
     "config": {
       "schema_version": 2,
@@ -128,8 +128,8 @@
           "key": "grinder",
           "kind": "unit",
           "shape": "circle",
-          "matter_cost": 25.0,
-          "max_hp": 65.0,
+          "matter_cost": 100.0,
+          "max_hp": 275.0,
           "counts_for_survival": false,
           "provides_build_ability": false,
           "movement": {
