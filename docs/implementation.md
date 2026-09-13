@@ -135,6 +135,10 @@ The coordinator retains shared content/contracts and merges changes sequentially
 - [x] Exact floating-point JSON recovery for fractional matter, with archive/peripheral hash checks and a generated-map regression.
 - [x] Integrate current main, pass the final 30-scenario browser suite and focused timeline scenarios, manually inspect full game frames and record actual verification limits.
 
+- [x] Consistent deletion for queued blueprints and unfinished structures, local validation for rebased blueprint drafts, and cancellation of newly placed blueprints in the same turn.
+- [x] Immediate group/priority/order feedback, mixed-selection summaries, ungrouped defaults without labels, constructor priority badges, yellow ore/gray depletion, floor-only fog and player-colored miners.
+- [x] Smoothed slope plots with signed axes, readable narrow layouts and derivative regression checks.
+
 ## Progressive replay
 
 - [x] View completed replay ticks while simulation continues, with an advancing available frontier, exact seeks, playback, refresh and preserved viewing position at final publication. Controller and native peripheral serve generation-isolated prefixes; provisional results remain read-only until verification. See the progressive replay pass in [integration verification](integration-verification.md).

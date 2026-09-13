@@ -110,7 +110,8 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await clickTile(a, await findEntity(a,0,'constructor')); await a.keyboard.press('h'); await a.keyboard.press('3');
   await expect(a.locator('#group-list')).toContainText('3: 2 living');
   await a.getByRole('button',{name:'Clear group',exact:true}).click(); await a.keyboard.press('3');
-  await expect(a.locator('#group-list')).toContainText('3: 0 living');
+  await expect(a.locator('#group-list button')).toHaveCount(0);
+  expect(await a.evaluate(()=>window.atemporal.experience.groups().find(g=>g.id.slot===3)?.members)).toEqual([]);
   await a.keyboard.press('Control+z'); await a.keyboard.press('Control+z');
   await clickTile(a,originalMiner);
   await a.keyboard.press('Control+z');
@@ -332,7 +333,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect.poll(async () => (await state(a)).draft).toBe(1);
   await expect(a.locator('#lock-preview')).toContainText('1 member deliveries');
   await clickTile(a,factoryTile);
-  await a.getByRole('button',{name:'Cancel construction',exact:true}).click();
+  await a.getByRole('button',{name:'Cancel selected construction',exact:true}).click();
   await expect(a.locator('#draft-list')).toContainText('cancel_blueprints');
   await a.keyboard.press('Escape');
   await a.keyboard.press('Enter');
@@ -357,7 +358,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('Escape');
   await s.locator('#groups summary').click();
   await s.getByLabel('Inspect player groups').selectOption('1');
-  await expect(s.locator('#group-list button')).toHaveCount(10);
+  await expect(s.locator('#group-list button')).toHaveCount(0);
   const scoreBeforeArchive = await a.locator('#top-score').textContent();
   await a.getByRole('button',{name:'Stop and archive unfinished',exact:true}).click();
   await expect(a.locator('#result')).toContainText('unfinished');

@@ -1,5 +1,30 @@
 # Browser integration verification — 2026-09-13
 
+## Blueprint and economy feedback pass
+
+Implemented in `agent/ui-feedback` on main's central-clearing map baseline (`702f57c`). Every unfinished structure has a visible cancellation action. Newly placed blueprints can be configured and cancelled in one draft; deleting their placement removes dependent settings. Rebased drafts check blueprint availability locally and preserve the draft with an actionable explanation before submission.
+
+Selection priority, orders and factory looping distinguish shared and mixed values. Draft group membership is visible immediately; ungrouped units have no number badge. Constructor H/M/L badges expose priority, with the panel explicitly explaining that building priority controls construction funding. Ore is yellow until exhausted, then light gray; walls retain their dark gray through fog. Miners use their owner's color. Statistics add a five-sample local slope with signed axes and responsive labels.
+
+Verification:
+
+- `scripts/check.sh` passed: workspace and serial simulation tests, strict Clippy, client build, shared fixtures and generated-file drift. The slope checks cover linear/irregular sample spacing, negative/flat rates, missing data and singleton windows.
+- The controller regression accepts same-draft placement/configuration/cancellation while rejecting foreign ownership, missing items and forward references.
+- Direct-controller focused Chromium runs passed all four desktop/narrow cases. Final focused run: `artifacts/ui/2026-09-13T19-27-56.885Z-841600`. Seed 42; blueprint turns use a 1,200-tick cap; the mining case uses 1,800 ticks and 200 matter per start, mines one deposit completely, then moves the miner away for inspection.
+- The peripheral-enabled full run (`artifacts/ui/2026-09-13T19-32-23.235Z-848086`) received SIGTERM after 13 passes, without an assertion failure or final report. All 13 completed traces have valid ZIP integrity. All 19 narrow cases then passed (`artifacts/ui/2026-09-13T19-35-27.502Z-854165`) and all 8 desktop variants passed (`artifacts/ui/2026-09-13T19-35-28.730Z-854219`), giving all 38 distinct scenarios passing coverage. The interrupted artifacts are retained.
+- Final compact mixed-value labels and focused-queue Delete handling passed TypeScript/build and both desktop/narrow blueprint scenarios (`artifacts/ui/2026-09-13T19-42-31.841Z-862842`), including undo restoring the removed queue item without deleting its factory. Both final traces have valid ZIP integrity.
+
+Manual review includes full desktop/narrow frames for mixed priorities, assigned groups, turret deletion controls, player-colored miners, yellow and exhausted gray ore, constant wall shading and smoothed mining plots. Review of the first narrow plot exposed illegible scaled labels; the final chart renders at its actual width. Focused traces were inspected for cancellation/rebase interactions and have valid ZIP integrity. Evidence is retained locally under `artifacts/review/2026-09-13-ui-feedback`; complete run evidence remains in the implementation worktree.
+
+Representative reviewed frames:
+
+- [Mixed selection](../artifacts/review/2026-09-13-ui-feedback/mixed-desktop.png), [narrow selection](../artifacts/review/2026-09-13-ui-feedback/mixed-narrow.png)
+- [Delete turret blueprint](../artifacts/review/2026-09-13-ui-feedback/blueprint-desktop.png), [cancel turret construction](../artifacts/review/2026-09-13-ui-feedback/construction-desktop.png)
+- [Miner owner color](../artifacts/review/2026-09-13-ui-feedback/miner-owner-color.png), [exhausted deposit](../artifacts/review/2026-09-13-ui-feedback/depleted-desktop.png)
+- [Mining slope](../artifacts/review/2026-09-13-ui-feedback/slope-desktop.png), [narrow slope](../artifacts/review/2026-09-13-ui-feedback/slope-narrow.png)
+
+This pass does not close the separate 2,000-live-entity controller/browser/peripheral stress measurement. Firefox/WebKit, touchscreen-only and WAN behavior remain unverified.
+
 ## Progressive replay pass
 
 Implemented in `agent/progressive-replay`, rebased onto main's seeded traffic-map changes (`aa8e7a6`). Completed prefixes are available during simulation from both the controller and native input-only peripheral. Generation checks isolate retries; exact provisional states stay outside published caches. Playback waits at the frontier, refresh restores access, and final verification preserves the inspected tick. Planning stays closed and the result remains explicitly pending until publication.

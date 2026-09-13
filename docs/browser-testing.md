@@ -128,3 +128,6 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 
 
 `progressive.spec.mjs` checks direct-controller and input-only-peripheral previews in both viewports: exact non-sample seeking, typing while progress advances, playback at the frontier, refresh, disabled planning and equality with the final replay. Its isolated processes use `ATEMPORAL_PREVIEW_TEST_DELAY_MS` to keep the long tail observable on fast machines; the production default adds no delay. The project timeout also gives built-in trace finalization up to 120 seconds; the review fixture has its own cleanup budget. Revision helpers wait for publication, so existing scenarios cannot accidentally count a provisional state as a verified result.
+
+
+`feedback.spec.mjs` covers factory/turret blueprint deletion, undo/redo and removal of dependent settings, shared/mixed priority and group feedback, rebasing before a blueprint existed without submitting an invalid commit, cancellation of an active turret construction site, exhausted ore and smoothed mining-rate plots. It uses the peripheral when `ATEMPORAL_UI_PERIPHERAL=1`; direct and replicated verification evidence is recorded in the integration log. The pure slope checks run with `npm test --prefix client` and cover irregular spacing, negative/zero rates, missing samples and singleton windows.

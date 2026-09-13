@@ -1,9 +1,9 @@
 import {test,expect} from './fixtures.mjs';
-import {isolatedServer,players,revision,tile,seek,area} from './game-helpers.mjs';
+import {isolatedServer,isolatedPeripheral,players,revision,tile,seek,area} from './game-helpers.mjs';
 
 test('blueprint deletion, queued membership and mixed priorities stay valid through commit',async({review},testInfo)=>{
   test.setTimeout(120000);
-  const server=await isolatedServer(testInfo,c=>{c.match_defaults.max_tick=1200;});review.afterClose(server.stop);
+  const server=await (process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral:isolatedServer)(testInfo,c=>{c.match_defaults.max_tick=1200;});review.afterClose(server.stop);
   const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
   const units=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0).map(e=>({type:e.type_key,x:e.x,y:e.y})));
   const constructor=units.find(e=>e.type==='constructor'),miner=units.find(e=>e.type==='miner');
@@ -19,6 +19,9 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   const spots=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0],tiles=[];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+3;x++)if(g.validPlacement({x,y},true))tiles.push({x,y});return tiles;});
   const place=async(type,pos)=>{await tile(a,constructor);await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:type}).click();await tile(a,pos);await tile(a,pos);};
   await place('factory',spots[0]);await a.getByRole('button',{name:'Queue grunt',exact:true}).click();
+  await a.getByRole('button',{name:'Remove one queued grunt',exact:true}).focus();await a.keyboard.press('Delete');
+  await expect(a.locator('#queue')).toContainText('Queue empty');expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(true);
+  await a.keyboard.press('Control+z');await expect(a.locator('#queue')).toContainText('grunt ×1');
   await a.getByRole('button',{name:'Delete selected blueprints',exact:true}).click();
   expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(false);
   await a.keyboard.press('Control+z');expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(true);await a.keyboard.press('Control+u');
@@ -30,7 +33,10 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   await a.locator('#draft-list li').filter({hasText:`place turret at ${spots[2].x},${spots[2].y}`}).click();await a.keyboard.press('Delete');
   expect(await a.evaluate(()=>window.atemporal.draft.commands.some(d=>d.command.kind==='configure_blueprints'&&d.command.blueprint_ids.some(r=>r.kind==='draft'&&!window.atemporal.draft.commands.some(p=>p.local_id===r.local_id))))).toBe(false);
   await a.keyboard.press('Control+z');await a.locator('#commit').click();await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');await b.locator('#commit').click();await revision(a,1);
-  await seek(a,1);await tile(a,spots[2]);await expect(a.locator('#cancel-blueprints')).toBeVisible();
+  await seek(a,1);
+  expect(await a.evaluate(()=>window.atemporal.exact.state.entities.filter(e=>e.owner===0&&['constructor','miner'].includes(e.type_key)).map(e=>e.priority))).toEqual(['low','low']);
+  expect(await a.evaluate(()=>window.atemporal.experience.groups().find(g=>g.id.owner===0&&g.id.slot===3)?.members.length)).toBe(1);
+  await tile(a,spots[2]);await expect(a.locator('#cancel-blueprints')).toBeVisible();
   expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0).length)).toBe(1);
   await a.locator('#cancel-blueprints').click();await review.capture('persistent-blueprint-cancelled-in-draft',a);
   // Rebase to a tick before this blueprint existed: keep the draft and explain locally.
@@ -40,12 +46,18 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   await seek(a,1);await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,2);
   expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0))).toEqual([]);
+  await place('turret',spots[3]);await tile(a,constructor);await a.keyboard.press('c');await area(a,spots[3]);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,3);await seek(a,10);await tile(a,spots[3]);
+  await expect(a.locator('#cancel-blueprints')).toHaveText('Cancel selected construction');await review.capture('turret-under-construction-cancel-control',a);
+  await a.locator('#cancel-blueprints').click();await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,4);await seek(a,11);
+  expect(await a.evaluate(t=>window.atemporal.entities().some(e=>e.x===t.x&&e.y===t.y&&e.type_key==='turret'),spots[3])).toBe(false);
 });
 
 test('depleted ore and mining slope are readable in a real replay',async({review},testInfo)=>{
   test.setTimeout(120000);
-  const server=await isolatedServer(testInfo,c=>{c.match_defaults.max_tick=1800;c.match_defaults.stall_ticks=1800;c.match_defaults.ore_matter_per_start=200;});review.afterClose(server.stop);
+  const server=await (process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral:isolatedServer)(testInfo,c=>{c.match_defaults.max_tick=1800;c.match_defaults.stall_ticks=1800;c.match_defaults.ore_matter_per_start=200;});review.afterClose(server.stop);
   const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  await tile(b,await b.evaluate(()=>{const m=window.atemporal.entities().find(e=>e.owner===1&&e.type_key==='miner');return{x:m.x,y:m.y};}));await review.capture('second-player-miner-color',b);
   const mining=await a.evaluate(()=>{const g=window.atemporal,m=g.entities().find(e=>e.owner===0&&e.type_key==='miner');const ores=g.initialOre.flatMap((n,i)=>n>0?[{x:i%g.terrain.width,y:Math.floor(i/g.terrain.width),n}]:[]);ores.sort((a,b)=>Math.hypot(a.x-m.x,a.y-m.y)-Math.hypot(b.x-m.x,b.y-m.y));return {miner:{x:m.x,y:m.y},ore:ores[0]};});
   await tile(a,mining.miner);await review.capture('player-colored-miner-and-gray-walls',a);await a.keyboard.press('m');await area(a,mining.ore);
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await seek(a,Math.min(1000,await a.evaluate(()=>window.atemporal.availableThrough)));

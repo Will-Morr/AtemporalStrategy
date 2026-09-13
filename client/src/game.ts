@@ -1199,10 +1199,17 @@ export class Game {
       const priorities=new Set(views.map(v=>this.effectivePriority(v)));
       const priority=document.createElement('div');priority.id='selection-priority';priority.className='selection-value';
       priority.dataset.value=priorities.size===1?[...priorities][0]:'mixed';
-      priority.textContent=`Priority: ${priorities.size===1?[...priorities][0]:'Mixed · '+[...priorities].join(' / ')}`;body.insertBefore(priority,icons.nextSibling);
+      priority.title=[...priorities].join(' / ');priority.textContent=`Priority: ${priorities.size===1?[...priorities][0]:'Mixed'}`;body.insertBefore(priority,icons.nextSibling);
+      if(views.length>1){
+        const orders=views.map(v=>this.effectiveOrder(v)??{kind:'idle'} as Order);
+        const summary=document.createElement('div');summary.id='selection-orders';summary.className='selection-value';
+        summary.textContent=`Orders: ${new Set(orders.map(o=>JSON.stringify(o))).size===1?orderLabel(orders[0]):'Mixed'}`;body.insertBefore(summary,priority.nextSibling);
+        const factories=views.filter(v=>!!this.types.get(v.type_key)?.production);
+        if(factories.length>1){const loops=new Set(factories.map(v=>factoryPlan(this,v).loop));const loop=document.createElement('div');loop.className='selection-value';loop.textContent=`Factory loop: ${loops.size>1?'Mixed':[...loops][0]?'On':'Off'}`;body.insertBefore(loop,summary.nextSibling);}
+      }
       const groups=this.experience.groups();
       const memberships=views.map(v=>groups.filter(g=>g.members.some(id=>idKey(id)===idKey(v.id))).map(g=>g.id.slot).sort().join(', '));
-      if(memberships.some(Boolean)){const group=document.createElement('div');group.id='selection-groups';group.className='selection-value';group.textContent=`Groups: ${new Set(memberships).size===1?memberships[0]:'Mixed · '+[...new Set(memberships)].map(s=>s||'ungrouped').join(' / ')}`;body.insertBefore(group,priority.nextSibling);}
+      if(memberships.some(Boolean)){const group=document.createElement('div');group.id='selection-groups';group.className='selection-value';group.title=[...new Set(memberships)].map(s=>s||'ungrouped').join(' / ');group.textContent=`Groups: ${new Set(memberships).size===1?memberships[0]:'Mixed'}`;body.insertBefore(group,priority.nextSibling);}
       if(views.some(v=>!!this.types.get(v.type_key)?.construction)){const note=document.createElement('small');note.textContent='Construction funding uses the target building’s priority.';body.append(note);}
       const cancellable=views.filter(v=>this.ownSelectable(v)&&this.blueprintRef(v));
       if(cancellable.length){const cancel=document.createElement('button');cancel.id='cancel-blueprints';cancel.textContent=cancellable.some(v=>v.lifecycle==='site')?'Cancel selected construction':'Delete selected blueprints';cancel.title='Remove these plans and unfinished buildings; invested matter is lost. Undo restores an uncommitted change.';cancel.disabled=!this.canStage().ok;cancel.onclick=()=>this.cancelSelectedBlueprints();body.insertBefore(cancel,priority.nextSibling);}
