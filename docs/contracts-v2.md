@@ -33,3 +33,9 @@ Content loading/normalization is shared; the sim reads capability data only. The
 ## Still provisional
 
 Compact binary encodings (JSON only today), `Move` events and the inputs-only transport (`replay_bootstrap`, `round_inputs`, `reference_hash` are defined but unused). Retention budgets, archive resume, lobby team capacity and server-side stats bucketing are implemented in the server without record changes: `get_stats` buckets report the latest `StatsSample` in each bucket, and timeline index buckets widen with the run length. Changing any record is a coordinator change with regenerated schema/types/fixtures.
+
+## Blueprint planning and factory order delivery
+
+`ConfigureBlueprints { blueprint_ids, settings }` uses the existing sequential draft/persistent blueprint reference format. Settings replace the planned queue, priority, loop flag and newborn order. Only owned, unfunded blueprints accept it; once a site exists, normal entity production/settings commands apply. Queue identities are derived from the configuring command plus the sorted/deduplicated target index and recipe index, separate from the placement identity. Settings and their birth-command source persist in checkpoints; absent optional fields are omitted so older unconfigured blueprint serialization/hashes remain stable. Construction consumes these settings when creating the site and preserves them through completion. Configuration requires `keep` and counts as a command under the control limit.
+
+Normal direct/group action delivery to a factory sets its newborn template, installs the same action replacement locks, and records the factory among applied recipients. It leaves production running; later newborns read the effective output-group order or fallback template. Existing `SetStoredOrder` records remain replayable. Sites with production accept this configuration before completion.

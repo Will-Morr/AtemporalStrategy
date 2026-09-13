@@ -326,6 +326,10 @@ pub enum Command<BlueprintReference = BlueprintId, QueueReference = QueueItemId>
         priority: Priority,
         output_directions: Option<Vec<CardinalDirection>>,
     },
+    ConfigureBlueprints {
+        blueprint_ids: Vec<BlueprintReference>,
+        settings: BlueprintSettings,
+    },
     CancelBlueprints {
         blueprint_ids: Vec<BlueprintReference>,
     },
@@ -413,8 +417,25 @@ record!(EntityState { id: EntityId, owner: PlayerId, type_key: TypeKey, tile: Ti
     hp: f64, paid_matter: f64, lifecycle: Lifecycle, blueprint_id: Option<BlueprintId>, action: Order, priority: Priority,
     next_action_tick: Tick, next_move_tick: Tick, production: Option<Production>, support_target: Option<EntityId>,
     engaged_target: Option<EntityId>, resolved_destination: Option<Tile>, failed_move_attempts: u8, blocked_step: Option<Tile>, born_at_tick: Option<Tick>, order_locks: Vec<OrderLock>, goal_settled: bool, local_detour: Vec<Tile> });
-record!(Blueprint { id: BlueprintId, owner: PlayerId, type_key: TypeKey, tile: Tile, priority: Priority,
-    source_command_id: CommandId, precedence: EventKey, site_id: Option<EntityId>, output_direction: Option<CardinalDirection> });
+record!(BlueprintSettings { queue: Vec<TypeKey>, order: Order, priority: Priority, loop_enabled: bool });
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Blueprint {
+    pub id: BlueprintId,
+    pub owner: PlayerId,
+    pub type_key: TypeKey,
+    pub tile: Tile,
+    pub priority: Priority,
+    pub source_command_id: CommandId,
+    pub precedence: EventKey,
+    pub site_id: Option<EntityId>,
+    pub output_direction: Option<CardinalDirection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<BlueprintSettings>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings_command: Option<BirthCommandId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EventKey {

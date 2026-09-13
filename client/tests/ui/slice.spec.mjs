@@ -109,7 +109,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect(a.locator('#draft-list')).toContainText('group 3: attack_move');
   await a.keyboard.press('Control+z');
   await clickTile(a, originalMiner);
-  await expect(a.locator('#recipient')).toContainText('Selected units only');
+  await expect(a.locator('#recipient')).toContainText('Selected units');
   await a.locator('#groups summary').click();
   // Every stored-order kind uses the same action/target gestures (factory tests below).
   // Wall line placement uses connected axis steps, with visible validity feedback.
@@ -148,7 +148,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await expect(a.locator('#mode')).toContainText('Place factory');
   const previewPoint = await screenOf(a,factoryTile);
   await a.mouse.move(previewPoint.x,previewPoint.y);
-  await a.keyboard.press('z');
+  await a.keyboard.press('r');
   await expect(a.locator('#mode')).toContainText('output');
   await review.capture('factory-output-preview',a);
   await clickTile(a, factoryTile);
@@ -214,7 +214,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
     if(key === 'f') await clickTile(a,factoryTile);
     if(key === 'm' || key === 'c') await dragTiles(a,factoryTile,factoryTile);
     await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.at(-1)?.command.order?.kind)).toBe(kind);
-    expect(await a.evaluate(() => window.atemporal.draft.commands.at(-1).command.kind)).toBe('set_stored_order');
+    expect(await a.evaluate(() => window.atemporal.draft.commands.at(-1).command.kind)).toBe('assign_order');
     await a.keyboard.press('Control+z');
   }
   await clickTile(a,factoryTile); await a.keyboard.press('j'); await a.keyboard.press('3');
@@ -232,7 +232,7 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('l');
   await a.keyboard.press('r');
   await a.keyboard.press('f');
-  const enemyMiner = await findEntity(a, 1, 'miner');
+  const enemyMiner = await findEntity(s, 1, 'miner');
   await clickTile(a, enemyMiner);
   await expect.poll(async () => (await state(a)).draft).toBe(3);
   expect((await state(a)).draftTick).toBe(153);
@@ -402,7 +402,7 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
     await a.keyboard.press('Shift+.');
     await expect.poll(async () => (await state(a)).exactTick).toBe(200);
     await review.capture('draft-marker-versus-playhead',a);
-    await a.getByRole('button',{name:'Rebase draft here'}).click(); expect((await state(a)).draftTick).toBe(200);
+    await a.getByText('More planning tools',{exact:true}).click();await a.getByRole('button',{name:'Rebase draft here'}).click(); expect((await state(a)).draftTick).toBe(200);
     await a.keyboard.press('Control+z'); expect((await state(a)).draftTick).toBe(100);
     await a.keyboard.press('t'); expect((await state(a)).playhead).toBe(100);
     // Advance twice from nonzero checkpoints; earlier authoritative outcomes must survive.

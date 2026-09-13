@@ -1170,3 +1170,90 @@ fn a_decided_run_stops_once_every_other_side_cannot_act() {
     assert_eq!(run.result.outcome.stop_reason, StopReason::Elimination);
     assert_eq!(run.result.outcome.terminal_state_tick, 1);
 }
+
+#[test]
+fn configured_ghost_starts_production_and_inherited_order_on_completion() {
+    let mut w = World::new(&OPEN);
+    w.state.players[0].bank = 1000.0;
+    let constructor = w.spawn(0, "constructor", 2, 2);
+    let placement = identity::command_id(1, 0, 0);
+    let factory = identity::blueprint(&placement, 0).unwrap();
+    let order = attack_move(10, 2);
+    w.turn(
+        1,
+        0,
+        0,
+        vec![
+            Command::PlaceBlueprints {
+                type_key: "factory".into(),
+                tiles: vec![tile(3, 2)],
+                priority: Priority::Medium,
+                output_directions: Some(vec![CardinalDirection::E]),
+            },
+            Command::ConfigureBlueprints {
+                blueprint_ids: vec![factory.clone()],
+                settings: BlueprintSettings {
+                    queue: vec!["grunt".into()],
+                    order: order.clone(),
+                    priority: Priority::High,
+                    loop_enabled: false,
+                },
+            },
+            Command::AssignOrder {
+                entities: vec![constructor.clone()],
+                order: attack_move(1, 7),
+            },
+            Command::AssignOrder {
+                entities: vec![constructor.clone()],
+                order: Order::Construct {
+                    area: rect(3, 2, 3, 2),
+                },
+            },
+        ],
+    );
+    let at_one = w.at(1);
+    assert!(matches!(
+        entity(&at_one, &constructor).action,
+        Order::Construct { .. }
+    ));
+    let run = w.run();
+    let factory_state = entity(&run.result.final_state, &factory);
+    assert_eq!(factory_state.lifecycle, Lifecycle::Complete);
+    assert_eq!(factory_state.priority, Priority::High);
+    assert_eq!(
+        factory_state.production.as_ref().unwrap().stored_order,
+        order
+    );
+    let newborn = run
+        .result
+        .final_state
+        .entities
+        .iter()
+        .find(|e| e.type_key == "grunt")
+        .unwrap();
+    assert_eq!(newborn.action, order);
+    let complete_tick = run
+        .checkpoints
+        .iter()
+        .find(|s| {
+            s.entities
+                .iter()
+                .any(|e| e.id == factory && e.lifecycle == Lifecycle::Complete)
+        })
+        .unwrap()
+        .tick;
+    assert!(
+        entity(&w.at(complete_tick + 1), &factory)
+            .production
+            .as_ref()
+            .unwrap()
+            .active_item
+            .is_some(),
+        "production starts on the first complete tick"
+    );
+    assert!(
+        run.outcome(&identity::command_id(1, 0, 1))
+            .skipped
+            .is_empty()
+    );
+}

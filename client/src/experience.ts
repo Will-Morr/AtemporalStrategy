@@ -22,21 +22,31 @@ export class Experience {
   constructor(readonly g: Game) {
     this.groupOwner = g.player ?? 0;
     const toolbar = document.createElement('div'); toolbar.id = 'actions';
-    const keys: [string,string][] = [['F Attack','f'],['G Support','g'],['M Mine','m'],['C Construct','c'],['B Build','b'],['Q Queue','q'],['P Priority','p'],['X Idle','x'],['L Loop','l'],['R Stored','r'],['H Members','h'],['⇧H Add','H'],['J Output group','j'],['O Future policy','o'],['Z Output direction','z'],['Undo','Control+z'],['Redo','Control+Shift+z'],['V Statistics','v'],['? Help','?']];
-    for (const [label,key] of keys) toolbar.append(button(label, () => {
-      if (key === 'Control+z') g.undo(); else if (key === 'Control+Shift+z') g.redo();
-      else g.key(new KeyboardEvent('keydown', { key, shiftKey: key === 'H' }));
-    }));
-    toolbar.append(button('Rebase draft here', () => {
+    const categories: [string,string,[string,string][]][] = [
+      ['Orders','orders',[['F Attack','f'],['G Support','g'],['M Mine','m'],['C Construct','c'],['X Idle','x']]],
+      ['Build & produce','production',[['B Build structure','b'],['Q Build units','q'],['P Priority','p'],['L Loop','l'],['R Rotate factory','r']]],
+      ['Groups','groups',[['H Members','h'],['⇧H Add','H'],['J Output group','j']]],
+      ['Planning','planning',[['O Future policy','o'],['Undo · Ctrl Z','Control+z'],['Redo · Ctrl U','Control+u'],['V Statistics','v'],['? Help','?']]],
+    ];
+    for (const [title,category,keys] of categories) {
+      const column=document.createElement('div');column.className=`action-group ${category}`;
+      const label=document.createElement('strong');label.textContent=title;column.append(label);
+      for(const [label,key] of keys){const b=button(label,()=>{
+        if(key==='Control+z')g.undo();else if(key==='Control+u')g.redo();else g.key(new KeyboardEvent('keydown',{key,shiftKey:key==='H'}));
+      });b.dataset.key=key;column.append(b);}
+      toolbar.append(column);
+    }
+    const advanced=document.createElement('details');advanced.innerHTML='<summary>More planning tools</summary>';const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);$('draft-panel').append(advanced);
+    planning.append(button('Rebase draft here', () => {
       if (g.current !== g.latest || g.playhead < g.editableFrom) { g.toast('Choose an editable live tick.'); return; }
       g.draft.undo.push({commands:[...g.draft.commands],tick:g.draft.tick}); g.draft.redo = [];
       g.draft.tick = g.draft.commands.length ? Math.floor(g.playhead) : null; g.updatePanels();
     }));
-    toolbar.append(button('Clear draft', () => g.clearDraft()));
-    toolbar.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
-    const guide = document.createElement('a'); guide.href = '/guide/'; guide.target = '_blank'; guide.textContent = 'Guide'; toolbar.append(guide);
-    for(let n=0;n<10;n++) toolbar.append(button(String(n), () => g.digit(n)));
-    toolbar.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
+    planning.append(button('Clear draft', () => g.clearDraft()));
+    planning.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
+    const guide = document.createElement('a'); guide.href = '/guide/'; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
+    const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
+    planning.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
     $('timeline-wrap').append(toolbar);
     const groups = document.createElement('details'); groups.id = 'groups'; groups.innerHTML = '<summary>Groups 0–9</summary><div id="group-list"></div>';
     if (g.spectator) { const owner=document.createElement('select');owner.setAttribute('aria-label','Inspect player groups');for(let p=0;p<g.config.player_count;p++)owner.add(new Option(g.name(p),String(p)));owner.onchange=()=>{this.groupOwner=Number(owner.value);g.selection.clear();g.recalledGroup=null;g.updatePanels();};groups.append(owner); }
@@ -142,8 +152,9 @@ export class Experience {
   }
   update(): void {
     const g = this.g;
+    this.actions();
     $('stop-archive').hidden = g.spectator || !!g.finished || g.current !== g.latest;
-    $('recipient').textContent = g.recalledGroup === null ? 'Selected units only' : `Group ${g.recalledGroup}: current members + future spawns`;
+    $('recipient').textContent = g.recalledGroup === null ? 'Selected units · factories set newborn orders' : `Group ${g.recalledGroup}: current members + future spawns`;
     ($('speed') as HTMLSelectElement).value = String(g.rate);
     const list = $('group-list'); list.replaceChildren();
     const groups = this.groups();
@@ -197,6 +208,17 @@ export class Experience {
     status.textContent = Array.from({length:g.config.player_count},(_,p) => `${g.name(p)}: building ${entities.some(e=>e.owner===p && g.types.get(e.type_key)?.counts_for_survival)?'✓':'missing'}, constructor/factory ${entities.some(e=>e.owner===p && g.types.get(e.type_key)?.provides_build_ability)?'✓':'missing'}`).join(' · ');
     inputs.prepend(status);
   }
+  actions(): void {
+    const g=this.g, views=g.selectedViews().filter(v=>g.ownSelectable(v));
+    const has=(cap:'movement'|'mining'|'construction'|'production')=>views.some(v=>!!g.types.get(v.type_key)?.[cap]);
+    const factory=has('production');
+    const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.length>0,b:has('construction'),q:factory,p:views.length>0,l:factory,r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production,h:views.some(v=>!v.blueprint),H:views.some(v=>!v.blueprint),j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production)};
+    for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || (g.spectator && !['v','?'].includes(b.dataset.key!));
+    for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden);
+    const options=$('mode-options');options.replaceChildren();
+    const choices=g.mode.kind==='build'?g.structures():g.mode.kind==='recipe'?g.producible():g.mode.kind==='priority'?['High','Medium','Low']:g.mode.kind==='membership'||g.mode.kind==='binding'?Array.from({length:10},(_,n)=>String(n)):[];
+    choices.forEach((label,index)=>{const digit=g.mode.kind==='membership'||g.mode.kind==='binding'?index:index+1;const cost=g.types.get(label)?.matter_cost;options.append(button(`${digit} · ${label}${cost===undefined?'':` · ${cost} matter`}`,()=>g.digit(digit)));});
+  }
   queue(): void {
     const g = this.g, root = $('queue');
     // Preserve focused queue buttons through redraws caused by exact-state arrival.
@@ -210,6 +232,7 @@ export class Experience {
       }; root.append(b);
     };
     for (const v of g.selectedViews()) {
+      if(v.blueprint && v.owner===g.player){const info=document.createElement('p');info.textContent=`Planned ${v.type_key} · ${v.settings?.priority} · queue: ${v.settings?.queue.join(', ')||'empty'} · newborn ${v.settings?.order.kind} · starts on completion`;root.append(info);root.append(button('Clear planned queue',()=>g.configureGhosts(s=>{s.queue=[];})));continue;}
       const p = structuredClone(v.exact?.production);
       if (!p || v.owner !== g.player) continue;
       if(g.draft.tick === Math.floor(g.playhead) && g.current === g.latest) for(const d of g.draft.commands) {const c=d.command;if('factories' in c && c.factories.some(id=>idKey(id)===idKey(v.id))) {if(c.kind==='bind_factory_group')p.spawn_group=c.group;if(c.kind==='set_stored_order')p.stored_order=c.order;}}

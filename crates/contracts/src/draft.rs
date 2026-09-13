@@ -77,6 +77,14 @@ pub fn resolve_local_references(
                 return Err("too many queue items".into());
             }
         }
+        if let Command::ConfigureBlueprints {
+            blueprint_ids,
+            settings,
+        } = &entry.command
+            && (blueprint_ids.len() > 65536 || settings.queue.len() > 65536)
+        {
+            return Err("too many blueprint targets or recipes".into());
+        }
         let index = u32::try_from(index).map_err(|_| "too many draft commands")?;
         let blueprint_ref = |reference: &DraftItemRef<BlueprintId>| -> Result<BlueprintId> {
             match reference {
@@ -195,6 +203,16 @@ pub fn resolve_local_references(
                     output_directions: output_directions.clone(),
                 }
             }
+            Command::ConfigureBlueprints {
+                blueprint_ids,
+                settings,
+            } => Command::ConfigureBlueprints {
+                blueprint_ids: blueprint_ids
+                    .iter()
+                    .map(blueprint_ref)
+                    .collect::<Result<_>>()?,
+                settings: settings.clone(),
+            },
             Command::CancelBlueprints { blueprint_ids } => Command::CancelBlueprints {
                 blueprint_ids: blueprint_ids
                     .iter()

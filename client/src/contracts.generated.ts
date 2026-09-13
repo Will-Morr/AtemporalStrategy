@@ -135,6 +135,11 @@ export type Command =
     }
   | {
       blueprint_ids: DraftItemRef[];
+      kind: "configure_blueprints";
+      settings: BlueprintSettings;
+    }
+  | {
+      blueprint_ids: DraftItemRef[];
       kind: "cancel_blueprints";
     }
   | {
@@ -439,6 +444,11 @@ export type Command2 =
       priority: Priority;
       tiles: Tile[];
       type_key: string;
+    }
+  | {
+      blueprint_ids: EntityId[];
+      kind: "configure_blueprints";
+      settings: BlueprintSettings;
     }
   | {
       blueprint_ids: EntityId[];
@@ -837,6 +847,16 @@ export interface ControlGroupId {
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "BlueprintSettings".
+ */
+export interface BlueprintSettings {
+  loop_enabled: boolean;
+  order: Order;
+  priority: Priority;
+  queue: string[];
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "QueueItemId".
  */
 export interface QueueItemId {
@@ -1011,6 +1031,8 @@ export interface Blueprint {
   owner: number;
   precedence: EventKey;
   priority: Priority;
+  settings?: BlueprintSettings | null;
+  settings_command?: BirthCommandId | null;
   site_id?: EntityId | null;
   source_command_id: CommandId;
   tile: Tile;

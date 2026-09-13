@@ -215,6 +215,26 @@
         "priority": {
           "$ref": "#/$defs/Priority"
         },
+        "settings": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlueprintSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "settings_command": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BirthCommandId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "site_id": {
           "anyOf": [
             {
@@ -243,6 +263,33 @@
         "priority",
         "source_command_id",
         "precedence"
+      ],
+      "type": "object"
+    },
+    "BlueprintSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "loop_enabled": {
+          "type": "boolean"
+        },
+        "order": {
+          "$ref": "#/$defs/Order"
+        },
+        "priority": {
+          "$ref": "#/$defs/Priority"
+        },
+        "queue": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "queue",
+        "order",
+        "priority",
+        "loop_enabled"
       ],
       "type": "object"
     },
@@ -893,6 +940,30 @@
               "type": "array"
             },
             "kind": {
+              "const": "configure_blueprints",
+              "type": "string"
+            },
+            "settings": {
+              "$ref": "#/$defs/BlueprintSettings"
+            }
+          },
+          "required": [
+            "kind",
+            "blueprint_ids",
+            "settings"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "blueprint_ids": {
+              "items": {
+                "$ref": "#/$defs/DraftItemRef"
+              },
+              "type": "array"
+            },
+            "kind": {
               "const": "cancel_blueprints",
               "type": "string"
             }
@@ -1133,6 +1204,30 @@
             "type_key",
             "tiles",
             "priority"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "blueprint_ids": {
+              "items": {
+                "$ref": "#/$defs/EntityId"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "configure_blueprints",
+              "type": "string"
+            },
+            "settings": {
+              "$ref": "#/$defs/BlueprintSettings"
+            }
+          },
+          "required": [
+            "kind",
+            "blueprint_ids",
+            "settings"
           ],
           "type": "object"
         },

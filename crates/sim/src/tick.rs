@@ -1237,10 +1237,33 @@ impl Sim {
                 let direction = bp.output_direction.unwrap_or(CardinalDirection::E);
                 let (dx, dy) = cardinal_offset(direction);
                 Production {
-                    pending_items: vec![],
+                    pending_items: bp
+                        .settings
+                        .as_ref()
+                        .map(|s| {
+                            s.queue
+                                .iter()
+                                .enumerate()
+                                .map(|(index, key)| QueueItem {
+                                    item_id: QueueItemId {
+                                        birth_command: bp
+                                            .settings_command
+                                            .clone()
+                                            .expect("configured blueprint has a settings command"),
+                                        item_index: index as u16,
+                                    },
+                                    type_key: key.clone(),
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     active_item: None,
-                    loop_enabled: false,
-                    stored_order: Order::Idle {},
+                    loop_enabled: bp.settings.as_ref().is_some_and(|s| s.loop_enabled),
+                    stored_order: bp
+                        .settings
+                        .as_ref()
+                        .map(|s| s.order.clone())
+                        .unwrap_or(Order::Idle {}),
                     output_tile: self.offset(bp.tile, dx, dy).unwrap_or(bp.tile),
                     occurrence_counters: vec![],
                     spawn_group: None,

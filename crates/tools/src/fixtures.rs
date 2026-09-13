@@ -487,6 +487,8 @@ pub fn generate() -> Result<()> {
             command_index: 0,
         },
         site_id: Some(factory_id.clone()),
+        settings: None,
+        settings_command: None,
         output_direction: Some(CardinalDirection::E),
     });
     let constructor = id(&recovery, 0, "constructor");

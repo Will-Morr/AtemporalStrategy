@@ -254,6 +254,8 @@ impl World {
                 command_index: 0,
             },
             site_id: Some(id.clone()),
+            settings: None,
+            settings_command: None,
             output_direction: None,
         });
         id
