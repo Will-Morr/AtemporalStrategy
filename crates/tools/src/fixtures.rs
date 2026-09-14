@@ -568,7 +568,7 @@ pub fn generate() -> Result<()> {
 
     let mut inheritance = base(
         "group-birth",
-        "A group assignment at t=0 is overridden individually at t=1. Blocked factory output opens at t=2; the newborn inherits the saved group order while the existing constructor remains idle. Newborns cannot move until tick 3.",
+        "A group assignment at t=0 is overridden individually at t=1. The ready factory pushes its miner blocker and spawns at t=0; the newborn inherits the saved group order while the existing constructor remains idle. The newborn starts walking at t=1, displacing the miner once more through ordinary traffic; its cooldown prevents a voluntary move at t=2.",
         3,
     );
     let constructor = id(&inheritance, 0, "constructor");
@@ -674,13 +674,18 @@ pub fn generate() -> Result<()> {
         },
     ];
     inheritance.expected.states.push(state(
+        1,
+        vec![
+            entity_expect(&newborn, Some(saved.clone()), Some(tile(3, 4))),
+            entity_expect(&blocker, Some(Order::Idle {}), Some(tile(3, 3))),
+        ],
+        vec![],
+    ));
+    inheritance.expected.states.push(state(
         2,
         vec![
             entity_expect(&constructor, Some(Order::Idle {}), None),
-            ExpectedEntity {
-                present: false,
-                ..entity_expect(&newborn, None, None)
-            },
+            entity_expect(&newborn, Some(saved.clone()), None),
         ],
         vec![],
     ));
@@ -690,8 +695,8 @@ pub fn generate() -> Result<()> {
         3,
         vec![
             entity_expect(&constructor, Some(Order::Idle {}), Some(tile(1, 2))),
-            entity_expect(&newborn, Some(saved.clone()), Some(tile(3, 4))),
-            entity_expect(&blocker, None, Some(tile(4, 4))),
+            entity_expect(&newborn, Some(saved.clone()), Some(tile(3, 3))),
+            entity_expect(&blocker, None, Some(tile(3, 2))),
         ],
         vec![],
     );
@@ -706,7 +711,7 @@ pub fn generate() -> Result<()> {
         }),
     });
     inheritance.expected.states.push(expected);
-    inheritance.expected.outcome = result(3, 2, &[0, 1], StopReason::AbsoluteHorizon);
+    inheritance.expected.outcome = result(3, 1, &[0, 1], StopReason::AbsoluteHorizon);
     worlds.push(inheritance);
 
     let mut locked_group = base(

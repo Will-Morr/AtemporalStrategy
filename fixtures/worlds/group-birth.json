@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "name": "group-birth",
-  "description": "A group assignment at t=0 is overridden individually at t=1. Blocked factory output opens at t=2; the newborn inherits the saved group order while the existing constructor remains idle. Newborns cannot move until tick 3.",
+  "description": "A group assignment at t=0 is overridden individually at t=1. The ready factory pushes its miner blocker and spawns at t=0; the newborn inherits the saved group order while the existing constructor remains idle. The newborn starts walking at t=1, displacing the miner once more through ordinary traffic; its cooldown prevents a voluntary move at t=2.",
   "request": {
     "schema_version": 2,
     "job_id": "group-birth",
@@ -1239,7 +1239,7 @@
       "kind": "stalemate",
       "stop_reason": "absolute_horizon",
       "terminal_state_tick": 3,
-      "last_progress_tick": 2,
+      "last_progress_tick": 1,
       "survivors": [
         0,
         1
@@ -1258,6 +1258,65 @@
       "survival_transitions": []
     },
     "states": [
+      {
+        "state_tick": 1,
+        "entities": [
+          {
+            "entity_id": {
+              "birth_command": {
+                "command": {
+                  "round": 1,
+                  "player": 0,
+                  "index": 99
+                },
+                "target_index": 0
+              },
+              "item_index": 0,
+              "occurrence": 0
+            },
+            "present": true,
+            "tile": {
+              "x": 3,
+              "y": 4
+            },
+            "hp": null,
+            "paid_matter": null,
+            "action": {
+              "kind": "attack_move",
+              "destination": {
+                "x": 1,
+                "y": 2
+              }
+            }
+          },
+          {
+            "entity_id": {
+              "birth_command": {
+                "command": {
+                  "round": 0,
+                  "player": 0,
+                  "index": 0
+                },
+                "target_index": 0
+              },
+              "item_index": 0,
+              "occurrence": 0
+            },
+            "present": true,
+            "tile": {
+              "x": 3,
+              "y": 3
+            },
+            "hp": null,
+            "paid_matter": null,
+            "action": {
+              "kind": "idle"
+            }
+          }
+        ],
+        "banks": [],
+        "groups": []
+      },
       {
         "state_tick": 2,
         "entities": [
@@ -1295,11 +1354,17 @@
               "item_index": 0,
               "occurrence": 0
             },
-            "present": false,
+            "present": true,
             "tile": null,
             "hp": null,
             "paid_matter": null,
-            "action": null
+            "action": {
+              "kind": "attack_move",
+              "destination": {
+                "x": 1,
+                "y": 2
+              }
+            }
           }
         ],
         "banks": [],
@@ -1348,7 +1413,7 @@
             "present": true,
             "tile": {
               "x": 3,
-              "y": 4
+              "y": 3
             },
             "hp": null,
             "paid_matter": null,
@@ -1375,8 +1440,8 @@
             },
             "present": true,
             "tile": {
-              "x": 4,
-              "y": 4
+              "x": 3,
+              "y": 2
             },
             "hp": null,
             "paid_matter": null,
