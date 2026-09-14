@@ -163,6 +163,8 @@ The browser feature, multiplayer/single-order/recovery, and peripheral implement
 
 ## Rematch and production follow-up
 
-- [ ] Shared five-map lobby choice, controlling-player selection and completed-game rematches preserving players.
-- [ ] Factory displacement of mobile output blockers, including crowded chains; orders survive.
-- [ ] Muted fogged ore and revised missile matter prices.
+- [x] Shared five-map lobby choice, controlling-player selection and completed-game rematches preserving players.
+- [x] Factory displacement of mobile output blockers, including crowded chains; orders survive.
+- [x] Muted fogged ore and revised missile matter prices.
+
+Verified with the clean repository check, 26/26 native-peripheral desktop browser scenarios, focused authoritative scenarios and manual full-frame review. See [integration verification](integration-verification.md).

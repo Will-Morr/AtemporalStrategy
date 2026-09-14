@@ -1,5 +1,24 @@
 # Browser integration verification — 2026-09-13
 
+## Shared map choice, rematches and factory displacement
+
+Implemented on `agent/rematch-map-choice` from main `7dd746e`. The lobby offers five public terrain/ore/start previews, with a shared selection controlled by the first occupied slot. The selected seed produces the actual initial battlefield. A game-complete menu lets the controller return everyone to five fresh maps; profiles, tokens and the server address survive, while replay/draft/scoring state resets and the old archive remains on disk. Map changes require the current lobby revision; rematches require the current completed/archived match ID. Peripheral replay cursors reset, jobs include match identity, and stale exact/regeneration results cannot populate the next match's cache.
+
+Ready factory births now push mobile output blockers, including a chain of units into nearby available space. Orders and movement cooldowns survive displacement; walls, buildings and completely packed areas remain solid. Fogged ore is muted yellow on the map/minimap while numeric readouts remain available. Costs are now silo 300, Satellite 50, Cluster 125 and Tac nuke 300 matter. These simulation changes use rules stamp 6.
+
+Verification:
+
+- `scripts/check.sh` passed on the committed implementation and revised authored group-birth fixture: workspace tests, strict Clippy, serial simulator tests, client build, JavaScript checks, guide and generated-file drift. The prior fixture expected a blocked factory to wait for a scheduled move; its authored expectations now verify immediate displacement/birth and subsequent group-order inheritance.
+- The final native-peripheral Chromium suite passed **26/26** at 1920×1080 (`artifacts/ui/2026-09-14T02-14-46.280Z-1006931`), with all 26 trace ZIPs intact. This includes rematching while another player watches the old replay, multiplayer/match variants, recovery, progressive replay, missiles, production, fog, selection and game-end results.
+- Simulator displacement scenarios verify immediate birth despite a parked miner's long movement cooldown, no duplicate birth or extra spend, chain displacement through allied/enemy mobile units, immovable buildings, and checkpoint equivalence. Existing movement and all twelve missile scenarios pass with the new prices/build times.
+- Controller tests verify five options, authorization, stale/invalid selection rejection, exact preview-to-world equality, rematch phase/identity checks, preserved tokens/profiles/old archive, and fresh maps/empty replay state.
+- The focused authoritative browser run passed **2/2** map/rematch and factory-displacement scenarios. The initial peripheral run passed those scenarios, ore shading and the manual missile scenario; its automatic-targeting test failed because ordinary scouts died before the newly more expensive missile finished. Durable spotters in that test setup preserve the intended acquisition check; the corrected automatic scenario passed. Failure artifacts remain retained.
+- Manually inspected full 1920×1080 frames for the five-map picker, shared selection, game-complete menu and muted fogged ore. The new menu leaves replay inspection available, and all five previews fit together on desktop.
+
+Final full-frame review additionally confirmed the retained-player fresh-map lobby and factory displacement/spawn. Representative PNGs, metadata and logs are retained in `artifacts/review/2026-09-13-rematch` in the main checkout; full reports/traces remain in `/home/will/atemporal-rematch/artifacts/ui`.
+
+The unrelated 2,000-live-entity controller/browser/peripheral cold-seek and peak-memory measurement remains open. Mobile support is outside the required scope.
+
 ## Missile silos and desktop review target
 
 Implemented on `agent/missile-silos` from main `be32b99`. Silos use matter priority and per-item production loops, store missiles by type, and accept automatic or ordered manual launches while planned, under construction or complete. Manual launches are unlimited and take 1–30 ticks. Satellite vision follows flight and persists at landing; Cluster deals 100 damage within seven tiles; Tac nuke annihilates entities within four tiles, including allies and entities receiving simultaneous healing. Silo destruction loses stock but does not cancel launched missiles. See [missile rules and implementation defaults](missiles.md).
