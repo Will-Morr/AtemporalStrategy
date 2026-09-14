@@ -11,6 +11,7 @@ export class Net {
   private waiters: Waiter[] = [];
   private ranges = new Map<Kind, Promise<unknown>>();
   instance: string | null = null;
+  matchId: string | null = null;
   lobby: LobbyState | null = null;
   published = false;
   bytes = 0;
@@ -36,6 +37,7 @@ export class Net {
       }
       this.instance = envelope.server_instance_id;
       const message = envelope.message;
+      if(message.kind === "welcome")this.matchId=message.match_id;
       if (message.kind === 'welcome' || message.kind === 'lobby_updated' || message.kind === 'lobby_update_rejected') {
         if (!this.lobby || message.lobby.revision >= this.lobby.revision) this.lobby = message.lobby;
       }

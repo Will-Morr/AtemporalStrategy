@@ -33,6 +33,11 @@ net.onClose = () => {
   }, 1000);
 };
 connection.hidden = true;
+net.on('match_reset', () => {
+  stale=true;
+  showConnection('Opening the next game. Your player slot is retained. ');
+  location.reload();
+});
 const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem('atemporal-slot-token'); location.href = location.pathname; }; document.getElementById('top')!.append(switchPlayer);
 
 async function boot(): Promise<void> {

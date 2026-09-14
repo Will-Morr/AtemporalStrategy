@@ -239,7 +239,7 @@ impl Store {
     ) -> SimRequest {
         SimRequest {
             schema_version: Version::default(),
-            job_id: format!("peripheral-r{revision}-{}", now_ms()),
+            job_id: format!("peripheral-{}-r{revision}-{}", self.match_id, now_ms()),
             revision,
             fingerprint: self.fingerprint.clone(),
             config: self.config.clone(),
@@ -658,15 +658,21 @@ impl Peripheral {
 
     async fn reproduce(&self, revision: Revision) {
         let started = std::time::Instant::now();
-        let prepared = {
+        let (match_id, prepared) = {
             let mut store = self.store.lock().unwrap();
             let Some(store) = store.as_mut() else { return };
-            store.start(revision)
+            (store.match_id.clone(), store.start(revision))
         };
         let (request, data) = match prepared {
             Ok(prepared) => prepared,
             Err(message) => {
-                if let Some(store) = self.store.lock().unwrap().as_mut() {
+                if let Some(store) = self
+                    .store
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .filter(|s| s.match_id == match_id)
+                {
                     store.fail(revision, message);
                 }
                 return;
@@ -676,8 +682,16 @@ impl Peripheral {
         let (tx, mut rx) = mpsc::channel(OUT_CAPACITY);
         let end_tick = request.end_tick_exclusive;
         let generation = request.job_id.clone();
-        if let Some(store) = self.store.lock().unwrap().as_mut() {
+        if let Some(store) = self
+            .store
+            .lock()
+            .unwrap()
+            .as_mut()
+            .filter(|s| s.match_id == match_id)
+        {
             store.preview = Some((generation.clone(), request.clone(), data));
+        } else {
+            return;
         }
         let _ = self.local.send(self.replay_progress());
         self.sim.submit(Job::Run {
@@ -709,7 +723,14 @@ impl Peripheral {
                     ..
                 } => {
                     let mut guard = self.store.lock().unwrap();
-                    let (_, _, data) = guard.as_mut().unwrap().preview.as_mut().unwrap();
+                    let Some((_, _, data)) = guard
+                        .as_mut()
+                        .and_then(|s| s.preview.as_mut())
+                        .filter(|(g, _, _)| g == &generation)
+                    else {
+                        cancel.store(true, Ordering::Relaxed);
+                        return;
+                    };
                     data.dictionary.extend(dictionary);
                     for s in samples {
                         data.samples.insert(s.tick, s);
@@ -765,7 +786,12 @@ impl Peripheral {
                         }
                     }
                     let mut guard = self.store.lock().unwrap();
-                    let store = guard.as_mut().unwrap();
+                    let Some(store) = guard
+                        .as_mut()
+                        .filter(|s| s.preview.as_ref().is_some_and(|(g, _, _)| g == &generation))
+                    else {
+                        return;
+                    };
                     let (_, _, mut data) = store.preview.take().unwrap();
                     data.outcome = Some(outcome);
                     data.final_hash = final_hash;
@@ -784,7 +810,11 @@ impl Peripheral {
                     done = true;
                 }
                 WorkerMessage::Failed { message, .. } => {
-                    if let Some(store) = self.store.lock().unwrap().as_mut() {
+                    if let Some(store) =
+                        self.store.lock().unwrap().as_mut().filter(|s| {
+                            s.preview.as_ref().is_some_and(|(g, _, _)| g == &generation)
+                        })
+                    {
                         store.preview = None;
                         store.fail(revision, message.clone());
                     }
@@ -796,17 +826,24 @@ impl Peripheral {
                 }
             }
         }
-        if !done && let Some(store) = self.store.lock().unwrap().as_mut() {
+        if !done
+            && let Some(store) = self
+                .store
+                .lock()
+                .unwrap()
+                .as_mut()
+                .filter(|s| s.preview.as_ref().is_some_and(|(g, _, _)| g == &generation))
+        {
             store.fail(revision, "simulation thread stopped".into());
         }
     }
 
     /// Body resident (regenerating an evicted one by full replay and re-checking its hash).
     pub async fn prepare(&self, revision: Revision) -> Result<()> {
-        let request = {
+        let (match_id, request) = {
             let mut store = self.store.lock().unwrap();
             let store = store.as_mut().ok_or("no match bootstrap yet")?;
-            store.ensure_loaded(revision)?
+            (store.match_id.clone(), store.ensure_loaded(revision)?)
         };
         if let Some(request) = request {
             let players = request.config.player_count;
@@ -816,7 +853,8 @@ impl Peripheral {
                 .lock()
                 .unwrap()
                 .as_mut()
-                .ok_or("no match bootstrap yet")?
+                .filter(|s| s.match_id == match_id)
+                .ok_or("match changed during replay regeneration")?
                 .install_body(revision, fresh)?;
             println!(
                 "regenerated revision {revision} from the ledger in {:?}",
@@ -828,18 +866,21 @@ impl Peripheral {
 
     pub async fn exact(&self, revision: Revision, tick: Tick) -> Result<WorldState> {
         self.prepare(revision).await?;
-        let request = {
+        let (match_id, request) = {
             let store = self.store.lock().unwrap();
             let store = store.as_ref().ok_or("no match bootstrap yet")?;
             if let Some(state) = store.cached_exact(revision, tick) {
                 return Ok(state);
             }
-            store.exact_request(revision, tick)?
+            (store.match_id.clone(), store.exact_request(revision, tick)?)
         };
         let state = self.sim.exact(request, tick).await?;
-        if let Some(store) = self.store.lock().unwrap().as_mut() {
-            store.remember_exact(revision, tick, state.clone());
-        }
+        let mut guard = self.store.lock().unwrap();
+        let store = guard
+            .as_mut()
+            .filter(|s| s.match_id == match_id)
+            .ok_or("match changed during exact seek")?;
+        store.remember_exact(revision, tick, state.clone());
         Ok(state)
     }
 

@@ -102,6 +102,15 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #range-readout{position:absolute;z-index:7;pointer-events:none;max-width:260px;padding:6px 9px;border:1px solid #91dcd7;border-radius:4px;background:#14232bf2;color:#d1f7f3;font-size:12px;white-space:pre-line}.silo-controls{border-top:1px solid #607688;margin-top:5px;padding-top:5px}.silo-controls>strong{display:block;color:#9ce5dc;font-size:12px}.missile-inventory,.missile-target-buttons{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}.missile-inventory .unit-chip{padding:2px}.missile-target-buttons button{font-size:11px;padding:3px}.missile-launches{padding-left:18px;margin:5px 0;font-size:11px}.missile-launches li{margin:3px 0}.missile-launches .unit-icon{width:20px;height:20px}.missile-launches button{padding:1px 5px;margin-left:4px}.silo-controls>small{display:block;color:#b3c4d4}
 .silo-selected #selection-body>strong{display:none}.silo-production>summary{padding:4px 6px;border:1px solid #ad923f;border-radius:4px;color:#ffe08a;background:#41371f;cursor:pointer;font-size:12px}.silo-controls .missile-inventory .unit-chip{padding:2px 6px}.silo-controls .unit-icon{width:23px;height:23px}.silo-controls>strong{font-size:11px}.silo-controls{margin-top:4px;padding-top:4px}
 .stock-label{font-size:11px;color:#9ce5dc}.missile-inventory>button{font-size:10px;padding:3px 5px}
+#lobby{max-width:1320px;margin:1.5rem auto}
+#map-picker h2{margin:.5rem 0 .2rem}#map-choice-status{color:var(--dim);margin:.2rem 0 .6rem}
+#map-choices{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.map-choice{display:flex;flex-direction:column;gap:6px;padding:6px;background:#202832;border:2px solid #48525e}
+.map-choice canvas{width:100%;height:auto;image-rendering:pixelated}.map-choice:disabled{opacity:1;cursor:default}
+.map-choice[aria-pressed=true]{border-color:#79d7ff;background:#21404e}.map-choice strong{padding:3px}
+#new-game-menu{position:absolute;z-index:12;right:20px;top:190px;width:330px;padding:18px;background:#1b2d39;border:1px solid #79d7ff;border-radius:8px;box-shadow:0 8px 30px #0008}
+#new-game-menu h2{margin:0;font-size:20px}#new-game-menu p{color:#c5d4df}#new-game-menu button{display:block;width:100%;margin-top:8px}
+#new-game-start{background:#237447;font-weight:bold}#new-game-open{pointer-events:auto}
 </style></head><body>
 
 <section id="lobby">
@@ -114,6 +123,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
     <span id="team-wrap" style="display:none"><label>Team <select id="team"></select></label></span>
   </div>
   <ul id="roster"></ul>
+  <section id="map-picker" aria-label="Choose a map"><h2>Choose the battlefield</h2><p id="map-choice-status"></p><div id="map-choices"></div></section>
   <div class="row">
     <button id="start" disabled>Start match</button>
     <button id="spectate">Spectate</button>

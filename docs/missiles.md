@@ -4,14 +4,14 @@ Silos use the existing matter-priority and production machinery, including per-i
 
 ## Current content defaults
 
-These values are implementation choices, revisable through content. User requirements are in [gameplay](../user_spec/gameplay.md#missile-silos).
+Matter costs follow the user’s balance update; other values are implementation choices, revisable through content. User requirements are in [gameplay](../user_spec/gameplay.md#missile-silos).
 
 | Item | Matter | Behavior |
 | --- | ---: | --- |
-| Silo | 150 | 300 HP; produces 2 matter/tick; launches at most once every 3 ticks |
-| Satellite | 30 | Vision radius 9 during flight, then 100 ticks at its destination |
-| Cluster | 75 | 100 damage to every entity within radius 7; 40% of a default tank's 250 HP |
-| Tac nuke | 200 | Annihilates every entity within radius 4 |
+| Silo | 300 | 300 HP; produces 2 matter/tick; launches at most once every 3 ticks |
+| Satellite | 50 | Vision radius 9 during flight, then 100 ticks at its destination |
+| Cluster | 125 | 100 damage to every entity within radius 7; 40% of a default tank's 250 HP |
+| Tac nuke | 300 | Annihilates every entity within radius 4 |
 
 All missiles fly at 3 tiles/tick, using ceiling-rounded Euclidean distance and a 1–30 tick flight duration. They ignore terrain and have no launch range limit. Manual targets must be map coordinates, including rock tiles. Explosions affect allies as well as enemies. Terrain rock, ore and unfunded blueprint plans are not physical entities and are unchanged by impacts.
 
@@ -25,7 +25,7 @@ The 36-tile placement ring represents automatic acquisition, while manual launch
 
 After matter allocation, complete missile recipes enter inventory and eligible launches are collected in canonical entity order. Combat and due missile impacts resolve through the same simultaneous damage phase. Tactical nuclear impacts explicitly annihilate affected entities, including when several healers contribute simultaneously. Missiles already in flight delay elimination/inactivity termination until their impacts have resolved. Ready queued launches respect launch cooldowns even with a short inactivity cutoff; a silo with a funded or fundable launch plan remains able to act after losing its constructor. Satellite destination coverage begins in the state after impact and expires after its content-defined duration.
 
-World checkpoints and compact samples carry active flights and reconnaissance zones; silo sample entities carry inventory/plan state, so counts remain available during sampled playback. Flight identities combine silo identity and launch sequence. Canonical ordering, bounds checks and rules stamp 5 protect checkpoint replay and controller/peripheral agreement. Active flights, landing coverage and effects are rendered from the viewed revision, including progressive replay; enemy entities retain ordinary fog filtering. Friendly missile impacts can be animated through fog without revealing entities.
+World checkpoints and compact samples carry active flights and reconnaissance zones; silo sample entities carry inventory/plan state, so counts remain available during sampled playback. Flight identities combine silo identity and launch sequence. Canonical ordering, bounds checks and rules stamp 6 protect checkpoint replay and controller/peripheral agreement. Active flights, landing coverage and effects are rendered from the viewed revision, including progressive replay; enemy entities retain ordinary fog filtering. Friendly missile impacts can be animated through fog without revealing entities.
 
 ## Verification
 

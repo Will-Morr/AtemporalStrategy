@@ -91,3 +91,5 @@ Provide quick controls to keep only, or remove, a unit/building type from the se
 ## Supported display target
 
 The game targets desktop play. Mobile support is not required; use normal desktop window sizes for the required browser scenarios and full-frame visual review. Earlier narrow/mobile testing was an assistant workflow choice, not a product requirement.
+
+Ore remains visible and readable through fog, but out-of-vision patches should be somewhat desaturated to match the subdued floor tiles.

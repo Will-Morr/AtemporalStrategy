@@ -157,14 +157,15 @@ export class Renderer {
     const sees = (tile: Tile) => this.game.spectator || visible.has(`${tile.x},${tile.y}`);
     const cornerA=this.worldAt(0,this.headerHeight),cornerB=this.worldAt(width,height);
     if (!this.game.spectator) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
-    // Ore stays yellow until exhausted; spent deposits are unambiguously gray.
+    // Fogged ore stays readable, with a muted yellow distinct from gray exhausted deposits.
     for (let i = 0; i < this.game.initialOre.length; i++) {
       const initial = this.game.initialOre[i];
       if (initial <= 0) continue;
       const remaining = this.game.oreAt(i);
       const x = i % t.width, y = Math.floor(i / t.width);
       const [px, py] = this.screen(x, y);
-      ctx.fillStyle = remaining <= 0 ? '#85858b' : `rgba(255,205,56,${0.35 + 0.6 * Math.max(0, remaining / initial)})`;
+      const inVision = sees({x,y});
+      ctx.fillStyle = remaining <= 0 ? (inVision ? '#85858b' : '#626269') : `rgba(${inVision ? '255,205,56' : '155,145,104'},${0.35 + 0.6 * Math.max(0, remaining / initial)})`;
       ctx.fillRect(px + 1, py + 1, s - 2, s - 2);
     }
     const h = this.game.hover;
@@ -331,7 +332,8 @@ export class Renderer {
     if(!this.game.spectator) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#48484f';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
     for (let i = 0; i < this.game.initialOre.length; i++) {
       if (this.game.initialOre[i] > 0) {
-        g.fillStyle = this.game.oreAt(i)<=0 ? '#85858b' : '#ffcd38';
+        const inVision = this.game.spectator || visible.has(`${i % t.width},${Math.floor(i / t.width)}`);
+        g.fillStyle = this.game.oreAt(i)<=0 ? (inVision ? '#85858b' : '#626269') : (inVision ? '#ffcd38' : '#9b9168');
         g.fillRect((i % t.width) * sx, Math.floor(i / t.width) * sy, sx, sy);
       }
     }

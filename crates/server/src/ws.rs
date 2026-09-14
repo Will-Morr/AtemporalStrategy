@@ -153,6 +153,10 @@ async fn connection(app: App, socket: WebSocket, peripheral: bool) {
             let mut batch = vec![];
             if peripheral {
                 match &message {
+                    ServerMessage::MatchReset { .. } => {
+                        synced = None;
+                        batch.push(message);
+                    }
                     ServerMessage::Welcome { .. } => {
                         let current = writer_app.controller.lock().unwrap().current;
                         batch = peripheral_sync(&writer_app, &mut synced, current);
@@ -340,6 +344,30 @@ async fn handle(
                     message,
                     lobby,
                 });
+            }
+        }
+        ClientMessage::SelectMap {
+            slot_token,
+            based_on_lobby_revision,
+            index,
+        } => {
+            let mut c = app.controller.lock().unwrap();
+            if let Err(message) = c.select_map(&slot_token, based_on_lobby_revision, index) {
+                let _ = tx.send(ServerMessage::LobbyUpdateRejected {
+                    request_id: "map".into(),
+                    code: "map_rejected".into(),
+                    message,
+                    lobby: c.lobby.clone(),
+                });
+            }
+        }
+        ClientMessage::NewMatch {
+            slot_token,
+            based_on_match_id,
+        } => {
+            let mut c = app.controller.lock().unwrap();
+            if let Err(message) = c.new_match(&slot_token, &based_on_match_id) {
+                reject(tx, "new-match", "new_match_rejected", message);
             }
         }
         ClientMessage::StartMatch {

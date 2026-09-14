@@ -1,3 +1,4 @@
+import {renderMapChoices} from './map-choice';
 import type { LobbyState, MatchConfig, Phase } from './contracts.generated';
 import type { Net } from './net';
 import { savedPlayers, rememberPlayer, choosePlayer } from './session';
@@ -30,6 +31,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
     team.innerHTML = lobby.available_teams.map(t => `<option value="${t.team_id}">${t.label}</option>`).join('');
   }
   const render = () => {
+    renderMapChoices(lobby, session.slot, index => {if(session.token)net.send({kind:'select_map',slot_token:session.token,based_on_lobby_revision:lobby.revision,index});});
     roster.innerHTML = '';
     for (const slot of lobby.slots) {
       const li = document.createElement('li');

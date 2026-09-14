@@ -45,8 +45,9 @@ test('silo blueprint production, launch previews, satellite replay and stockpili
 });
 
 test('automatic silo launches use allied spotting and can be rewritten into stored inventory',async({review},testInfo)=>{
-  const config=c=>{c.match_defaults.max_tick=220;c.match_defaults.stop_when_decided=false;c.match_defaults.starting_matter=2000;};
-  const content=c=>{c.starting_roster=['silo','scout','turret'];};
+  const config=c=>{c.match_defaults.max_tick=400;c.match_defaults.stop_when_decided=false;c.match_defaults.starting_matter=2000;};
+  // Keep spotters alive through the longer 125-matter build; this scenario tests acquisition.
+  const content=c=>{c.starting_roster=['silo','scout','turret'];c.types.find(t=>t.key==='scout').max_hp=500;};
   const server=await(process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral(testInfo,config,{},content):isolatedServer(testInfo,config,content));review.afterClose(server.stop);
   const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);await seek(a,0);await seek(b,0);
   const own=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0).map(e=>({type:e.type_key,x:e.x,y:e.y})));
@@ -59,7 +60,7 @@ test('automatic silo launches use allied spotting and can be rewritten into stor
   const f=flights[0];expect(Math.hypot(f.target.x-f.origin.x,f.target.y-f.origin.y)).toBeLessThanOrEqual(36);
   await seek(a,f.launch_tick);expect(await a.evaluate(t=>window.atemporal.visibility().has(`${t.x},${t.y}`),f.target)).toBe(true);
   await seek(a,f.launch_tick+1);await hover(a,f.target);await review.capture('automatic-missile-with-allied-spotter',a);
-  await seek(a,1);await tile(a,silo);await a.getByRole('button',{name:'Auto launch: On',exact:true}).click();await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,210);await tile(a,silo);
+  await seek(a,1);await tile(a,silo);await a.getByRole('button',{name:'Auto launch: On',exact:true}).click();await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,350);await tile(a,silo);
   await expect(a.locator('.missile-inventory [data-missile="cluster"]')).toHaveAttribute('data-count','5');
   expect(await a.evaluate(()=>window.atemporal.revisions.get(window.atemporal.current).events.some(e=>e.event.kind==='missile_launch'))).toBe(false);await review.capture('automatic-launch-disabled-stockpile',a);
 });

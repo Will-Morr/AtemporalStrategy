@@ -135,6 +135,52 @@ fn token(seed: &str, n: usize) -> String {
     identity::sha256(format!("{seed}:{n}:{}", now_ms()).as_bytes())[..32].to_string()
 }
 
+fn map_candidates(
+    config: &MatchConfig,
+    content: &Content,
+    nonce: &str,
+) -> Result<Vec<MapCandidate>> {
+    let base = if config.seed.get() == 0 {
+        u64::from_str_radix(&identity::sha256(nonce.as_bytes())[..12], 16)
+            .map_err(|e| e.to_string())?
+            .max(1)
+    } else {
+        config.seed.get()
+    };
+    (0..5)
+        .map(|i| {
+            let mut candidate = config.clone();
+            let seed = if i == 0 {
+                base
+            } else {
+                u64::from_str_radix(
+                    &identity::sha256(format!("{base}:map:{i}").as_bytes())[..12],
+                    16,
+                )
+                .map_err(|e| e.to_string())?
+                .max(1)
+            };
+            candidate.seed = seed.try_into()?;
+            let state = map::generate(&candidate, content)?;
+            let starts = (0..config.player_count)
+                .filter_map(|owner| {
+                    state
+                        .entities
+                        .iter()
+                        .find(|e| e.owner == owner)
+                        .map(|e| e.tile)
+                })
+                .collect();
+            Ok(MapCandidate {
+                seed: candidate.seed,
+                terrain: state.terrain,
+                ore: state.ore,
+                starts,
+            })
+        })
+        .collect()
+}
+
 impl Controller {
     pub fn new(
         setup: Setup,
@@ -162,6 +208,8 @@ impl Controller {
             available_teams: setup.available_teams.clone(),
             can_start: false,
             rule_summary: rule_summary(&config, &content),
+            map_candidates: map_candidates(&config, &content, &instance_id)?,
+            selected_map: 0,
         };
         let (broadcast, _) = broadcast::channel(256);
         Ok(Self {
@@ -456,6 +504,73 @@ impl Controller {
         })
     }
 
+    pub fn select_map(&mut self, token: &str, revision: Revision, index: usize) -> Result<()> {
+        self.require_controller(token)?;
+        if self.phase != Phase::Lobby {
+            return Err("map choice is only available in the lobby".into());
+        }
+        if revision != self.lobby.revision {
+            return Err("lobby changed; review the maps and choose again".into());
+        }
+        if index >= self.lobby.map_candidates.len() {
+            return Err("unknown map option".into());
+        }
+        self.lobby.selected_map = index;
+        self.bump_lobby();
+        Ok(())
+    }
+
+    fn require_controller(&self, token: &str) -> Result<()> {
+        let player = self.player_for(token).ok_or("claim a slot first")?;
+        if self.lobby.slots.iter().find(|s| s.claimed).map(|s| s.slot) != Some(player) {
+            return Err("only the first occupied slot controls game setup".into());
+        }
+        Ok(())
+    }
+
+    pub fn new_match(&mut self, token: &str, based_on_match_id: &str) -> Result<()> {
+        self.require_controller(token)?;
+        if based_on_match_id != self.match_id {
+            return Err("match changed; refresh the lobby".into());
+        }
+        if !matches!(self.phase, Phase::Finished | Phase::Archived) {
+            return Err("finish or archive this match before starting another".into());
+        }
+        let mut config = self.config.clone();
+        config.seed = 0u64.try_into()?;
+        let setup = Setup {
+            schema_version: Version::default(),
+            match_defaults: config,
+            available_teams: self.lobby.available_teams.clone(),
+            default_port: 8080,
+        };
+        let mut next = Self::new(
+            setup,
+            self.content.clone(),
+            self.config_yaml.clone(),
+            self.content_yaml.clone(),
+            self.guide_url.clone(),
+            self.replay_root.clone(),
+            self.sim.clone(),
+        )?;
+        next.match_id = format!("match-{}-{}", now_ms(), &next.instance_id[..8]);
+        next.instance_id = self.instance_id.clone();
+        next.broadcast = self.broadcast.clone();
+        next.tokens = self.tokens.clone();
+        next.connections = self.connections.clone();
+        next.lobby.slots = self.lobby.slots.clone();
+        next.lobby.revision = self.lobby.revision + 1;
+        next.lobby.can_start = next.roster_multiplayer().is_ok();
+        next.memory_budget = self.memory_budget;
+        next.disk_budget = self.disk_budget;
+        *self = next;
+        self.send(ServerMessage::MatchReset {
+            match_id: self.match_id.clone(),
+        });
+        self.send(self.welcome());
+        Ok(())
+    }
+
     // ---- match start -------------------------------------------------------------------------
 
     pub fn start_match(&mut self, token: &str, based_on_lobby_revision: Revision) -> Result<()> {
@@ -483,11 +598,12 @@ impl Controller {
         // Team choices become the pinned assignments; the fingerprint follows the pinned config.
         // Seed 0 in the setup file means a fresh map per match, pinned here for replays.
         self.config.multiplayer = self.roster_multiplayer()?;
-        if self.config.seed.get() == 0 {
-            let fresh = identity::sha256(self.match_id.as_bytes());
-            let fresh = u64::from_str_radix(&fresh[..12], 16).map_err(|e| e.to_string())?;
-            self.config.seed = fresh.max(1).try_into()?;
-        }
+        self.config.seed = self
+            .lobby
+            .map_candidates
+            .get(self.lobby.selected_map)
+            .ok_or("choose a map before starting")?
+            .seed;
         self.fingerprint.config_hash = identity::canonical_hash(&self.config)?;
         let initial = map::generate(&self.config, &self.content)?;
         let archive = Archive::create(&self.replay_root, &self.match_id)?;
@@ -2418,6 +2534,62 @@ pub(crate) mod tests {
             "#4fc3f7".into(),
             team.map(str::to_string),
         )
+    }
+
+    #[test]
+    fn shared_map_choice_is_authorized_and_pins_the_previewed_terrain() {
+        let mut c = controller(false, |_| {});
+        assert_eq!(c.lobby.map_candidates.len(), 5);
+        let a = claim(&mut c, 0, None).unwrap();
+        let b = claim(&mut c, 1, None).unwrap();
+        assert!(c.select_map(&b, c.lobby.revision, 3).is_err());
+        assert!(c.select_map(&a, c.lobby.revision, 5).is_err());
+        let before = c.lobby.revision;
+        c.select_map(&a, before, 3).unwrap();
+        assert!(c.select_map(&a, before, 2).is_err());
+        let selected = c.lobby.map_candidates[3].clone();
+        c.start_match(&a, c.lobby.revision).unwrap();
+        assert_eq!(c.config.seed, selected.seed);
+        let initial = &c.revisions[&0].checkpoints[&0];
+        assert_eq!(initial.terrain, selected.terrain);
+        assert_eq!(initial.ore, selected.ore);
+        assert!(c.select_map(&a, c.lobby.revision, 1).is_err());
+    }
+
+    #[test]
+    fn rematch_keeps_players_and_archives_but_resets_game_and_maps() {
+        let mut c = controller(false, |_| {});
+        let a = claim(&mut c, 0, None).unwrap();
+        let b = claim(&mut c, 1, None).unwrap();
+        let old_match = c.match_id.clone();
+        assert!(c.new_match(&a, &old_match).is_err());
+        c.start_match(&a, c.lobby.revision).unwrap();
+        assert!(c.new_match(&a, &old_match).is_err());
+        let instance = c.instance_id.clone();
+        let slots = c.lobby.slots.clone();
+        let seeds: Vec<_> = c.lobby.map_candidates.iter().map(|m| m.seed).collect();
+        let old_archive = c.replay_root.join(&old_match);
+        c.phase = Phase::Finished;
+        assert!(c.new_match(&b, &old_match).is_err());
+        assert!(c.new_match(&a, "stale").is_err());
+        c.new_match(&a, &old_match).unwrap();
+        assert_ne!(c.match_id, old_match);
+        assert_eq!(c.instance_id, instance);
+        assert_eq!(c.phase, Phase::Lobby);
+        assert_eq!(c.lobby.slots, slots);
+        assert_eq!(c.player_for(&a), Some(0));
+        assert_eq!(c.player_for(&b), Some(1));
+        assert!(c.revisions.is_empty() && c.scores.is_empty() && c.committed.is_empty());
+        assert!(c.lobby.can_start && old_archive.exists());
+        assert!(
+            c.lobby
+                .map_candidates
+                .iter()
+                .all(|m| !seeds.contains(&m.seed))
+        );
+        assert!(c.new_match(&a, &old_match).is_err());
+        c.start_match(&a, c.lobby.revision).unwrap();
+        assert_eq!(c.revisions.len(), 1);
     }
 
     #[test]

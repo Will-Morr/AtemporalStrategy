@@ -74,7 +74,7 @@ fn missiles_build_to_inventory_without_an_output_and_loop_per_item() {
             },
         ],
     );
-    let state = w.at(30);
+    let state = w.at(50);
     let inventory = &entity(&state, &id)
         .production
         .as_ref()
@@ -91,7 +91,7 @@ fn missiles_build_to_inventory_without_an_output_and_loop_per_item() {
         }]
     );
     assert!(state.missiles.is_empty());
-    assert_eq!(state.players[0].bank, 1940.0);
+    assert_eq!(state.players[0].bank, 1900.0);
     assert!(!state.entities.iter().any(|e| e.type_key == "satellite"));
     w.entity_mut(&id).priority = Priority::Off;
     assert!(silo(&w, &id, 30).inventory.is_empty());
@@ -127,19 +127,19 @@ fn queued_launch_waits_for_production_then_cluster_hits_the_radius_for_40_percen
             },
         ],
     );
-    assert_eq!(silo(&w, &id, 37).plan.launches.len(), 1);
-    assert!(w.at(37).missiles.is_empty());
-    let flying = w.at(38);
+    assert_eq!(silo(&w, &id, 62).plan.launches.len(), 1);
+    assert!(w.at(62).missiles.is_empty());
+    let flying = w.at(63);
     assert_eq!(flying.missiles.len(), 1);
-    assert_eq!(flying.missiles[0].launch_tick, 37);
-    assert_eq!(flying.missiles[0].impact_tick, 43);
-    let hit = w.at(44);
+    assert_eq!(flying.missiles[0].launch_tick, 62);
+    assert_eq!(flying.missiles[0].impact_tick, 68);
+    let hit = w.at(69);
     assert_eq!(entity(&hit, &tank).hp, 150.0);
     assert_eq!(entity(&hit, &edge).hp, 150.0);
     assert_eq!(entity(&hit, &outside).hp, 250.0);
     assert!(!hit.entities.iter().any(|e| e.id == friendly));
     assert!(hit.missiles.is_empty());
-    assert!(silo(&w, &id, 44).plan.launches.is_empty());
+    assert!(silo(&w, &id, 69).plan.launches.is_empty());
     let run = w.run();
     assert_checkpoint_equivalence(&w, &run);
 }
@@ -219,7 +219,7 @@ fn silo_death_destroys_stock_but_already_launched_missiles_land() {
     let first = w.at(1);
     assert!(!first.entities.iter().any(|e| e.id == id));
     assert_eq!(first.missiles.len(), 1);
-    assert_eq!(first.players[0].counters.lost_invested_matter, 300.0); // 150 silo + two 75-matter missiles.
+    assert_eq!(first.players[0].counters.lost_invested_matter, 550.0); // 300 silo + two 125-matter missiles.
     let run = w.run();
     assert!(run.result.outcome.terminal_state_tick >= 7);
     assert_eq!(entity(&run.result.final_state, &target).hp, 150.0);
@@ -484,8 +484,8 @@ fn launch_cooldowns_and_fundable_plans_survive_early_termination_checks() {
             .filter(|e| matches!(e.event, PresentationEvent::MissileLaunch { .. }))
             .map(|e| e.tick)
             .collect();
-        assert_eq!(ticks, if produce { vec![0, 3, 37] } else { vec![0, 3] });
-        assert!(run.result.outcome.terminal_state_tick >= if produce { 44 } else { 5 });
+        assert_eq!(ticks, if produce { vec![0, 3, 62] } else { vec![0, 3] });
+        assert!(run.result.outcome.terminal_state_tick >= if produce { 69 } else { 5 });
         assert_checkpoint_equivalence(&w, &run);
     }
 }

@@ -60,7 +60,6 @@ impl Sim {
         let mut damage = self.combat(&intents);
         let annihilated = self.missile_impacts(&mut damage)?;
         self.resolve(&growth, &healing, &damage, &annihilated, &mut intents)?;
-        self.clear_factory_outputs(&mut intents);
         self.motion(&intents)?;
         self.births()?;
         self.create_sites()?;
@@ -1216,64 +1215,94 @@ impl Sim {
         }
     }
 
-    /// Let an allied worker step away from a paid factory output without replacing its order.
-    /// Normal motion handles cooldowns/collisions, so this never moves an entity twice.
-    fn clear_factory_outputs(&self, intents: &mut [Intent]) {
-        for factory in &self.state.entities {
-            let Some(p) = &factory.production else {
-                continue;
-            };
-            if factory.lifecycle != Lifecycle::Complete
-                || !p.active_item.as_ref().is_some_and(|a| a.awaiting_output)
-            {
-                continue;
-            }
-            let index = self.occ[self.idx(p.output_tile)];
+    /// Push a chain of mobile units one legal step each into the nearest available space.
+    /// This is involuntary displacement: orders survive, movement cooldown cannot block output.
+    fn push_factory_output(&mut self, factory: usize, out: Tile) {
+        let occupied = self.occ[self.idx(out)];
+        if occupied == NONE || occupied == RESERVED {
+            return;
+        }
+        let mut parents = vec![None; self.occ.len()];
+        let mut seen = vec![false; self.occ.len()];
+        let mut queue = std::collections::VecDeque::from([out]);
+        seen[self.idx(out)] = true;
+        let mut vacancy = None;
+        while let Some(from) = queue.pop_front() {
+            let index = self.occ[self.idx(from)];
             if index == NONE || index == RESERVED {
                 continue;
             }
             let i = index as usize;
-            let blocker = &self.state.entities[i];
-            if self.def(i).construction.is_none() {
+            if self.state.entities[i].lifecycle != Lifecycle::Complete {
                 continue;
             }
             let Some(movement) = &self.def(i).movement else {
                 continue;
             };
-            if self.hostile(factory.owner, blocker.owner)
-                || blocker.lifecycle != Lifecycle::Complete
-                || intents[i].attack.is_some()
-                || intents[i].heal.is_some()
-            {
-                continue;
-            }
-            // Do not interrupt units already departing under their own order.
-            if intents[i].goal.is_some() && !intents[i].hold {
-                continue;
-            }
             let count = if movement.neighbors == Neighbors::Eight {
                 8
             } else {
                 4
             };
-            if let Some(tile) = DIRS[..count]
-                .iter()
-                .filter_map(|(dx, dy, _)| {
-                    self.step_legal(blocker.tile, *dx, *dy, movement.neighbors)
-                })
-                .find(|tile| {
-                    self.occ[self.idx(*tile)] == NONE
-                        && !self.state.entities.iter().any(|e| {
-                            e.production
-                                .as_ref()
-                                .is_some_and(|p| p.output_tile == *tile)
-                        })
-                })
-            {
-                intents[i].hold = false;
-                intents[i].goal = Some((tile, false));
-                intents[i].work_goal = false;
+            for (dx, dy, _) in &DIRS[..count] {
+                let Some(to) = self.step_legal(from, *dx, *dy, movement.neighbors) else {
+                    continue;
+                };
+                let cell = self.idx(to);
+                if seen[cell] {
+                    continue;
+                }
+                seen[cell] = true;
+                parents[cell] = Some(from);
+                if self.occ[cell] == NONE {
+                    // Do not trade one blocked output for another.
+                    if self.state.entities.iter().any(|e| {
+                        e.production
+                            .as_ref()
+                            .is_some_and(|p| p.silo.is_none() && p.output_tile == to)
+                    }) {
+                        continue;
+                    }
+                    vacancy = Some(to);
+                    break;
+                }
+                if self.occ[cell] != RESERVED {
+                    queue.push_back(to);
+                }
             }
+            if vacancy.is_some() {
+                break;
+            }
+        }
+        let Some(mut to) = vacancy else {
+            return;
+        };
+        while let Some(from) = parents[self.idx(to)] {
+            let i = self.occ[self.idx(from)] as usize;
+            let cooldown = self.def(i).movement.as_ref().unwrap().cooldown;
+            let next_tick = self.state.entities[i]
+                .next_move_tick
+                .max(self.state.tick + cooldown);
+            let blocker_id = self.state.entities[i].id.clone();
+            let direction = direction_of(
+                i32::from(to.x) - i32::from(from.x),
+                i32::from(to.y) - i32::from(from.y),
+            );
+            self.commit_move(i, from, to, direction, cooldown);
+            let e = &mut self.state.entities[i];
+            e.next_move_tick = next_tick;
+            e.goal_settled = false;
+            e.local_detour.clear();
+            self.push_event(PresentationEvent::Displacement {
+                mover_id: self.state.entities[factory].id.clone(),
+                blocker_id: blocker_id.clone(),
+                mover_from: self.state.entities[factory].tile,
+                mover_to: self.state.entities[factory].tile,
+                blocker_from: from,
+                blocker_to: to,
+                involuntary_entity_id: blocker_id,
+            });
+            to = from;
         }
     }
 
@@ -1283,6 +1312,18 @@ impl Sim {
         let mut newborns: Vec<EntityState> = vec![];
         let mut joins: Vec<(ControlGroupId, EntityId)> = vec![];
         for f in 0..self.state.entities.len() {
+            let output = self.state.entities[f]
+                .production
+                .as_ref()
+                .filter(|p| {
+                    p.silo.is_none() && p.active_item.as_ref().is_some_and(|a| a.awaiting_output)
+                })
+                .map(|p| p.output_tile);
+            if self.state.entities[f].lifecycle == Lifecycle::Complete
+                && let Some(output) = output
+            {
+                self.push_factory_output(f, output);
+            }
             let factory = &self.state.entities[f];
             if factory.lifecycle != Lifecycle::Complete {
                 continue;

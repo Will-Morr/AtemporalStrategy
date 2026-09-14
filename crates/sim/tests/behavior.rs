@@ -487,63 +487,75 @@ fn cancelling_the_active_item_loses_its_matter() {
 }
 
 #[test]
-fn blocked_output_never_duplicates_or_double_charges_a_birth() {
+fn blocked_output_pushes_without_duplicates_or_double_charging() {
     let mut w = World::new(&OPEN);
     w.bank(0, 1000.0);
     let f = w.spawn(0, "factory", 1, 1);
     let blocker = w.spawn(0, "miner", 2, 1);
+    w.entity_mut(&blocker).next_move_tick = 1000;
     let ids = w.turn(
         1,
         0,
         0,
-        vec![
-            Command::SetStoredOrder {
-                factories: vec![f.clone()],
-                order: attack_move(10, 1),
+        vec![Command::EditProduction {
+            factories: vec![f.clone()],
+            edit: ProductionEdit::Append {
+                items: vec!["grunt".into()],
             },
-            Command::SetQueueLoop {
-                factories: vec![f.clone()],
-                enabled: true,
-            },
-            Command::EditProduction {
-                factories: vec![f.clone()],
+        }],
+    );
+    let grunt = born(&ids[0], 0, 0, 0);
+    let state = w.at(5);
+    assert!(present(&state, &grunt));
+    assert_eq!(entity(&state, &grunt).born_at_tick, Some(4));
+    assert_ne!(entity(&state, &blocker).tile, tile(2, 1));
+    assert_eq!(entity(&state, &blocker).action, Order::Idle {});
+    assert_eq!(entity(&state, &blocker).next_move_tick, 1000);
+    assert_eq!(state.players[0].counters.unit_spend, 15.0);
+    assert_eq!(
+        w.at(30)
+            .entities
+            .iter()
+            .filter(|e| e.type_key == "grunt")
+            .count(),
+        1
+    );
+    assert_checkpoint_equivalence(&w, &w.run());
+}
+
+#[test]
+fn factory_pushes_a_crowded_output_chain_but_not_structures() {
+    for immobile in [false, true] {
+        let mut w = World::new(&["#######", "#.....#", "#######"]);
+        w.bank(0, 100.0);
+        let factory = w.spawn(0, "factory", 1, 1);
+        let first = w.spawn(0, "miner", 2, 1);
+        let second = w.spawn(1, if immobile { "factory" } else { "miner" }, 3, 1);
+        w.entity_mut(&first).next_move_tick = 1000;
+        w.entity_mut(&second).next_move_tick = 1000;
+        let ids = w.turn(
+            1,
+            0,
+            0,
+            vec![Command::EditProduction {
+                factories: vec![factory],
                 edit: ProductionEdit::Append {
                     items: vec!["grunt".into()],
                 },
-            },
-        ],
-    );
-    w.turn(
-        2,
-        0,
-        30,
-        vec![Command::AssignOrder {
-            entities: vec![blocker.clone()],
-            order: attack_move(10, 4),
-        }],
-    );
-    let grunt = born(&ids[2], 0, 0, 0);
-    let s30 = w.at(30);
-    assert!(!present(&s30, &grunt));
-    let prod = entity(&s30, &f).production.as_ref().unwrap();
-    assert!(prod.active_item.as_ref().unwrap().awaiting_output);
-    assert!(
-        prod.occurrence_counters.is_empty(),
-        "occurrence advances only at spawn"
-    );
-    assert!(prod.pending_items.is_empty(), "loop re-adds only at spawn");
-    assert_eq!(s30.players[0].counters.unit_spend, 15.0);
-    let s31 = w.at(31);
-    let g = entity(&s31, &grunt);
-    assert_eq!(
-        (g.tile, g.born_at_tick, &g.action),
-        (tile(2, 1), Some(30), &attack_move(10, 1))
-    );
-    let prod = entity(&s31, &f).production.as_ref().unwrap();
-    assert_eq!(prod.occurrence_counters[0].next_occurrence, 1);
-    assert_eq!(prod.pending_items.len(), 1);
-    assert_eq!(s31.players[0].counters.unit_spend, 15.0);
-    assert!(present(&w.at(60), &born(&ids[2], 0, 0, 1)));
+            }],
+        );
+        let state = w.at(5);
+        assert_eq!(present(&state, &born(&ids[0], 0, 0, 0)), !immobile);
+        assert_eq!(
+            entity(&state, &first).tile,
+            tile(if immobile { 2 } else { 3 }, 1)
+        );
+        assert_eq!(
+            entity(&state, &second).tile,
+            tile(if immobile { 3 } else { 4 }, 1)
+        );
+        assert_checkpoint_equivalence(&w, &w.run());
+    }
 }
 
 fn lock_world() -> (World, EntityId) {

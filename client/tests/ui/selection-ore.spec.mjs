@@ -11,7 +11,7 @@ test('fogged ore amounts and type selection helpers preserve ownership and order
   const point=await a.evaluate(t=>{const r=window.atemporal.renderer;r.centerOn(t.x,t.y);return r.screen(t.x+.5,t.y+.5)},ore);await a.mouse.move(...point);
   await expect(a.locator('#ore-readout')).toContainText(`Ore: ${ore.value.toLocaleString('en-US',{maximumFractionDigits:1})} matter`);
   expect(await a.evaluate(t=>window.atemporal.visibility().has(`${t.x},${t.y}`),ore)).toBe(false);
-  await expect.poll(()=>a.evaluate(([x,y])=>{const p=document.querySelector('#map').getContext('2d').getImageData(Math.floor(x),Math.floor(y),1,1).data;return p[0]>180&&p[1]>140&&p[2]<100;},point)).toBe(true);
+  await expect.poll(()=>a.evaluate(([x,y])=>{const p=document.querySelector('#map').getContext('2d').getImageData(Math.floor(x),Math.floor(y),1,1).data;return p[0]>120&&p[0]<180&&p[1]>110&&p[2]<120&&p[0]-p[2]<80;},point)).toBe(true);
   expect(await a.evaluate(()=>window.atemporal.entities().some(v=>v.owner===1))).toBe(false);
   await review.capture('fogged-ore-visible-amount',a);
   await a.getByRole('button',{name:'All units',exact:true}).click();

@@ -157,3 +157,9 @@ Selection offers All army (all owned completed mobile combat units at the viewed
 ### Missile silos and targeting
 
 Silos have inventory counts and target buttons in the selection panel, with a labeled expandable Build missiles section for production, looping and queue removal. Both planned and complete silos support launch plans. Q lists only recipes supported by selected producers; mixed producer selections only receive compatible additions. Satellite vision, flights and landing zones follow the current replay state. Placement previews show turret weapon reach and silo automatic acquisition, and manual targeting previews show impact radius and flight ticks. See [missiles](missiles.md) for the current timing and targeting defaults.
+
+## Shared map choice and rematches
+
+The lobby shows five generated map candidates to every connected player and observer. The first occupied slot controls the shared selection; option one starts selected. Previews include terrain, ore and starting positions. Selection is revision checked and the chosen seed is pinned at match start.
+
+A small game-complete menu offers continuing replay inspection or returning everyone to a fresh map-selection lobby. Only the controlling slot can open that lobby. A rematch preserves profiles, tokens and the server address, retains the old archive, and resets replay, scoring and drafts. Browsers reload into the new lobby on an explicit match-reset event. Mobile support is not required.

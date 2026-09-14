@@ -43,6 +43,17 @@ export type ClientMessage =
     }
   | {
       based_on_lobby_revision: number;
+      index: number;
+      kind: "select_map";
+      slot_token: string;
+    }
+  | {
+      based_on_match_id: string;
+      kind: "new_match";
+      slot_token: string;
+    }
+  | {
+      based_on_lobby_revision: number;
       kind: "start_match";
       slot_token: string;
     }
@@ -551,6 +562,10 @@ export type AwardReason = "survival" | "draw" | "none";
  * via the `definition` "ServerMessage".
  */
 export type ServerMessage =
+  | {
+      kind: "match_reset";
+      match_id: string;
+    }
   | {
       kind: "replay_progress";
       preview?: ReplayFrontier | null;
@@ -1633,8 +1648,10 @@ export interface ArchiveRecord {
 export interface LobbyState {
   available_teams: AvailableTeam[];
   can_start: boolean;
+  map_candidates?: MapCandidate[];
   revision: number;
   rule_summary: string;
+  selected_map?: number;
   slots: LobbySlot[];
 }
 /**
@@ -1645,6 +1662,16 @@ export interface AvailableTeam {
   capacity?: number | null;
   label: string;
   team_id: string;
+}
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "MapCandidate".
+ */
+export interface MapCandidate {
+  ore: number[];
+  seed: SafeInt;
+  starts: Tile[];
+  terrain: Terrain;
 }
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema

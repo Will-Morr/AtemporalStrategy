@@ -724,7 +724,9 @@ pub enum WorkerMessage {
 }
 record!(PlayerProfile { player_id: PlayerId, username: String, color: String, team_id: Option<TeamId> });
 record!(LobbySlot { slot: PlayerId, claimed: bool, connected: bool, profile: Option<PlayerProfile> });
-record!(LobbyState { revision: Revision, slots: Vec<LobbySlot>, available_teams: Vec<AvailableTeam>, can_start: bool, rule_summary: String });
+record!(MapCandidate { seed: SafeInt, terrain: Terrain, ore: Vec<f64>, starts: Vec<Tile> });
+record!(LobbyState { revision: Revision, slots: Vec<LobbySlot>, available_teams: Vec<AvailableTeam>, can_start: bool, rule_summary: String,
+    #[serde(default)] map_candidates: Vec<MapCandidate>, #[serde(default)] selected_map: usize });
 choices!(Phase {
     Lobby,
     Planning,
@@ -775,6 +777,15 @@ pub enum ClientMessage {
         username: Option<String>,
         color: Option<String>,
         team_id: Option<TeamId>,
+    },
+    SelectMap {
+        slot_token: String,
+        based_on_lobby_revision: Revision,
+        index: usize,
+    },
+    NewMatch {
+        slot_token: String,
+        based_on_match_id: String,
     },
     StartMatch {
         slot_token: String,
@@ -839,6 +850,9 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ServerMessage {
+    MatchReset {
+        match_id: String,
+    },
     ReplayProgress {
         preview: Option<ReplayFrontier>,
     },

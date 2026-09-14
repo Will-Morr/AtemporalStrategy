@@ -1,0 +1,56 @@
+import {test,expect} from './fixtures.mjs';
+import {isolatedServer,isolatedPeripheral,players,revision,tile,seek} from './game-helpers.mjs';
+
+test('shared five-map choice and completed-game rematch preserve players and reset replay',async({review},testInfo)=>{
+  test.setTimeout(150000);
+  const server=await(process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral:isolatedServer)(testInfo,c=>{c.match_defaults.max_tick=1600;c.match_defaults.objective.rules.victory_rule.points=1;});review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);
+  const spectator=await(await review.newContext('map-observer')).newPage();await spectator.goto(server.url);
+  for(const p of [a,b,spectator])await expect(p.locator('.map-choice')).toHaveCount(5);
+  await expect(b.getByRole('button',{name:'Map 4',exact:true})).toBeDisabled();
+  await a.getByRole('button',{name:'Map 4',exact:true}).click();
+  for(const p of [a,b,spectator])await expect(p.getByRole('button',{name:'Map 4',exact:true})).toHaveAttribute('aria-pressed','true');
+  const hashes=await a.locator('.map-choice canvas').evaluateAll(cs=>cs.map(c=>c.toDataURL()));
+  expect(new Set(hashes).size).toBe(5);
+  expect(await b.locator('.map-choice canvas').evaluateAll(cs=>cs.map(c=>c.toDataURL()))).toEqual(hashes);
+  await review.capture('shared-five-map-picker-controller',a);await review.capture('shared-five-map-picker-other-player',b);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  await spectator.getByRole('button',{name:'Spectate',exact:true}).click();await revision(spectator,0);
+  expect(await a.evaluate(()=>{const g=window.atemporal,m=g.net.lobby.map_candidates[3];return JSON.stringify(g.terrain)===JSON.stringify(m.terrain)&&JSON.stringify(g.initialOre)===JSON.stringify(m.ore)})).toBe(true);
+  const oldMatch=await a.evaluate(()=>window.atemporal.net.matchId);
+  const target=await a.evaluate(()=>{const v=window.atemporal.entities().find(e=>e.owner===0&&e.type_key==='turret');return{x:v.x,y:v.y}});
+  const worker=await b.evaluate(()=>{const v=window.atemporal.entities().find(e=>e.owner===1&&e.type_key==='constructor');return{x:v.x,y:v.y}});
+  await tile(b,worker);await b.keyboard.press('f');await tile(b,target);await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);
+  for(const p of [a,b,spectator])await expect(p.getByRole('dialog',{name:'Game complete'})).toBeVisible();
+  await expect(b.getByRole('button',{name:'Choose maps for a new game'})).toBeDisabled();
+  await review.capture('game-complete-new-game-menu',a);
+  await a.getByRole('button',{name:'Keep viewing replay'}).click();await expect(a.locator('#new-game-menu')).toBeHidden();
+  await a.reload();await revision(a,1);await expect(a.locator('#new-game-menu')).toBeVisible();
+  await b.getByRole('button',{name:'Keep viewing replay'}).click();await b.locator('#play').click();
+  await a.getByRole('button',{name:'Choose maps for a new game'}).click();
+  for(const p of [a,b,spectator])await expect(p.locator('#map-picker')).toBeVisible();
+  await expect(a.locator('#status')).toContainText('You hold slot 0');await expect(b.locator('#status')).toContainText('You hold slot 1');
+  const fresh=await a.locator('.map-choice canvas').evaluateAll(cs=>cs.map(c=>c.toDataURL()));expect(fresh.every(h=>!hashes.includes(h))).toBe(true);
+  await a.getByRole('button',{name:'Map 2',exact:true}).click();await expect(b.getByRole('button',{name:'Map 2',exact:true})).toHaveAttribute('aria-pressed','true');await expect(spectator.getByRole('button',{name:'Map 2',exact:true})).toHaveAttribute('aria-pressed','true');
+  await review.capture('rematch-retained-players-fresh-maps',a);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  expect(await a.evaluate(()=>window.atemporal.net.matchId)).not.toBe(oldMatch);
+  expect(await a.evaluate(()=>window.atemporal.draft.commands.length)).toBe(0);
+  for(const p of [a,b])await expect(p.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-wins','0');
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);
+  await review.capture('rematch-playing-with-clean-replay',a);
+});
+
+test('factory displaces a parked miner when production finishes',async({review},testInfo)=>{
+  const config=c=>{c.match_defaults.max_tick=120;c.match_defaults.stop_when_decided=false;c.match_defaults.starting_matter=500;};
+  const content=c=>{c.starting_roster=['factory','miner','grunt'];};
+  const server=await(process.env.ATEMPORAL_UI_PERIPHERAL?isolatedPeripheral(testInfo,config,{},content):isolatedServer(testInfo,config,content));review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const data=await a.evaluate(()=>{const es=window.atemporal.exact.state.entities,f=es.find(e=>e.owner===0&&e.type_key==='factory'),m=es.find(e=>e.owner===0&&e.type_key==='miner');return{factory:f.tile,output:f.production.output_tile,miner:m.tile,id:m.id};});
+  await tile(a,data.miner);await a.keyboard.press('f');await tile(a,data.output);await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);await seek(a,50);
+  expect(await a.evaluate(id=>window.atemporal.exact.state.entities.find(e=>JSON.stringify(e.id)===JSON.stringify(id)).tile,data.id)).toEqual(data.output);
+  await tile(a,data.factory);await a.keyboard.press('q');await a.locator('#mode-options button').filter({hasText:'grunt'}).click();await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,55);
+  const result=await a.evaluate(id=>{const es=window.atemporal.exact.state.entities;return{miner:es.find(e=>JSON.stringify(e.id)===JSON.stringify(id)),born:es.filter(e=>e.owner===0&&e.type_key==='grunt'&&e.born_at_tick!==null)}},data.id);
+  expect(result.miner.tile).not.toEqual(data.output);expect(result.miner.action).toEqual({kind:'attack_move',destination:data.output});expect(result.born).toHaveLength(1);expect(result.born[0].tile).toEqual(data.output);
+  await tile(a,data.factory);await review.capture('factory-pushes-parked-miner-and-spawns',a);
+});

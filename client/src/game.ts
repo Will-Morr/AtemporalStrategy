@@ -1,3 +1,4 @@
+import {updateRematch} from './rematch';
 import {flightPosition, missileName, setSiloPlan, siloPlan} from './silo';
 import { unitIcon } from './icons';
 import { factoryPlan, orderLabel } from './factory';
@@ -170,6 +171,7 @@ export class Game {
     });
     this.net.on('welcome', m => {
       this.profiles = m.lobby.slots;
+      if(m.phase==='finished'||m.phase==='archived'){this.finished=m.phase==='archived'?'Match archived.':'Match complete.';this.updatePanels();}
       this.net.send({kind:'get_replay_progress'});
     });
     this.net.on('match_archived', () => {
@@ -1196,6 +1198,7 @@ export class Game {
   }
 
   updatePanels(): void {
+    updateRematch(this);
     this.updateTop();
     this.experience?.update();
     const rev = this.rev();

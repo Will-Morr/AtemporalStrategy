@@ -527,6 +527,57 @@
               "minimum": 0,
               "type": "integer"
             },
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "select_map",
+              "type": "string"
+            },
+            "slot_token": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "slot_token",
+            "based_on_lobby_revision",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "based_on_match_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "new_match",
+              "type": "string"
+            },
+            "slot_token": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "slot_token",
+            "based_on_match_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "based_on_lobby_revision": {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
             "kind": {
               "const": "start_match",
               "type": "string"
@@ -2358,6 +2409,13 @@
         "can_start": {
           "type": "boolean"
         },
+        "map_candidates": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MapCandidate"
+          },
+          "type": "array"
+        },
         "revision": {
           "format": "uint32",
           "maximum": 4294967295,
@@ -2366,6 +2424,12 @@
         },
         "rule_summary": {
           "type": "string"
+        },
+        "selected_map": {
+          "default": 0,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         },
         "slots": {
           "items": {
@@ -2380,6 +2444,37 @@
         "available_teams",
         "can_start",
         "rule_summary"
+      ],
+      "type": "object"
+    },
+    "MapCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "ore": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "seed": {
+          "$ref": "#/$defs/SafeInt"
+        },
+        "starts": {
+          "items": {
+            "$ref": "#/$defs/Tile"
+          },
+          "type": "array"
+        },
+        "terrain": {
+          "$ref": "#/$defs/Terrain"
+        }
+      },
+      "required": [
+        "seed",
+        "terrain",
+        "ore",
+        "starts"
       ],
       "type": "object"
     },
@@ -4199,6 +4294,23 @@
     },
     "ServerMessage": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "match_reset",
+              "type": "string"
+            },
+            "match_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "match_id"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {

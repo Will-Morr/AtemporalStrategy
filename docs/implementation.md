@@ -160,3 +160,9 @@ The browser feature, multiplayer/single-order/recovery, and peripheral implement
 - [x] Tank-priced grinders: 275 HP, 25 damage per five ticks, movement every two ticks, melee range.
 - [x] Fogged ore readouts and owner/type selection filters with All army / All units helpers.
 - [x] Missile silos: inventory, production/launch queues, automatic/manual targets, three missile effects, flight replay and placement/impact previews. Verified through controller and native peripheral at desktop 1920×1080; see [integration verification](integration-verification.md).
+
+## Rematch and production follow-up
+
+- [ ] Shared five-map lobby choice, controlling-player selection and completed-game rematches preserving players.
+- [ ] Factory displacement of mobile output blockers, including crowded chains; orders survive.
+- [ ] Muted fogged ore and revised missile matter prices.

@@ -48,6 +48,8 @@ Scrub back to an earlier tick to change your plan. Orders in a turn share one ti
 
 Open **How to play** from the lobby, or visit `/guide/` on your server, for survival rules, factory queues, missile silos, control groups, and unit stats.
 
+The lobby offers five shared map previews; the first occupied slot chooses the battlefield. After a match, the new-game menu opens another map selection while retaining the players.
+
 Missile silos can stockpile satellites, cluster missiles and tactical nukes. Build one with a constructor, then select it to build missiles or queue targets—even before construction finishes. Targeting previews show the affected area and flight time. Manual launches can reach anywhere on the map; explosions also hit allies.
 
 ## Useful controls

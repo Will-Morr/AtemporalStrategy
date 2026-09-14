@@ -141,3 +141,7 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 ## Missile silo scenarios
 
 `missiles.spec.mjs` builds and configures a silo through real inputs, checks all three production recipes, manual launch queues and cancellation, range/impact previews, satellite flight and destination vision, blast results, stockpiling, refresh and replay rewrites. A second scenario supplies automatic targeting with an allied spotter, then rewrites the automatic plan into stored ammunition. Both run through the controller or native peripheral on desktop Chromium. The tests compare preview flight times with resolved arrivals and play a one-tick satellite flight between compact replay samples. Capture and inspect the full placement, stockpile, targeting and flight frames; a passing control assertion alone does not establish visual quality.
+
+## Map choice, rematches and factory displacement
+
+`rematch.spec.mjs` checks that both players and an observer see the same five maps, that only the controlling player can choose, and that the selected preview matches the initial terrain and ore. It ends a real match, reviews/reloads the completion menu, opens a fresh lobby while another player is playing the old replay, keeps slot identities, selects another map and commits in the reset match. A second scenario parks a miner on a factory output and verifies displacement and the completed birth. The scenarios run through authoritative or native-peripheral transport and capture full 1080p frames.

@@ -105,4 +105,12 @@ After the current pathing, ore, grinder and selection changes, add missile silos
 
 Three missile types are required: Satellite reveals a large area and reveals terrain throughout flight, creating a moving line of vision; Cluster damages a roughly seven-tile-radius area for about 40% of a tank’s health; Tac nuke completely destroys everything in a roughly four-tile-radius area. Flight time depends on distance and is at most 30 ticks. The final instruction removes launch range limits, superseding the initially suggested range of roughly 75% of the standard map.
 
-Placement previews must show turret and silo reach. Missile launch previews must show ticks to impact and the affected area. The meaning of a silo range preview with unlimited launch distance, automatic acquisition policy, satellite vision persistence after landing, missile costs/build times and friendly-fire details are implementation interpretations, not user-locked defaults.
+Placement previews must show turret and silo reach. Missile launch previews must show ticks to impact and the affected area. The meaning of a silo range preview with unlimited launch distance, automatic acquisition policy, satellite vision persistence after landing, missile build rates and friendly-fire details are implementation interpretations, not user-locked defaults.
+
+Missile costs are now fixed by the user: silo 300 matter, Satellite 50, Cluster 125, Tac nuke 300. These supersede the initial implementation prices.
+
+## Map choice and rematches
+
+Generate five map candidates before a game and let the controlling player pick one. Show the options and current choice to all players. When a game ends, show a small menu for starting a new game from within the UI.
+
+Factory outputs must push blocking units aside when ready to spawn, rather than waiting indefinitely for their orders to move them.
