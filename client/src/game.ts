@@ -1,7 +1,8 @@
+import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
 import {flightPosition, missileName, setSiloPlan, siloPlan} from './silo';
 import { unitIcon } from './icons';
-import { factoryPlan, orderLabel } from './factory';
+import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type {
   ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   TypeDefinition, WorldEvent, WorldState,
@@ -640,13 +641,44 @@ export class Game {
     return { ok: true, reason: '' };
   }
 
+  factoryEditing = false;
+  factorySelection(): EntityView[] {
+    return this.selectedViews().filter(v=>this.ownSelectable(v)&&!!this.types.get(v.type_key)?.production&&!this.types.get(v.type_key)?.silo);
+  }
+  editFactories(action: () => void): void {
+    if(this.factoryEditing){action();return;}
+    const factories=this.factorySelection();
+    if(factories.length<2){action();return;}
+    if(!this.canStage().ok){this.toast(this.canStage().reason);return;}
+    const mixed=new Set(factories.map(v=>factorySignature(this,v))).size>1;
+    if(mixed&&!window.confirm(`Override ${factories.length} factories at tick ${Math.floor(this.playhead)}? Their configurations differ. This clears all waiting queues, cancels active production (spent matter is lost), and resets newborn orders, output groups, loop and priority before applying your shared command. Cancel preserves everything.`))return;
+    const before=structuredClone(this.draft);
+    this.factoryEditing=true;
+    try {
+      if(mixed)for(const v of factories){
+        if(v.blueprint){const settings=structuredClone(v.settings!);settings.queue=[];settings.queue_loop_flags=[];settings.loop_enabled=false;settings.priority='medium';settings.order={kind:'idle'};this.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint],settings});}
+        else {
+          this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});
+          if(factoryPlan(this,v).active)this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}});
+          this.stage({kind:'set_queue_loop',factories:[v.id],enabled:false});
+          this.stage({kind:'bind_factory_group',factories:[v.id],group:null});
+          this.stage({kind:'assign_order',entities:[v.id],order:{kind:'idle'}});
+          this.stage({kind:'set_priority',entities:[v.id],priority:'medium'});
+        }
+      }
+      action();
+      if(this.config.control_limit==='single_order'&&this.draft.commands.length>1){this.draft=before;this.toast('This shared edit needs multiple commands. In single-order mode, select factories individually.');}
+      else {this.draft.undo=[...before.undo,{commands:before.commands,tick:before.tick}];this.draft.redo=[];}
+    } finally {this.factoryEditing=false;this.updatePanels();}
+  }
+
   stage(command: Command, policy: FutureOrderPolicy = 'keep'): void {
     const gate = this.canStage();
     if (!gate.ok) {
       this.toast(gate.reason);
       return;
     }
-    if (this.config.control_limit === 'single_order' && this.draft.commands.length >= 1) {
+    if (!this.factoryEditing && this.config.control_limit === 'single_order' && this.draft.commands.length >= 1) {
       this.toast('Single-order mode: delete the staged command first.');
       return;
     }
@@ -697,6 +729,7 @@ export class Game {
   }
 
   assign(order: Order, filter: (t: TypeDefinition) => boolean): void {
+    if(!this.factoryEditing && this.factorySelection().length>1){this.editFactories(()=>this.assign(order,filter));return;}
     const ghosts = this.configureGhosts(s => { s.order = order; },v=>!this.types.get(v.type_key)?.silo);
     this.stored = false;
     if (this.recalledGroup !== null && this.player !== null) {
@@ -1052,6 +1085,7 @@ export class Game {
       case 'z': if (this.mode.kind === 'place') this.renderer.cycleOutput(); break;
       case 'x': this.assign({ kind: 'idle' }, () => true); this.mode = { kind: 'none' }; break;
       case 'l': {
+        if(!this.factoryEditing&&this.factorySelection().length>1){this.editFactories(()=>this.key(e));break;}
         const enabled = !this.selectedViews().filter(v=>this.types.get(v.type_key)?.production).every(v=>factoryPlan(this,v).loop);
         const ghosts = this.configureGhosts(s => { s.loop_enabled = enabled; }, v=>!!this.types.get(v.type_key)?.production);
         const factories = this.selectedIds(t => !!t.production);
@@ -1100,12 +1134,14 @@ export class Game {
     return !!t && (!!t.construction || !!t.production || !!t.self_repair || !!t.healing || v.lifecycle!=='complete');
   }
   setSelectionPriority(priority: Priority): void {
+    if(!this.factoryEditing&&this.factorySelection().length>1){this.editFactories(()=>this.setSelectionPriority(priority));return;}
     this.configureGhosts(s=>{s.priority=priority;});
     const entities=this.selectedViews().filter(v=>this.ownSelectable(v)&&!v.blueprint&&this.priorityEligible(v)).map(v=>v.id);
     if(entities.length)this.stage({kind:'set_priority',entities,priority});
   }
   digit(n: number, five = false): void {
     const mode = this.mode;
+    if(mode.kind==='recipe'&&!this.factoryEditing&&this.factorySelection().length>1){this.editFactories(()=>this.digit(n,five));return;}
     if (mode.kind === 'membership') {
       if (this.player !== null) this.stage({ kind: 'edit_group_members', group: { owner: this.player, slot: n }, edit: { kind: mode.add ? 'add' : 'replace', entities: mode.add ? this.selectedIds() : [] } });
       this.mode = { kind: 'none' };
@@ -1170,6 +1206,10 @@ export class Game {
   }
 
   updateTop(): void {
+    const waiting=this.committed.includes(this.player??-1)&&this.committed.length<this.config.player_count&&!this.progress&&!this.preview&&!this.finished&&this.phase?.revision===this.latest;
+    $('turn-banner').hidden=!waiting;
+    $('turn-banner').textContent=`TURN COMMITTED · Waiting for ${this.config.player_count-this.committed.length} player${this.config.player_count-this.committed.length===1?'':'s'} · Uncommit to edit your moves`;
+
     const rev = this.rev();
     const phase = this.viewingPreview ? 'Simulating · preview (read-only)' : this.replayErrors.has(this.current) ? `Replay unavailable: ${/mismatch/i.test(this.replayErrors.get(this.current)!) ? 'local replay mismatch' : 'loading failed'}` : this.current !== this.latest ? `Historical round ${this.experience?.rounds.get(this.current)?.round ?? '…'} (read-only)` : this.finished ? this.finished : this.committed.length >= this.config.player_count ? `Round ${this.round}: simulating…` : this.committed.includes(this.player ?? -1) ? `Round ${this.round}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${this.round}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
     $('top-phase').textContent = `${this.spectator ? 'Spectator' : this.name(this.player!)} · ${phase} · revision ${this.current}`;
@@ -1301,6 +1341,7 @@ export class Game {
       helpers.append(button);
     }
     body.prepend(helpers);
+    updateOrderWarnings(this);
     // Draft panel.
     const list = $('draft-list');
     list.innerHTML = '';

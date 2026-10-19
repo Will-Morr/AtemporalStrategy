@@ -111,6 +111,34 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #new-game-menu{position:absolute;z-index:12;right:20px;top:190px;width:330px;padding:18px;background:#1b2d39;border:1px solid #79d7ff;border-radius:8px;box-shadow:0 8px 30px #0008}
 #new-game-menu h2{margin:0;font-size:20px}#new-game-menu p{color:#c5d4df}#new-game-menu button{display:block;width:100%;margin-top:8px}
 #new-game-start{background:#237447;font-weight:bold}#new-game-open{pointer-events:auto}
+
+/* A single timeline strip, contextual workspace and compact planning column. */
+#panels{grid-template-columns:minmax(270px,1fr) minmax(470px,1.8fr) minmax(240px,.85fr);grid-template-rows:82px 230px;gap:8px;padding:8px}
+#panels>div{height:auto!important;min-height:0;overflow:visible;padding:8px}
+#panels>#timeline-strip{grid-column:1/-1;background:#101c28;display:flex;flex-direction:column;gap:5px;padding:5px 8px}
+#timeline{height:38px;min-height:38px}#transport{flex-wrap:nowrap;gap:8px;font-size:11px}#timeline-legend{color:#d4b7ff;margin-left:auto;font-size:11px}
+#top-sim,#top-exact{display:none}
+#timeline-wrap{position:relative;display:flex;flex-direction:column;gap:6px}
+#actions{display:flex;align-items:center;gap:12px;min-height:30px;flex-wrap:nowrap}
+.action-group{flex-direction:row;align-items:center;gap:4px}.action-group>strong{display:none}
+.action-group button{font-size:12px!important;padding:5px 7px!important}
+#actions details{position:relative;display:block;margin-left:auto}#actions details[hidden]{display:none}
+summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
+#actions details[open]{position:absolute;bottom:calc(100% + 8px);right:0;z-index:15;background:#172938;border:1px solid #61829c;border-radius:6px;padding:10px;min-width:230px;box-shadow:0 6px 24px #0008}
+#actions details[open]>button{display:block;width:100%;margin:3px 0}#actions details details[open]{position:static;box-shadow:none;min-width:0}
+#timeline-navigation{position:relative;white-space:nowrap}#timeline-navigation[open]{position:absolute;bottom:calc(100% - 25px);z-index:15;background:#172938;padding:8px;border:1px solid #61829c}
+#queue{min-height:0;flex:1}#queue .factory-plan{border:0;margin:0;padding:0}.factory-plan>strong{display:none}
+.queue-icons{max-height:66px;overflow:auto;align-content:start}.recipe-icons .unit-icon{width:27px;height:27px}.recipe-icons{gap:8px;margin:6px 0}.factory-settings{float:right;margin:0}.factory-order{font-size:12px;margin:5px 0}
+#selection{position:relative}#selection-body{font-size:12px}.unit-stats{grid-template-columns:1fr 1fr;font-size:11px}.unit-stats span{white-space:normal}
+#selection-body>small{display:none}#selection-icons{gap:3px}#selection-icons .unit-icon{width:22px;height:22px}
+#selection.factory-selected #selection-body>details[open]{position:absolute;bottom:100%;left:0;background:#172938;padding:12px;border:1px solid #61829c;z-index:12;width:100%}
+#draft-panel{height:100%;display:flex;flex-direction:column}#draft-list{min-height:0;max-height:none;overflow:auto;flex:1}#draft-title{overflow:visible;max-height:none}#commit{margin-top:auto;flex-shrink:0}
+#minimap{bottom:346px;width:6rem;height:6rem}#toast{bottom:346px}#stop-archive{position:static;font-size:11px}#lock-preview{max-height:none;overflow:visible}
+#turn-banner{position:absolute;z-index:6;top:calc(var(--hud-height) + 4px);left:15%;right:15%;text-align:center;background:#176743;border:2px solid #8aefb1;color:#edfff4;font-size:18px;font-weight:750;padding:14px;box-shadow:0 5px 24px #0008;pointer-events:none}
+#order-warnings{position:absolute;z-index:5;left:10px;bottom:346px;max-width:calc(100% - 130px);padding:7px 10px;border:1px solid #c59747;border-radius:5px;background:#382d19;color:#ffe2a4;display:flex;gap:12px;align-items:center;font-size:12px}
+#order-warnings[hidden],#turn-banner[hidden]{display:none}#order-warnings button{padding:3px 8px;font-size:11px}.order-warning{color:#ffdb91;background:#40321d;border-left:3px solid #d7a64f;padding:6px;margin:4px 0;font-size:12px}
+#help{max-height:none;overflow:visible;columns:2;width:800px;font-size:11px}#help table{break-inside:avoid}#statistics{max-height:none;overflow:visible}
+@media(max-width:1500px){#timeline-legend{font-size:10px;max-width:185px}#panels{grid-template-columns:minmax(260px,1fr) minmax(430px,1.7fr) minmax(220px,.8fr)}#transport{gap:5px}.action-group button{font-size:11px!important;padding:4px!important}#actions{gap:7px}#top-sim,#top-exact{display:none}}
 </style></head><body>
 
 <section id="lobby">
@@ -137,6 +165,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 <div id="ore-readout" role="status" hidden></div>
   <canvas id="map" tabindex="0" aria-label="Battlefield"></canvas>
   <div id="top"><span id="top-phase"></span><span id="top-tick"></span><span id="top-bank"></span><section id="scoreboard" aria-label="Match scoreboard" aria-live="polite"></section><span id="top-sim"></span><span id="top-exact"></span></div>
+  <div id="turn-banner" role="status" hidden></div><div id="order-warnings" role="status" hidden></div>
   <div id="mode"></div><div id="outcome-banner" role="status"></div>
   <div id="result"></div>
   <div id="toast"></div>

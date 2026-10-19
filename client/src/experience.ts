@@ -2,9 +2,9 @@ import {siloPanel} from './silo';
 import { scoreboard } from './scoreboard';
 import { slopePoints } from './plot';
 import { unitIcon } from './icons';
-import { factoryPlan, orderLabel } from './factory';
+import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type { AcceptedTurn, Command, ControlGroupState, EntityId, PlayerStats, ServerMessage, StatsSample } from './contracts.generated';
-import { Game, idKey, type RevisionView } from './game';
+import { Game, idKey, type EntityView, type RevisionView } from './game';
 
 type Round = Extract<ServerMessage, { kind: 'round_result' }>;
 const $ = (id: string) => document.getElementById(id)!;
@@ -29,19 +29,19 @@ export class Experience {
     const toolbar = document.createElement('div'); toolbar.id = 'actions';
     const categories: [string,string,[string,string][]][] = [
       ['Orders','orders',[['F Attack','f'],['G Support','g'],['M Mine','m'],['C Construct','c'],['X Idle','x']]],
-      ['Build & produce','production',[['B Build structure','b'],['Q Build units','q'],['P Priority','p'],['L Loop','l'],['R Rotate factory','r']]],
+      ['Build & produce','production',[['B Build structure','b'],['Q Build units','q'],['R Rotate factory','r']]],
       ['Groups','groups',[['H Add to group','h'],['Clear group','clear-group'],['J Output group','j']]],
       ['Planning','planning',[['O Future policy','o'],['Undo · Ctrl Z','Control+z'],['Redo · Ctrl U','Control+u'],['V Statistics','v'],['? Help','?']]],
     ];
     for (const [title,category,keys] of categories) {
-      const column=document.createElement('div');column.className=`action-group ${category}`;
-      const label=document.createElement('strong');label.textContent=title;column.append(label);
+      const column=document.createElement(category==='groups'||category==='planning'?'details':'div');column.className=`action-group ${category}`;
+      const label=document.createElement(category==='groups'||category==='planning'?'summary':'strong');label.textContent=title;column.append(label);
       for(const [label,key] of keys){const b=button(label,()=>{
         if(key==='clear-group'){g.mode={kind:'membership',add:false};g.updateMode();}else if(key==='Control+z')g.undo();else if(key==='Control+u')g.redo();else g.key(new KeyboardEvent('keydown',{key,shiftKey:key==='H'}));
       });b.dataset.key=key;column.append(b);}
       toolbar.append(column);
     }
-    const advanced=document.createElement('details');advanced.innerHTML='<summary>More planning tools</summary>';const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);$('draft-panel').append(advanced);
+    const advanced=document.createElement('details');advanced.innerHTML='<summary>More planning tools</summary>';const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);toolbar.querySelector('.planning')!.append(advanced);
     planning.append(button('Rebase draft here', () => {
       if (g.current !== g.latest || g.playhead < g.editableFrom) { g.toast('Choose an editable live tick.'); return; }
       g.draft.undo.push({commands:[...g.draft.commands],tick:g.draft.tick}); g.draft.redo = [];
@@ -55,10 +55,10 @@ export class Experience {
     $('timeline-wrap').append(toolbar);
     const groups = document.createElement('details'); groups.id = 'groups'; groups.innerHTML = '<summary>Groups 0–9</summary><div id="group-list"></div>';
     if (g.spectator) { const owner=document.createElement('select');owner.setAttribute('aria-label','Inspect player groups');for(let p=0;p<g.config.player_count;p++)owner.add(new Option(g.name(p),String(p)));owner.onchange=()=>{this.groupOwner=Number(owner.value);g.selection.clear();g.recalledGroup=null;g.updatePanels();};groups.append(owner); }
-    $('selection').append(groups);
+    toolbar.querySelector('.groups')!.append(groups);
     const recipient = document.createElement('div'); recipient.id = 'recipient'; $('selection').prepend(recipient);
-    const queue = document.createElement('div'); queue.id = 'queue'; $('selection').insertBefore(queue, groups);
-    const preview = document.createElement('div'); preview.id = 'lock-preview'; const diagnostics=document.createElement('details');diagnostics.innerHTML='<summary>Future-order details</summary>';diagnostics.append(preview);$('draft-panel').append(diagnostics);
+    const queue = document.createElement('div'); queue.id = 'queue'; $('timeline-wrap').append(queue);
+    const preview = document.createElement('div'); preview.id = 'lock-preview'; const diagnostics=document.createElement('details');diagnostics.innerHTML='<summary>Future-order details</summary>';diagnostics.append(preview);toolbar.querySelector('.planning')!.append(diagnostics);
     const replay = document.createElement('details'); replay.id = 'replay';
     replay.innerHTML = '<summary>Rounds, inputs and rewrite results</summary><label>Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
     $('game').append(replay);
@@ -69,7 +69,11 @@ export class Experience {
     const rates = document.createElement('select'); rates.id = 'speed'; rates.setAttribute('aria-label', 'Playback speed');
     for (const n of [.25,.5,1,2,4,8,16]) rates.add(new Option(`${n}×`,String(n)));
     rates.value = '1'; rates.onchange = () => { g.rate = Number(rates.value); g.updatePanels(); }; speedLabel.append(rates);$('transport').append(speedLabel);
-    $('transport').append(button('− Zoom', () => g.zoomTimeline(1.25)), button('+ Zoom', () => g.zoomTimeline(.8)), button('Pan ◀', () => g.panTimeline(-(g.view.t1-g.view.t0)/4)), button('Pan ▶', () => g.panTimeline((g.view.t1-g.view.t0)/4)));
+    const navigation=document.createElement('details');navigation.id='timeline-navigation';navigation.innerHTML='<summary>Timeline tools</summary>'; $('transport').append(navigation);
+    navigation.append(button('− Zoom', () => g.zoomTimeline(1.25)), button('+ Zoom', () => g.zoomTimeline(.8)), button('Pan ◀', () => g.panTimeline(-(g.view.t1-g.view.t0)/4)), button('Pan ▶', () => g.panTimeline((g.view.t1-g.view.t0)/4)));
+    const reference=document.createElement('a');reference.href='/guide/#units';reference.target='_blank';reference.rel='noopener';reference.textContent='Unit reference ↗';reference.id='unit-reference';$('transport').append(reference);
+    const legend=document.createElement('span');legend.id='timeline-legend';legend.textContent='◆ Purple: selection orders · White outline: latest write';$('transport').append(legend);
+    const strip=document.createElement('div');strip.id='timeline-strip';strip.append($('timeline'),$('transport'));$('panels').prepend(strip);
     const overlay = document.createElement('div'); overlay.id = 'statistics'; overlay.className = 'overlay';
     overlay.innerHTML = '<button id="close-stats">Close statistics (V)</button><h2>Statistics</h2><label>Metric <select id="metric"></select></label> <label>Player <select id="graph-player"></select></label> <label>Opponent <select id="graph-opponent"></select></label> <label>Window <select id="graph-window"><option value="full">Full run</option><option value="visible">Visible timeline</option></select></label><label>Display <select id="graph-mode"><option value="value">Value</option><option value="slope">Slope (smoothed)</option></select></label><p id="graph-caption"></p><canvas id="graph" width="900" height="330"></canvas><p id="graph-hover"></p><p>Thinking time is cumulative committed time by round, separate from the live planning timer. Attrition is this player’s spend divided by the selected opponent’s spend; no spend has no defined ratio.</p>';
     $('game').append(overlay);
@@ -89,7 +93,7 @@ export class Experience {
     $('game').append(button('Stop and archive unfinished', () => {
       if (g.session.token && g.phase) g.net.send({ kind: 'stop_and_archive', request_id: `stop-${Date.now()}`, based_on_revision: g.latest, slot_token: g.session.token });
     }));
-    const stop = $('game').lastElementChild as HTMLElement; stop.id = 'stop-archive';
+    const stop = $('game').lastElementChild as HTMLElement; stop.id = 'stop-archive';planning.append(stop);
     window.addEventListener('focusin', e => {
       if (!(e.target as HTMLElement).closest('#queue')) this.focusDelete = null;
       if ((e.target as HTMLElement).matches('input,select,textarea,[contenteditable]')) g.renderer.keys = { w:false,a:false,s:false,d:false };
@@ -160,6 +164,7 @@ export class Experience {
     return groups;
   }
   bind(slot: number | null): void {
+    if(!this.g.factoryEditing&&this.g.factorySelection().length>1){this.g.editFactories(()=>this.bind(slot));return;}
     const factories = this.g.selectedIds(t => !!t.production && !t.silo);
     if (factories.length) this.g.stage({ kind:'bind_factory_group', factories, group:slot === null ? null : { owner:this.g.player!,slot } });
     else this.g.toast('Select a factory first.');
@@ -256,7 +261,7 @@ export class Experience {
     const g=this.g, views=g.selectedViews().filter(v=>g.ownSelectable(v));
     const has=(cap:'movement'|'mining'|'construction'|'production')=>views.some(v=>!!g.types.get(v.type_key)?.[cap]);
     const factory=views.some(v=>!!g.types.get(v.type_key)?.production&&!g.types.get(v.type_key)?.silo);
-    const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.some(v=>!g.types.get(v.type_key)?.silo),b:has('construction'),q:has('production'),p:views.some(v=>g.priorityEligible(v)),l:has('production'),r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production&&!g.types.get(g.mode.type_key)?.silo,h:views.some(v=>!v.blueprint),'clear-group':g.player!==null,j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production&&!g.types.get(v.type_key)?.silo)};
+    const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.some(v=>!g.types.get(v.type_key)?.silo),b:has('construction'),q:false,p:views.some(v=>g.priorityEligible(v)),l:has('production'),r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production&&!g.types.get(g.mode.type_key)?.silo,h:views.some(v=>!v.blueprint),'clear-group':g.player!==null,j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production&&!g.types.get(v.type_key)?.silo)};
     for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
     const produce=document.querySelector<HTMLButtonElement>('#actions [data-key="q"]');if(produce)produce.textContent=views.some(v=>g.types.get(v.type_key)?.silo)&&!factory?'Q Build missiles':'Q Build units';
     for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden);
@@ -270,7 +275,9 @@ export class Experience {
     const signature=JSON.stringify([g.canStage().ok,views.map(v=>[v.id,v.lifecycle,factoryPlan(g,v)])]);
     if(root.dataset.plan===signature)return;root.dataset.plan=signature;root.replaceChildren();this.focusDelete=null;
     const enabled=g.canStage().ok;
-    for(const v of views) {
+    const factories=views.filter(v=>!g.types.get(v.type_key)?.silo);
+    if(factories.length>1)this.sharedQueue(root,factories);
+    for(const v of views.filter(v=>factories.length<2||g.types.get(v.type_key)?.silo)) {
       const isSilo=!!g.types.get(v.type_key)?.silo;
       const plan=factoryPlan(g,v), card=document.createElement('section');card.className='factory-plan';
       const heading=document.createElement('strong');heading.append(unitIcon(v.type_key,g.color(v.owner)),document.createTextNode(isSilo?'Missile production':v.lifecycle==='complete'?'Factory output':v.lifecycle==='site'?'Factory under construction':'Planned factory'));card.append(heading);
@@ -298,6 +305,34 @@ export class Experience {
       }
       root.append(card);
     }
+  }
+  sharedQueue(root: HTMLElement, views: EntityView[]): void {
+    const g=this.g, aligned=new Set(views.map(v=>factorySignature(g,v))).size===1;
+    const plan=factoryPlan(g,views[0]);
+    const card=document.createElement('section');card.className='factory-plan shared-factories';
+    const heading=document.createElement('strong');heading.textContent=`${views.length} factories · shared commands`;card.append(heading);
+    const warning=document.createElement('p');warning.className=aligned?'factory-order':'order-warning';
+    warning.textContent=aligned?`Aligned queues · New units: ${orderLabel(plan.order)}`:'Different configurations. Your next shared command requires confirmation and clears all selected factories’ queues and settings at this tick.';card.append(warning);
+    const edit=(change:(v:EntityView)=>void)=>g.editFactories(()=>{for(const v of g.factorySelection())change(v);});
+    const configure=(v:EntityView,change:(s:NonNullable<EntityView['settings']>)=>void)=>{const settings=structuredClone(v.settings!);settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
+    const loop=button(`↻ Loop new items: ${aligned?(plan.loop?'On':'Off'):'Mixed'}`,()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});}));card.append(loop);
+    const queue=document.createElement('div');queue.className='queue-icons';
+    if(aligned){
+      if(plan.active){const active=button(`Cancel active ${plan.active.type_key} on all`,()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));queue.append(active);}
+      plan.pending.forEach((item,index)=>{
+        const chip=document.createElement('span');chip.className='queue-item';chip.append(unitIcon(item.type,g.color(g.player!)),document.createTextNode(item.type));
+        const repeat=button(item.loop?'↻':'1×',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue_loop_flags![index]=!item.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[factoryPlan(g,v).pending[index].ref!],enabled:!item.loop}});}));repeat.setAttribute('aria-label',`Loop shared item ${index+1}`);
+        const remove=button('−',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue.splice(index,1);s.queue_loop_flags!.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[factoryPlan(g,v).pending[index].ref!]}});}));remove.setAttribute('aria-label',`Remove shared item ${index+1}`);chip.append(repeat,remove);queue.append(chip);
+      });
+    }
+    card.append(queue);
+    const recipes=document.createElement('div');recipes.className='recipe-icons';
+    for(const type of g.producible().filter(type=>views.every(v=>g.types.get(v.type_key)?.production?.recipes.includes(type)))){
+      const add=button('',event=>edit(v=>{const items=Array(event.shiftKey?5:1).fill(type);if(v.blueprint)configure(v,s=>{s.queue.push(...items);s.queue_loop_flags!.push(...items.map(()=>s.loop_enabled));});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items}});}));add.setAttribute('aria-label',`Queue ${type}`);add.title=`${type} · ${g.types.get(type)?.matter_cost} matter each · Shift adds 5 to every factory`;add.append(unitIcon(type,g.color(g.player!)),document.createTextNode('+'));recipes.append(add);
+    }
+    card.append(recipes,button('Clear all waiting queues',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue=[];s.queue_loop_flags=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});} )));
+    for(const b of Array.from(card.querySelectorAll('button')))b.disabled=!g.canStage().ok;
+    root.append(card);
   }
   lockPreview(): string {
     const g = this.g, turns = this.turns.get(g.current);

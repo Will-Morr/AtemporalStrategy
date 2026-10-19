@@ -33,3 +33,9 @@ export function factoryPlan(g: Game, v: EntityView) {
 export function orderLabel(order: Order): string {
   switch(order.kind){case 'attack_move':return `Attack move → ${order.destination.x}, ${order.destination.y}`;case 'construct':return 'Construct in assigned area';case 'mine':return 'Mine in assigned area';case 'support':return 'Support assigned ally';default:return 'Idle';}
 }
+
+/** Persistent queue identities differ even when two factories have the same plan. */
+export function factorySignature(g: Game, v: EntityView): string {
+  const p=factoryPlan(g,v);
+  return JSON.stringify({type:v.type_key,pending:p.pending.map(i=>[i.type,i.loop]),active:p.active?{...p.active,item_id:undefined}:null,loop:p.loop,priority:p.priority,order:p.order,group:p.group??null});
+}

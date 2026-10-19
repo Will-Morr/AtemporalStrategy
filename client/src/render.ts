@@ -395,8 +395,14 @@ export class Renderer {
       const outcome=round?.command_outcomes.find(o=>JSON.stringify(o.command_id)===JSON.stringify(c.id));
       if(outcome?.applied_entities.some(id=>this.game.selection.has(idKey(id)))) ticks.add(turn.tick);
     }
-    g.fillStyle='#c2a2ff';
-    for(const tick of ticks){g.fillRect(x(tick)-2,0,4,height-14);g.beginPath();g.moveTo(x(tick)-5,0);g.lineTo(x(tick)+5,0);g.lineTo(x(tick),7);g.fill();}
+    if(this.game.draft.tick!==null)for(const d of this.game.draft.commands){
+      const c=d.command;
+      const ids='entities' in c?c.entities:'factories' in c?c.factories:[];
+      const selected=ids.some(id=>this.game.selection.has(idKey(id))) || (c.kind==='configure_blueprints'&&this.game.selectedViews().some(v=>v.blueprint&&c.blueprint_ids.some(id=>JSON.stringify(id)===JSON.stringify(v.blueprint)))) || (c.kind==='assign_group_order'&&this.game.experience.groups().some(group=>group.id.owner===c.group.owner&&group.id.slot===c.group.slot&&group.members.some(id=>this.game.selection.has(idKey(id)))));
+      if(selected)ticks.add(this.game.draft.tick);
+    }
+    g.fillStyle='#d4b7ff';
+    for(const tick of ticks){g.fillRect(x(tick)-4,0,8,height-14);g.beginPath();g.moveTo(x(tick)-5,0);g.lineTo(x(tick)+5,0);g.lineTo(x(tick),7);g.fill();}
     this.timeline.dataset.orderTicks=[...ticks].sort((a,b)=>a-b).join(',');
     if(this.game.viewingPreview){
       const frontier=x(this.game.preview!.through_tick);
