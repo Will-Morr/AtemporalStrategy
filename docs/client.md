@@ -126,7 +126,7 @@ Fog currently uses Euclidean vision radius from completed friendly units/buildin
 
 Players can uncommit while waiting for other players. The commit button becomes “Uncommit · edit my moves”; successful withdrawal restores the submitted draft, including local blueprint and queue references. The final commit closes the turn immediately. Each browser tab stores its own player token; a saved-player chooser supports explicit rejoin and switching without overwriting another tab’s identity.
 
-The command deck is approximately 30% shorter. A single selection shows unit stats and selection icons; factory output takes priority over detailed stats. Factory blueprints and construction sites expose the same queue/loop/priority controls, with explicit cancellation. Enemy unfunded blueprints stay hidden during seeks. Narrow panels retain scrolling for secondary controls.
+The command deck is approximately 30% shorter. A single selection shows unit stats and selection icons; factory output takes priority over detailed stats. Factory blueprints and construction sites expose the same queue/loop/priority controls, with explicit cancellation. Enemy unfunded blueprints stay hidden during seeks. Normal desktop controls fit without scrolling; only long command and production/launch queues scroll. Secondary tools open from the Groups, Planning and Timeline tools menus.
 
 
 ## Replay while simulation runs
@@ -156,10 +156,19 @@ Selection offers All army (all owned completed mobile combat units at the viewed
 
 ### Missile silos and targeting
 
-Silos have inventory counts and target buttons in the selection panel, with a labeled expandable Build missiles section for production, looping and queue removal. Both planned and complete silos support launch plans. Q lists only recipes supported by selected producers; mixed producer selections only receive compatible additions. Satellite vision, flights and landing zones follow the current replay state. Placement previews show turret weapon reach and silo automatic acquisition, and manual targeting previews show impact radius and flight ticks. See [missiles](missiles.md) for the current timing and targeting defaults.
+Silos have inventory counts and target buttons in the contextual command workspace, with a labeled expandable Build missiles section for production, looping and queue removal. Both planned and complete silos support launch plans. Q lists only recipes supported by selected producers; mixed producer selections only receive compatible additions. Satellite vision, flights and landing zones follow the current replay state. Placement previews show turret weapon reach and silo automatic acquisition, and manual targeting previews show impact radius and flight ticks. See [missiles](missiles.md) for the current timing and targeting defaults.
 
 ## Shared map choice and rematches
 
 The lobby shows five generated map candidates to every connected player and observer. The first occupied slot controls the shared selection; option one starts selected. Previews include terrain, ore and starting positions. Selection is revision checked and the chosen seed is pinned at match start.
 
 A small game-complete menu offers continuing replay inspection or returning everyone to a fresh map-selection lobby. Only the controlling slot can open that lobby. A rematch preserves profiles, tokens and the server address, retains the old archive, and resets replay, scoring and drafts. Browsers reload into the new lobby on an explicit match-reset event. Mobile support is not required.
+
+
+## Shared editing and planning feedback
+
+The full-width timeline sits above a three-column deck: selection information, contextual commands/production, and draft/commit. Factory recipes replace the redundant production action button; priority has one selection dropdown. Unit reference opens the generated effective-content statistics in a separate tab. The timeline legend identifies purple selected-recipient ticks, including current draft deliveries, and white latest-write outlines.
+
+Multi-factory selection exposes one shared editor. Equivalent recipes, loop flags, active progress, newborn orders, group binding and priority preserve additive queue editing despite differing item identities. Differing plans show an inline warning and require acceptance of a browser confirmation before resetting queues, active work, priority, loop, group binding and newborn order at the draft tick. The reset and requested edit undo together. Single-order matches reject a shared edit requiring multiple protocol commands without retaining a partial draft. This is a client implementation constraint, not a new gameplay rule.
+
+Missing-order feedback checks the viewed tick's projected state, prioritizes selected entities, and cycles the camera/selection through affected entities. It reports idle mobiles, empty factory queues, newborns lacking orders or with incompatible mining/construction templates, and blueprints/sites outside every constructor's assigned work area. It does not predict path reachability, funding, future command success or later orders. A large green committed banner remains visible while waiting and disappears on uncommit, execution or match completion.

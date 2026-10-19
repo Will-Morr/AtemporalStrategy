@@ -26,6 +26,7 @@ for(const variant of [
   await spectator.getByRole('button',{name:'Spectate',exact:true}).click();
   await a.getByRole('button',{name:'Start match',exact:true}).click();for(const p of [...ps,spectator])await revision(p,0);
   await expect(a.locator('#scoreboard .score-player')).toHaveCount(variant.count);
+  expect(await a.evaluate(()=>Array.from(document.querySelectorAll('#panels>div')).filter(e=>e.scrollHeight>e.clientHeight+2||e.scrollWidth>e.clientWidth+2).map(e=>e.id))).toEqual([]);
   await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-wins','0');
   if(variant.teams)await expect(a.locator('#scoreboard')).toContainText('cyan · 0 pts');
   await expect(spectator.locator('#commit')).toBeDisabled();await expect(spectator.getByRole('button',{name:'B Build structure',exact:true})).toBeHidden();

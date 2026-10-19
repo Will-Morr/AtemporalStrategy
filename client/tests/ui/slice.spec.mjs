@@ -105,11 +105,11 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await clickTile(a, originalMiner);
   await a.keyboard.press('h'); await a.keyboard.press('3');
   await expect(a.locator('#draft-list')).toContainText('edit_group_members');
-  await a.locator('#groups summary').click();
-  await expect(a.locator('#group-list')).toContainText('3: 1 living');
+  await a.locator('#actions .groups>summary').click();await a.locator('#groups summary').click();
+  await expect(a.locator('#group-list')).toContainText('3: 1 living');await a.locator('#actions .groups>summary').click();
   await clickTile(a, await findEntity(a,0,'constructor')); await a.keyboard.press('h'); await a.keyboard.press('3');
   await expect(a.locator('#group-list')).toContainText('3: 2 living');
-  await a.getByRole('button',{name:'Clear group',exact:true}).click(); await a.keyboard.press('3');
+  await a.locator('#actions .groups>summary').click();await a.getByRole('button',{name:'Clear group',exact:true}).click(); await a.keyboard.press('3');
   await expect(a.locator('#group-list button')).toHaveCount(0);
   expect(await a.evaluate(()=>window.atemporal.experience.groups().find(g=>g.id.slot===3)?.members)).toEqual([]);
   await a.keyboard.press('Control+z'); await a.keyboard.press('Control+z');
@@ -129,7 +129,6 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('Control+z');
   await clickTile(a, originalMiner);
   await expect(a.locator('#recipient')).toContainText('Selection');
-  await a.locator('#groups summary').click();
   // Every stored-order kind uses the same action/target gestures (factory tests below).
   // Wall line placement uses connected axis steps, with visible validity feedback.
   const wallTiles = await a.evaluate(() => {
@@ -358,11 +357,11 @@ test('two players and a spectator play the opening, rewrite and replay', async (
   await a.keyboard.press('?');
   await review.capture('hotkey-help', a);
   await a.keyboard.press('Escape');
-  await s.locator('#groups summary').click();
+  await s.locator('#actions .groups>summary').click();await s.locator('#groups summary').click();
   await s.getByLabel('Inspect player groups').selectOption('1');
   await expect(s.locator('#group-list button')).toHaveCount(0);
   const scoreBeforeArchive = await a.locator('#scoreboard').textContent();
-  await a.getByRole('button',{name:'Stop and archive unfinished',exact:true}).click();
+  await a.locator('#actions .planning>summary').click();await a.getByRole('button',{name:'Stop and archive unfinished',exact:true}).click();
   await expect(a.locator('#result')).toContainText('unfinished');
   await expect(a.locator('#commit')).toBeDisabled();
   await expect(a.locator('#top-sim')).not.toContainText('live planning');
@@ -424,7 +423,7 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
     await a.keyboard.press('Shift+.');
     await expect.poll(async () => (await state(a)).exactTick).toBe(200);
     await review.capture('draft-marker-versus-playhead',a);
-    await a.getByText('More planning tools',{exact:true}).click();await a.getByRole('button',{name:'Rebase draft here'}).click(); expect((await state(a)).draftTick).toBe(200);
+    await a.locator('#actions .planning>summary').click();await a.getByRole('button',{name:'Rebase draft here'}).click(); expect((await state(a)).draftTick).toBe(200);
     await a.keyboard.press('Control+z'); expect((await state(a)).draftTick).toBe(100);
     await a.keyboard.press('t'); expect((await state(a)).playhead).toBe(100);
     // Advance twice from nonzero checkpoints; earlier authoritative outcomes must survive.
@@ -437,7 +436,7 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
     await b.fill('#tick-input','200');await b.locator('#tick-input').press('Enter');await b.keyboard.press('Escape');await b.keyboard.press('Enter');
     await waitRevision(a,3);
     await expect.poll(() => a.evaluate(() => window.atemporal.experience.rounds.get(3)?.command_outcomes.some(o => o.command_id.round === 2 && o.applied_entities.length === 1))).toBe(true);
-    const popup = a.waitForEvent('popup'); await a.getByRole('link',{name:'Guide',exact:true}).click(); const guide = await popup;
+    const popup = a.waitForEvent('popup'); await a.locator('#unit-reference').click(); const guide = await popup;
     await expect(guide.getByRole('heading',{name:'Browser controls'})).toBeVisible();
     await review.capture('guide-actual-controls-desktop',guide);
     await guide.getByRole('heading',{name:'Browser controls'}).scrollIntoViewIfNeeded();

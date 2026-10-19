@@ -9,7 +9,7 @@ From the repository root:
 ```sh
 npm ci --prefix client
 npm run ui:install --prefix client
-cargo build --release -p atemporal-server
+cargo build --release -p atemporal-server -p atemporal-runner
 npm run build --prefix client
 ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --seed 42 --replays target/ui-replays' npm run ui:review --prefix client
 ```
@@ -145,3 +145,10 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 ## Map choice, rematches and factory displacement
 
 `rematch.spec.mjs` checks that both players and an observer see the same five maps, that only the controlling player can choose, and that the selected preview matches the initial terrain and ore. It ends a real match, reviews/reloads the completion menu, opens a fresh lobby while another player is playing the old replay, keeps slot identities, selects another map and commits in the reset match. A second scenario parks a miner on a factory output and verifies displacement and the completed birth. The scenarios run through authoritative or native-peripheral transport and capture full 1080p frames.
+
+
+## Compact planning review
+
+`declutter.spec.mjs` covers grouped factory overrides (dismiss/accept, mouse and keyboard, whole-edit undo, aligned additions and active production cancellation), missing-order feedback, selection markers, unit-reference access, and committed/uncommitted banners. It checks normal panels for overflow and captures 1920×1080 and 1366×768 frames. `missiles.spec.mjs` also checks the expanded silo editor at 1366×768. Secondary actions are reached through Groups and Planning menus; only command/production/launch lists scroll. The default browser harness builds both server and peripheral binaries to avoid testing a stale replica against current content.
+
+On the current eight-core workstation, keep test workloads on six cores at low priority so the user can work concurrently: prefix commands with `taskset -c 0-5 nice -n 10 env CARGO_BUILD_JOBS=6 RUST_TEST_THREADS=6`. Browser scenarios use two workers within that shared CPU cap. Run the repository check and browser build phases sequentially because both write generated/client assets.

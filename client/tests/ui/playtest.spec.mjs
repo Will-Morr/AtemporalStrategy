@@ -29,14 +29,14 @@ test('playtest fixes: reachable map, contextual production, ghosts, fog and appl
     const direction=await a.evaluate(()=>window.atemporal.renderer.outputDirection);await a.keyboard.press('r');expect(await a.evaluate(()=>window.atemporal.renderer.outputDirection)).not.toBe(direction);
     // Choose a valid output after rotation.
     await tile(a,build);await expect(a.locator('#draft-list')).toContainText('place factory');await tile(a,build);
-    await a.getByRole('button',{name:'Q Build units',exact:true}).click();await a.locator('#mode-options button').filter({hasText:'grunt'}).click();
+    await a.getByRole('button',{name:'Queue grunt',exact:true}).click();
     await a.getByRole('button',{name:'Queue grunt',exact:true}).click();
     await expect(a.locator('.queue-icons')).toContainText('grunt ×2');
     await a.getByRole('button',{name:'Remove one queued grunt',exact:true}).click();
     await expect(a.locator('.queue-icons')).toContainText('grunt ×1');
     await a.getByRole('button',{name:'↻ Loop new items: Off',exact:true}).click();
     await expect(a.getByRole('button',{name:'↻ Loop new items: On',exact:true})).toHaveAttribute('aria-pressed','true');
-    await a.getByRole('button',{name:'P Priority',exact:true}).click();await a.locator('#mode-options button').filter({hasText:'High'}).click();
+    await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');
     await a.keyboard.press('f');await tile(a,{x:start.x+4,y:start.y+2});
     await expect(a.locator('#queue')).toContainText('grunt ×1');await expect(a.getByRole('combobox',{name:'Selection priority'})).toHaveValue('high');await expect(a.locator('#queue')).toContainText('Attack move');
     await review.capture('ghost-production-configured',a);

@@ -2,7 +2,7 @@ import {factoryPlan} from './factory';
 import type {EntityView, Game} from './game';
 
 export function orderWarnings(g: Game): {entity:EntityView;message:string}[] {
-  if(g.spectator||g.current!==g.latest||g.finished||!g.exact)return [];
+  if(g.spectator||g.current!==g.latest||g.finished||g.progress||g.preview||g.committed.includes(g.player??-1)||!g.exact)return [];
   const own=g.entities().filter(v=>g.ownSelectable(v));
   const builders=own.filter(v=>g.types.get(v.type_key)?.construction);
   const warnings:{entity:EntityView;message:string}[]=[];
@@ -30,8 +30,9 @@ export function updateOrderWarnings(g: Game): void {
   root.replaceChildren();
   if(!warnings.length)return;
   const label=document.createElement('strong');label.textContent=`Needs orders · ${warnings.length}`;
-  const detail=document.createElement('span');detail.textContent=warnings[0].message;
+  const relevant=warnings.filter(w=>g.selection.has(JSON.stringify(w.entity.id)));
+  const detail=document.createElement('span');detail.textContent=(relevant.length?relevant:warnings).slice(0,2).map(w=>w.message).join(' · ');
   root.title=`At tick ${Math.floor(g.playhead)}. Future orders may change this.\n${warnings.map(w=>w.message).join('\n')}`;
-  const review=document.createElement('button');review.textContent='Select affected';review.onclick=()=>g.selectViews([...new Map(warnings.map(w=>[JSON.stringify(w.entity.id),w.entity])).values()]);
+  const review=document.createElement('button');review.textContent='Review next';review.onclick=()=>{const entities=[...new Map(warnings.map(w=>[JSON.stringify(w.entity.id),w.entity])).values()];const current=entities.findIndex(v=>g.selection.has(JSON.stringify(v.id)));const next=entities[(current+1)%entities.length];g.renderer.centerOn(next.x,next.y);g.selectViews([next]);};
   root.append(label,detail,review);
 }

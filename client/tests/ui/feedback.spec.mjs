@@ -40,10 +40,10 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0).length)).toBe(1);
   await a.locator('#cancel-blueprints').click();await review.capture('persistent-blueprint-cancelled-in-draft',a);
   // Rebase to a tick before this blueprint existed: keep the draft and explain locally.
-  await seek(a,0);await a.getByText('More planning tools',{exact:true}).click();await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();await a.locator('#commit').click();
+  await seek(a,0);await a.locator('#actions .planning>summary').click();await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();await a.locator('#commit').click();
   await expect(a.locator('#toast')).toContainText('blueprint in this plan is unavailable at tick 0');
   expect(await a.evaluate(()=>window.atemporal.committed)).not.toContain(0);
-  await seek(a,1);await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();
+  await seek(a,1);await a.locator('#actions .planning>summary').click();await a.getByRole('button',{name:'Rebase draft here',exact:true}).click();
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,2);
   expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0))).toEqual([]);
   await place('turret',spots[3]);await tile(a,constructor);await a.keyboard.press('c');await area(a,spots[3]);

@@ -142,6 +142,7 @@ export class Game {
   }
 
   async start(): Promise<void> {
+    $('game').style.setProperty('--timeline-height',`${Math.max(38,this.config.player_count*12+14)}px`);
     this.content = await (await fetch('/guide/content.json')).json();
     for (const t of this.content.types) this.types.set(t.key, t);
     this.net.on('revision_published', m => { void this.onPublished(m).catch(error => this.failReplay(m.revision, error)); });
@@ -681,6 +682,19 @@ export class Game {
     if (!this.factoryEditing && this.config.control_limit === 'single_order' && this.draft.commands.length >= 1) {
       this.toast('Single-order mode: delete the staged command first.');
       return;
+    }
+    // One shared payload remains one protocol command for disjoint recipients.
+    if(this.factoryEditing){
+      const previous=this.draft.commands.at(-1);
+      const field='factories' in command?'factories':'entities' in command?'entities':command.kind==='configure_blueprints'?'blueprint_ids':null;
+      if(previous&&field&&previous.future_orders===policy){
+        const old=previous.command as unknown as Record<string,unknown>, next=command as unknown as Record<string,unknown>;
+        const left=old[field] as unknown[]|undefined,right=next[field] as unknown[];
+        const payload=(c:Record<string,unknown>)=>JSON.stringify({...c,[field]:undefined});
+        if(left&&payload(old)===payload(next)&&!left.some(a=>right.some(b=>JSON.stringify(a)===JSON.stringify(b)))){
+          previous.command={...previous.command,[field]:[...left,...right]} as DraftCommand['command'];this.updatePanels();return;
+        }
+      }
     }
     this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});
     this.draft.redo = [];
@@ -1292,6 +1306,12 @@ export class Game {
         remove.onclick=()=>this.selectViews(this.selectedViews().filter(e=>!matches(e)));
         chip.append(only,remove); icons.append(chip);
       }
+      if(counts.size>3){
+        const filter=document.createElement('select');filter.setAttribute('aria-label','Filter selection by type');filter.add(new Option(`${views.length} selected · filter by type…`,''));
+        for(const [key,{v,count}] of counts){filter.add(new Option(`Only ${v.type_key} ×${count}`,`only:${key}`));filter.add(new Option(`Remove ${v.type_key} ×${count}`,`remove:${key}`));}
+        filter.onchange=()=>{const [action,owner,...type]=filter.value.split(':');this.selectViews(views.filter(v=>(v.owner===Number(owner)&&v.type_key===type.join(':'))===(action==='only')));};
+        icons.replaceChildren(filter);
+      }
       body.append(icons);
       if(views.length===1){const v=views[0],t=this.types.get(v.type_key)!;const title=document.createElement('strong');title.textContent=`${v.type_key} · ${v.lifecycle==='site'?'Under construction':v.lifecycle==='blueprint'?'Planned':this.name(v.owner)}`;body.append(title);
         const stats=document.createElement('div');stats.id='unit-stats';stats.className='unit-stats';
@@ -1384,12 +1404,12 @@ export class Game {
       ['Left click / drag', 'Select / box select (Shift adds)'], ['0–9', 'Recall control group'], ['WASD, middle drag, wheel', 'Pan / zoom; Shift+wheel pans'],
       ['F then click', 'Attack-move'], ['G then click ally', 'Support'], ['M then drag', 'Mine area'], ['C then drag', 'Construct area'],
       ['B then 1/2/3 then click', 'Place factory / turret / wall (R rotates output)'], ['X', 'Idle'], ['O', 'Cycle future-order policy'],
-      ['P then 1/2/3', 'Priority high / medium / low'], ['Q then 1–7', 'Queue a unit at selected factories'], ['L', 'Toggle factory loop'],
+      ['P then 1/2/3/4', 'Priority high / medium / low / Off'], ['Q then 1–7', 'Queue a unit at selected factories'], ['L', 'Toggle factory loop'],
       ['H then digit / Clear group', 'Add members / empty a group'], ['J then digit / Backspace', 'Bind / clear factory output group'], ['Factory + F/G/M/C/X', 'Starting order for newborns'], ['V', 'Statistics graphs'], ['- / =, Shift+[ / Shift+]', 'Timeline zoom / pan'], ['Delete', 'Remove selected draft / blueprint / queue item'], ['Ctrl+Z / Ctrl+U', 'Undo / redo draft'],
-      ['Enter', 'Commit / pass'], ['Space', 'Play / pause'], [', .', 'Step one tick'], ['< >', 'Jump 100 ticks'], ['Home / End', 'Editable start / end'],
+      ['Enter', 'Commit / pass / uncommit while waiting'], ['Space', 'Play / pause'], [', .', 'Step one tick'], ['< >', 'Jump 100 ticks'], ['Home / End', 'Editable start / end'],
       ['[ ]', 'Playback speed'], ['T', 'Return to draft tick'], ['Esc', 'Cancel mode, then clear selection'], ['?', 'This help'],
     ];
-    $('help').innerHTML = `<b>Hotkeys</b><table>${rows.map(([k, v]) => `<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join('')}</table>`;
+    $('help').innerHTML = `<b>Hotkeys · ? or Esc to close</b><div class="help-columns">${[rows.slice(0,15),rows.slice(15)].map(part=>`<table>${part.map(([k,v])=>`<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join('')}</table>`).join('')}</div>`;
   }
 }
 

@@ -41,7 +41,7 @@ export class Experience {
       });b.dataset.key=key;column.append(b);}
       toolbar.append(column);
     }
-    const advanced=document.createElement('details');advanced.innerHTML='<summary>More planning tools</summary>';const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);toolbar.querySelector('.planning')!.append(advanced);
+    const advanced=document.createElement('div');const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);toolbar.querySelector('.planning')!.append(advanced);
     planning.append(button('Rebase draft here', () => {
       if (g.current !== g.latest || g.playhead < g.editableFrom) { g.toast('Choose an editable live tick.'); return; }
       g.draft.undo.push({commands:[...g.draft.commands],tick:g.draft.tick}); g.draft.redo = [];
@@ -52,6 +52,7 @@ export class Experience {
     const guide = document.createElement('a'); guide.href = '/guide/'; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
     const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
     planning.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
+    toolbar.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))for(const menu of Array.from(toolbar.querySelectorAll('details')))menu.open=false;});
     $('timeline-wrap').append(toolbar);
     const groups = document.createElement('details'); groups.id = 'groups'; groups.innerHTML = '<summary>Groups 0–9</summary><div id="group-list"></div>';
     if (g.spectator) { const owner=document.createElement('select');owner.setAttribute('aria-label','Inspect player groups');for(let p=0;p<g.config.player_count;p++)owner.add(new Option(g.name(p),String(p)));owner.onchange=()=>{this.groupOwner=Number(owner.value);g.selection.clear();g.recalledGroup=null;g.updatePanels();};groups.append(owner); }
@@ -264,7 +265,7 @@ export class Experience {
     const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.some(v=>!g.types.get(v.type_key)?.silo),b:has('construction'),q:false,p:views.some(v=>g.priorityEligible(v)),l:has('production'),r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production&&!g.types.get(g.mode.type_key)?.silo,h:views.some(v=>!v.blueprint),'clear-group':g.player!==null,j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production&&!g.types.get(v.type_key)?.silo)};
     for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
     const produce=document.querySelector<HTMLButtonElement>('#actions [data-key="q"]');if(produce)produce.textContent=views.some(v=>g.types.get(v.type_key)?.silo)&&!factory?'Q Build missiles':'Q Build units';
-    for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden);
+    for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden)&&!col.querySelector('select');
     const options=$('mode-options');options.replaceChildren();
     const choices=g.mode.kind==='build'?g.structures():g.mode.kind==='recipe'?g.producible():g.mode.kind==='priority'?['High','Medium','Low','Off']:g.mode.kind==='membership'||g.mode.kind==='binding'?Array.from({length:10},(_,n)=>String(n)):[];
     choices.forEach((label,index)=>{const digit=g.mode.kind==='membership'||g.mode.kind==='binding'?index:index+1;const cost=g.types.get(label)?.matter_cost;options.append(button(`${digit} · ${label}${cost===undefined?'':` · ${cost} matter`}`,event=>g.digit(digit,event.shiftKey)));});
@@ -276,8 +277,13 @@ export class Experience {
     if(root.dataset.plan===signature)return;root.dataset.plan=signature;root.replaceChildren();this.focusDelete=null;
     const enabled=g.canStage().ok;
     const factories=views.filter(v=>!g.types.get(v.type_key)?.silo);
-    if(factories.length>1)this.sharedQueue(root,factories);
-    for(const v of views.filter(v=>factories.length<2||g.types.get(v.type_key)?.silo)) {
+    const silos=views.filter(v=>g.types.get(v.type_key)?.silo);
+    const editors=[...(factories.length?[{key:'factories',label:factories.length>1?`${factories.length} factories · shared editor`:'Factory output'}]:[]),...silos.map(v=>({key:idKey(v.id),label:`Missile silo at ${v.x}, ${v.y}`}))];
+    if(!editors.some(e=>e.key===root.dataset.editor))root.dataset.editor=editors[0]?.key;
+    if(editors.length>1){const picker=document.createElement('select');picker.setAttribute('aria-label','Production editor');for(const e of editors)picker.add(new Option(e.label,e.key));picker.value=root.dataset.editor!;picker.onchange=()=>{root.dataset.editor=picker.value;root.dataset.plan='';this.queue();};root.append(picker);}
+    const showFactories=root.dataset.editor==='factories';
+    if(factories.length>1&&showFactories)this.sharedQueue(root,factories);
+    for(const v of views.filter(v=>g.types.get(v.type_key)?.silo?idKey(v.id)===root.dataset.editor:factories.length===1&&showFactories)) {
       const isSilo=!!g.types.get(v.type_key)?.silo;
       const plan=factoryPlan(g,v), card=document.createElement('section');card.className='factory-plan';
       const heading=document.createElement('strong');heading.append(unitIcon(v.type_key,g.color(v.owner)),document.createTextNode(isSilo?'Missile production':v.lifecycle==='complete'?'Factory output':v.lifecycle==='site'?'Factory under construction':'Planned factory'));card.append(heading);
@@ -318,7 +324,7 @@ export class Experience {
     const loop=button(`↻ Loop new items: ${aligned?(plan.loop?'On':'Off'):'Mixed'}`,()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});}));card.append(loop);
     const queue=document.createElement('div');queue.className='queue-icons';
     if(aligned){
-      if(plan.active){const active=button(`Cancel active ${plan.active.type_key} on all`,()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));queue.append(active);}
+      if(plan.active){const active=button(`Cancel active ${plan.active.type_key} on all`,()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));queue.append(active);const repeat=button(plan.active.loop_enabled?'Active repeats':'Repeat active on all',()=>edit(v=>{const active=factoryPlan(g,v).active;if(active)g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:active.item_id}],enabled:!plan.active!.loop_enabled}});}));queue.append(repeat);}
       plan.pending.forEach((item,index)=>{
         const chip=document.createElement('span');chip.className='queue-item';chip.append(unitIcon(item.type,g.color(g.player!)),document.createTextNode(item.type));
         const repeat=button(item.loop?'↻':'1×',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue_loop_flags![index]=!item.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[factoryPlan(g,v).pending[index].ref!],enabled:!item.loop}});}));repeat.setAttribute('aria-label',`Loop shared item ${index+1}`);

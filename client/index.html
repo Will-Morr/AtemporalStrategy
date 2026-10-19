@@ -113,7 +113,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #new-game-start{background:#237447;font-weight:bold}#new-game-open{pointer-events:auto}
 
 /* A single timeline strip, contextual workspace and compact planning column. */
-#panels{grid-template-columns:minmax(270px,1fr) minmax(470px,1.8fr) minmax(240px,.85fr);grid-template-rows:82px 230px;gap:8px;padding:8px}
+#panels{grid-template-columns:minmax(270px,1fr) minmax(470px,1.8fr) minmax(240px,.85fr);grid-template-rows:calc(var(--timeline-height,38px) + 44px) 230px;gap:8px;padding:8px}
 #panels>div{height:auto!important;min-height:0;overflow:visible;padding:8px}
 #panels>#timeline-strip{grid-column:1/-1;background:#101c28;display:flex;flex-direction:column;gap:5px;padding:5px 8px}
 #timeline{height:38px;min-height:38px}#transport{flex-wrap:nowrap;gap:8px;font-size:11px}#timeline-legend{color:#d4b7ff;margin-left:auto;font-size:11px}
@@ -133,12 +133,17 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 #selection-body>small{display:none}#selection-icons{gap:3px}#selection-icons .unit-icon{width:22px;height:22px}
 #selection.factory-selected #selection-body>details[open]{position:absolute;bottom:100%;left:0;background:#172938;padding:12px;border:1px solid #61829c;z-index:12;width:100%}
 #draft-panel{height:100%;display:flex;flex-direction:column}#draft-list{min-height:0;max-height:none;overflow:auto;flex:1}#draft-title{overflow:visible;max-height:none}#commit{margin-top:auto;flex-shrink:0}
-#minimap{bottom:346px;width:6rem;height:6rem}#toast{bottom:346px}#stop-archive{position:static;font-size:11px}#lock-preview{max-height:none;overflow:visible}
+#minimap{bottom:calc(var(--timeline-height,38px) + 308px);width:6rem;height:6rem}#toast{bottom:calc(var(--timeline-height,38px) + 308px)}#stop-archive{position:static;font-size:11px}#lock-preview{max-height:none;overflow:visible}
 #turn-banner{position:absolute;z-index:6;top:calc(var(--hud-height) + 4px);left:15%;right:15%;text-align:center;background:#176743;border:2px solid #8aefb1;color:#edfff4;font-size:18px;font-weight:750;padding:14px;box-shadow:0 5px 24px #0008;pointer-events:none}
-#order-warnings{position:absolute;z-index:5;left:10px;bottom:346px;max-width:calc(100% - 130px);padding:7px 10px;border:1px solid #c59747;border-radius:5px;background:#382d19;color:#ffe2a4;display:flex;gap:12px;align-items:center;font-size:12px}
+#order-warnings{position:absolute;z-index:5;left:10px;bottom:calc(var(--timeline-height,38px) + 308px);max-width:calc(100% - 130px);padding:7px 10px;border:1px solid #c59747;border-radius:5px;background:#382d19;color:#ffe2a4;display:flex;gap:12px;align-items:center;font-size:12px}
 #order-warnings[hidden],#turn-banner[hidden]{display:none}#order-warnings button{padding:3px 8px;font-size:11px}.order-warning{color:#ffdb91;background:#40321d;border-left:3px solid #d7a64f;padding:6px;margin:4px 0;font-size:12px}
 #help{max-height:none;overflow:visible;columns:2;width:800px;font-size:11px}#help table{break-inside:avoid}#statistics{max-height:none;overflow:visible}
 @media(max-width:1500px){#timeline-legend{font-size:10px;max-width:185px}#panels{grid-template-columns:minmax(260px,1fr) minmax(430px,1.7fr) minmax(220px,.8fr)}#transport{gap:5px}.action-group button{font-size:11px!important;padding:4px!important}#actions{gap:7px}#top-sim,#top-exact{display:none}}
+.factory-plan:has(.silo-controls){display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.silo-controls{margin:0;border:0;padding:0}.silo-production .factory-settings{float:none}.silo-production .recipe-icons{gap:4px}.silo-production .recipe-icons .unit-icon{width:20px;height:20px}.missile-launches{max-height:78px;overflow:auto}.silo-controls>small{font-size:10px}
+#actions>.planning[open]{width:270px}#actions>.planning .action-group{display:grid;grid-template-columns:1fr}#actions>.planning .action-group button{width:100%}
+.silo-production>strong,.silo-production>small{display:none}.silo-production .recipe-icons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.silo-production .recipe-icons button{min-width:0;font-size:10px!important;line-height:1.1}.silo-production .recipe-icons .unit-icon{width:18px;height:18px}
+#help{columns:auto;width:min(900px,calc(100vw - 32px))}.help-columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.help-columns table{width:100%}#help td{padding:4px}
+#mode-options:empty{display:none}#timeline-wrap:has(#mode-options:not(:empty)) #queue{display:none}
 </style></head><body>
 
 <section id="lobby">

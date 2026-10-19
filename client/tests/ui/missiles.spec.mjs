@@ -11,8 +11,9 @@ test('silo blueprint production, launch previews, satellite replay and stockpili
   const build=await a.evaluate(c=>{const g=window.atemporal;for(let y=c.y-1;y<=c.y+1;y++)for(let x=c.x-1;x<=c.x+1;x++)if(g.validPlacement({x,y},false))return{x,y}},constructor);
   await tile(a,constructor);await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'turret'}).click();await hover(a,build);await expect(a.locator('#range-readout')).toContainText('Turret reach:');await review.capture('turret-placement-range',a);await a.keyboard.press('Escape');
   await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'silo'}).click();await hover(a,build);await expect(a.locator('#range-readout')).toContainText('Manual launches: unlimited range');await review.capture('silo-placement-auto-range',a);await tile(a,build);await tile(a,build);
-  await a.locator('.silo-production>summary').click();
+  await a.setViewportSize({width:1366,height:768});await a.locator('.silo-production>summary').click();
   await a.keyboard.press('q');await expect(a.locator('#mode-options button')).toHaveCount(3);await a.locator('#mode-options button').filter({hasText:'satellite'}).click();await a.getByRole('button',{name:'Queue cluster',exact:true}).click();await a.getByRole('button',{name:'Queue tac_nuke',exact:true}).click();
+  expect(await a.evaluate(()=>Array.from(document.querySelectorAll('#panels>div')).filter(e=>e.scrollHeight>e.clientHeight+2||e.scrollWidth>e.clientWidth+2).map(e=>e.id))).toEqual([]);await review.capture('silo-production-no-scroll-1366',a);
   await a.locator('.silo-production>summary').click();
   await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');
   const predicted={};

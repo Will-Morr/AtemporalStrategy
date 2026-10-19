@@ -224,3 +224,20 @@ Full-frame review also covered narrow combat playback and historical replay (`20
 
 - [Peripheral ghost planning, desktop](../artifacts/ui/2026-09-13T15-24-39.535Z-635088/results/playtest-playtest-fixes-re-c97ed-hosts-fog-and-applied-ticks-desktop-chromium/ghost-production-configured.png)
 - [Peripheral mismatch, narrow](../artifacts/ui/2026-09-13T15-24-39.535Z-635088/results/playtest-peripheral-mismat-74cf1-ning-without-browser-errors-narrow-chromium/peripheral-mismatch-blocks-planning.png)
+
+## Compact planning UI pass
+
+The requested UI checklist is implemented: contextual command menus, a full-width timeline, one shared factory editor, accepted overrides for differing factory configurations, missing-order feedback, a committed/waiting banner, prominent selected-recipient ticks, and a direct generated unit-reference link. The guide and thematic user requirements are updated.
+
+Local verification:
+
+- `scripts/check.sh` completed successfully: formatting, workspace tests, Clippy, simulation tests without default features, client generation/typecheck/build, JavaScript checks, authored fixtures and generated-file drift. Later layout adjustments were rebuilt and typechecked by the browser harness.
+- All 27 browser scenarios have passing coverage across the full run and focused corrections. `artifacts/ui/2026-10-19T01-12-01.903Z-46856` passed 22; its five failures exposed old menu-navigation test steps, a stale peripheral executable, a missing acceptance in the expanded factory scenario, and silo-panel overflow. Those failure artifacts are retained.
+- `artifacts/ui/2026-10-19T01-21-14.841Z-53407` passed seven of eight focused scenarios, including active factory cancellation after publication, production priorities, peripheral previews, both opening/history slices, four-player layout and the new feedback checks. Its remaining silo overflow was corrected by removing the empty mode-options row and showing mode choices in place of production controls.
+- `artifacts/ui/2026-10-19T01-24-00.699Z-55199` passed all three final factory/feedback/silo scenarios. This includes 1366×768 panel overflow assertions, accepted/dismissed mixed-factory overrides, aligned five-item additions, whole-edit undo, blueprint/site/live editing, committed/uncommitted banner lifetime, draft and published selection markers, guide access and completed missile scenarios.
+
+Full rendered PNGs were manually inspected, including the final `silo-production-no-scroll-1366`, `factory-no-scroll-1366` and `shared-aligned-factory-editor` frames; the preceding run's `planning-menu-1366`, `hotkeys-no-scroll-1366`, `active-factories-overridden-together`, committed-waiting frame and four-player `group-single-delivery-and-timeline` frame were also inspected. The screenshots show accessible bottom controls, readable menus, isolated long command lists and unclipped timeline rows. The reviewed display sizes are 1920×1080 and 1366×768, device scale 1, Chromium; mobile and other browser engines were not reviewed.
+
+The warning system describes projected orders at the viewed tick, not guaranteed future funding or reachability. Equivalent shared operations combine disjoint recipients into one command; a mixed-factory reset that needs several protocol commands is rejected atomically in single-order mode. It remains available in the default timestamp mode. No simulation/protocol behavior was changed.
+
+After the user's resource request, running test threads and all subsequent runs were restricted to CPU cores 0–5 with scheduling priority 10. The browser retained two workers inside that cap. Test processes are stopped after verification; generated build phases were serialized. The pre-existing untracked `TMP_NOTES.md` was left untouched.

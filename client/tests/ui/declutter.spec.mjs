@@ -15,6 +15,7 @@ test('shared factory editing requires accepted override and preserves aligned ad
   }
   const selectBoth=async()=>{await tile(a,sites[0]);const point=await a.evaluate(t=>window.atemporal.renderer.screen(t.x+.5,t.y+.5),sites[1]);await a.keyboard.down('Shift');await a.mouse.click(...point);await a.keyboard.up('Shift');};
   await selectBoth();await expect(a.locator('.shared-factories')).toContainText('Different configurations');await expect(a.getByRole('button',{name:'Queue miner',exact:true})).toHaveCount(1);
+  await review.capture('mixed-factory-override-warning',a);
   const before=await a.evaluate(()=>window.atemporal.draft.commands);
   a.once('dialog',d=>d.dismiss());await a.getByRole('button',{name:'Queue scout',exact:true}).click();expect(await a.evaluate(()=>window.atemporal.draft.commands)).toEqual(before);
   a.once('dialog',async d=>{expect(d.message()).toContain('tick 0');await d.accept();});await a.getByRole('button',{name:'Queue scout',exact:true}).click();
@@ -32,6 +33,15 @@ test('shared factory editing requires accepted override and preserves aligned ad
   await a.getByRole('button',{name:'Queue miner',exact:true}).click();await expect(a.locator('.shared-factories')).toContainText('Aligned queues');
   await a.getByRole('button',{name:'Remove shared item 2',exact:true}).click();
   await review.capture('shared-live-factory-editor',a);
+  await a.keyboard.press('Control+z');await a.keyboard.press('Control+z');await seek(a,150);await selectBoth();
+  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>v.lifecycle))).toEqual(['complete','complete']);
+  const acceptOverride=dialog=>dialog.accept();a.on('dialog',acceptOverride);await a.getByRole('button',{name:'Queue tank',exact:true}).click();a.off('dialog',acceptOverride);await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,152);await tile(a,sites[0]);
+  await a.getByRole('button',{name:'Queue miner',exact:true}).click();await selectBoth();
+  a.once('dialog',d=>d.accept());await a.getByRole('combobox',{name:'Selection priority'}).selectOption('off');
+  expect(await a.evaluate(()=>window.atemporal.draft.commands.filter(d=>d.command.kind==='edit_production'&&d.command.edit.kind==='cancel_active').length)).toBe(2);
+  await noPanelScroll(a);await review.capture('active-factories-overridden-together',a);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,3);await seek(a,153);await selectBoth();
+  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>({priority:v.exact.priority,pending:v.exact.production.pending_items.length,active:v.exact.production.active_item??null})))).toEqual(Array(2).fill({priority:'off',pending:0,active:null}));
 });
 
 async function noPanelScroll(page){
@@ -54,6 +64,10 @@ test('order warnings, committed banner, selection markers and unit reference fit
   await a.keyboard.press('m');await area(a,site);await expect(a.locator('#order-warnings')).not.toHaveAttribute('title',/will start idle/);
   await expect(a.locator('#timeline')).toHaveAttribute('data-order-ticks','0');await noPanelScroll(a);await review.capture('factory-no-scroll-1366',a);
   await tile(a,constructor);await a.keyboard.press('c');await area(a,site);await expect(a.locator('#order-warnings')).not.toHaveAttribute('title',/no constructor assigned/);
+  await a.locator('#actions .planning>summary').click();await review.capture('planning-menu-1366',a);
+  expect(await a.locator('#actions .planning').evaluate(e=>e.getBoundingClientRect().top>=0)).toBe(true);
+  await a.locator('#actions .planning>summary').click();
+  await a.keyboard.press('?');expect(await a.locator('#help').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight)).toBe(true);await review.capture('hotkeys-no-scroll-1366',a);await a.keyboard.press('Escape');
   const popup=a.waitForEvent('popup');await a.locator('#unit-reference').click();const reference=await popup;await reference.waitForLoadState();await expect(reference.locator('#units')).toContainText('Unit reference');await expect(reference.locator('body')).toContainText('miner');
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeVisible();await review.capture('committed-waiting-1366',a);
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeHidden();
