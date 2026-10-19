@@ -168,3 +168,15 @@ The browser feature, multiplayer/single-order/recovery, and peripheral implement
 - [x] Muted fogged ore and revised missile matter prices.
 
 Verified with the clean repository check, 26/26 native-peripheral desktop browser scenarios, focused authoritative scenarios and manual full-frame review. See [integration verification](integration-verification.md).
+
+## UI simplification checklist
+
+- [ ] Consolidate command controls and eliminate scrolling in normal desktop gameplay.
+- [ ] Shared multi-factory editing with accepted override warning for differing configurations; preserve aligned queues.
+- [ ] Visible missing-order warnings for production and construction.
+- [ ] Prominent committed/waiting banner that clears when execution starts.
+- [ ] Discoverable selection order markers on the timeline.
+- [ ] Direct access to unit statistics before construction.
+- [ ] Real-browser scenarios, screenshot review, local checks and incremental commits.
+
+Implementation interpretation: configuration alignment compares queue recipes/loop flags, active production progress, priority, output group and newborn orders. Item identities are excluded so independent but equivalent factories can be edited together. Resetting differing configurations is undoable and does not delete future commands at other ticks.
