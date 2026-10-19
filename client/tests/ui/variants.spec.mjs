@@ -29,7 +29,7 @@ for(const variant of [
   expect(await a.evaluate(()=>Array.from(document.querySelectorAll('#panels>div')).filter(e=>e.scrollHeight>e.clientHeight+2||e.scrollWidth>e.clientWidth+2).map(e=>e.id))).toEqual([]);
   await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-wins','0');
   if(variant.teams)await expect(a.locator('#scoreboard')).toContainText('cyan · 0 pts');
-  await expect(spectator.locator('#commit')).toBeDisabled();await expect(spectator.getByRole('button',{name:'B Build structure',exact:true})).toBeHidden();
+  await expect(spectator.locator('#commit')).toBeDisabled();await expect(spectator.getByRole('button',{name:'B Plan structures',exact:true})).toBeHidden();
   const constructor=await a.evaluate(()=>{const e=window.atemporal.entities().find(e=>e.owner===0&&e.type_key==='constructor');return{x:e.x,y:e.y};});
   await tile(a,constructor);await a.keyboard.press('h');await a.keyboard.press('2');
   await a.keyboard.press('p');await a.keyboard.press('1');

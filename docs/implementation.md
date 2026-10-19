@@ -172,7 +172,7 @@ Verified with the clean repository check, 26/26 native-peripheral desktop browse
 ## UI simplification checklist
 
 - [x] Consolidate command controls and eliminate scrolling in normal desktop gameplay.
-- [x] Shared multi-factory editing with accepted override warning for differing configurations; preserve aligned queues.
+- [x] Shared multi-factory editing with inline override warning (no browser dialog) for differing configurations; preserve aligned queues.
 - [x] Visible missing-order warnings for production and construction.
 - [x] Prominent committed/waiting banner that clears when execution starts.
 - [x] Discoverable selection order markers on the timeline.

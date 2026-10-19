@@ -16,7 +16,7 @@ test('playtest fixes: reachable map, contextual production, ghosts, fog and appl
     await review.capture('bottom-edge-uncovered',a);
     await tile(a,start);
     await expect(a.getByRole('button',{name:'Q Build units',exact:true})).toBeHidden();
-    await expect(a.getByRole('button',{name:'B Build structure',exact:true})).toBeVisible();
+    await expect(a.getByRole('button',{name:'B Plan structures',exact:true})).toBeVisible();
     await a.keyboard.press('f');await tile(a,{x:start.x+1,y:start.y});
     await a.keyboard.press('c');await area(a,start);
     expect(await a.evaluate(()=>window.atemporal.draft.commands.filter(d=>d.command.kind==='assign_order').map(d=>d.command.order.kind))).toEqual(['construct']);
@@ -25,7 +25,7 @@ test('playtest fixes: reachable map, contextual production, ghosts, fog and appl
     await a.keyboard.press('Control+u');expect(await a.evaluate(()=>window.atemporal.effectiveOrder(window.atemporal.selectedViews()[0]).kind)).toBe('construct');
     await a.keyboard.press('Control+z');await a.keyboard.press('Control+z');
     const build=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=Math.floor(c.y)-2;y<=c.y+2;y++)for(let x=Math.floor(c.x)-2;x<=c.x+2;x++)if(g.validPlacement({x,y},true))return{x,y};});
-    await a.getByRole('button',{name:'B Build structure',exact:true}).click();await a.locator('#mode-options button').filter({hasText:'factory'}).click();
+    await a.getByRole('button',{name:'B Plan structures',exact:true}).click();await a.locator('#mode-options button').filter({hasText:'factory'}).click();
     const direction=await a.evaluate(()=>window.atemporal.renderer.outputDirection);await a.keyboard.press('r');expect(await a.evaluate(()=>window.atemporal.renderer.outputDirection)).not.toBe(direction);
     // Choose a valid output after rotation.
     await tile(a,build);await expect(a.locator('#draft-list')).toContainText('place factory');await tile(a,build);

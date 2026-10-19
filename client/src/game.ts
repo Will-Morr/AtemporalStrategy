@@ -652,7 +652,6 @@ export class Game {
     if(factories.length<2){action();return;}
     if(!this.canStage().ok){this.toast(this.canStage().reason);return;}
     const mixed=new Set(factories.map(v=>factorySignature(this,v))).size>1;
-    if(mixed&&!window.confirm(`Override ${factories.length} factories at tick ${Math.floor(this.playhead)}? Their configurations differ. This clears all waiting queues, cancels active production (spent matter is lost), and resets newborn orders, output groups, loop and priority before applying your shared command. Cancel preserves everything.`))return;
     const before=structuredClone(this.draft);
     this.factoryEditing=true;
     try {
@@ -744,7 +743,7 @@ export class Game {
 
   assign(order: Order, filter: (t: TypeDefinition) => boolean): void {
     if(!this.factoryEditing && this.factorySelection().length>1){this.editFactories(()=>this.assign(order,filter));return;}
-    const ghosts = this.configureGhosts(s => { s.order = order; },v=>!this.types.get(v.type_key)?.silo);
+    const ghosts = this.configureGhosts(s => { s.order = order; },v=>!!this.types.get(v.type_key)?.production&&!this.types.get(v.type_key)?.silo);
     this.stored = false;
     if (this.recalledGroup !== null && this.player !== null) {
       this.stage({ kind: 'assign_group_order', group: { owner: this.player, slot: this.recalledGroup }, order }, this.draft.policy);
@@ -1042,6 +1041,25 @@ export class Game {
     return ['factory', 'turret', 'wall'].filter(k => this.types.has(k)).concat([...this.types.values()].filter(t => t.kind === 'structure' && !['factory', 'turret', 'wall'].includes(t.key)).map(t => t.key));
   }
 
+  actionAvailable(key: string): boolean {
+    const views=this.selectedViews().filter(v=>this.ownSelectable(v));
+    const has=(cap:'movement'|'mining'|'construction'|'production')=>views.some(v=>!!this.types.get(v.type_key)?.[cap]);
+    const template=this.factorySelection().length>0||this.recalledGroup!==null;
+    switch(key){
+      case 'f': case 'g': return has('movement')||template;
+      case 'm': return has('mining')||template;
+      case 'c': return has('construction')||template;
+      case 'x': return has('movement')||template;
+      case 'b': return this.structures().length>0;
+      case 'q': return this.producible().length>0;
+      case 'p': return views.some(v=>this.priorityEligible(v));
+      case 'l': return has('production');
+      case 'h': return views.some(v=>!v.blueprint);
+      case 'j': return views.some(v=>!v.blueprint&&!!this.types.get(v.type_key)?.production&&!this.types.get(v.type_key)?.silo);
+      default: return true;
+    }
+  }
+
   key(e: KeyboardEvent): void {
     const target = e.target as HTMLElement;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
@@ -1080,6 +1098,7 @@ export class Game {
       this.digit(Number(k),e.shiftKey);
       return;
     }
+    if ('fgmcxbqplhj'.includes(k) && k.length===1 && (!this.canStage().ok || !this.actionAvailable(k))) return;
     switch (k) {
       case 'w': this.renderer.keys.w = true; break;
       case 'a': this.renderer.keys.a = true; break;
@@ -1290,7 +1309,7 @@ export class Game {
     $('selection').classList.toggle('factory-selected', views.length === 1 && !!this.types.get(views[0].type_key)?.production);
 
     if (!views.length) {
-      body.innerHTML = this.viewingPreview ? '<p>Select units to inspect them, or scrub the completed replay. Orders reopen after verification.</p>' : this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : '<p>Select units to see their stats and orders.</p><p>Start an army: constructor → B Factory → C Construct.</p><a href="/guide/" target="_blank">How to play ↗</a>';
+      body.innerHTML = this.viewingPreview ? '<p>Select units to inspect them, or scrub the completed replay. Orders reopen after verification.</p>' : this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : '<p>Select units to see their stats and orders.</p><p>Plan buildings with B. Separately select constructors and use C to assign their work area.</p><a href="/guide/" target="_blank">How to play ↗</a>';
     } else {
       body.replaceChildren();
       const icons=document.createElement('div'); icons.id='selection-icons';

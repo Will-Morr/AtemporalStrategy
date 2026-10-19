@@ -29,7 +29,7 @@ export class Experience {
     const toolbar = document.createElement('div'); toolbar.id = 'actions';
     const categories: [string,string,[string,string][]][] = [
       ['Orders','orders',[['F Attack','f'],['G Support','g'],['M Mine','m'],['C Construct','c'],['X Idle','x']]],
-      ['Build & produce','production',[['B Build structure','b'],['Q Build units','q'],['R Rotate factory','r']]],
+      ['Build & produce','production',[['B Plan structures','b'],['Q Build units','q'],['R Rotate factory','r']]],
       ['Groups','groups',[['H Add to group','h'],['Clear group','clear-group'],['J Output group','j']]],
       ['Planning','planning',[['O Future policy','o'],['Undo · Ctrl Z','Control+z'],['Redo · Ctrl U','Control+u'],['V Statistics','v'],['? Help','?']]],
     ];
@@ -260,10 +260,9 @@ export class Experience {
   }
   actions(): void {
     const g=this.g, views=g.selectedViews().filter(v=>g.ownSelectable(v));
-    const has=(cap:'movement'|'mining'|'construction'|'production')=>views.some(v=>!!g.types.get(v.type_key)?.[cap]);
-    const factory=views.some(v=>!!g.types.get(v.type_key)?.production&&!g.types.get(v.type_key)?.silo);
-    const allowed:Record<string,boolean>={f:has('movement')||factory||g.recalledGroup!==null,g:has('movement')||factory||g.recalledGroup!==null,m:has('mining')||factory||g.recalledGroup!==null,c:has('construction')||factory||g.recalledGroup!==null,x:views.some(v=>!g.types.get(v.type_key)?.silo),b:has('construction'),q:false,p:views.some(v=>g.priorityEligible(v)),l:has('production'),r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production&&!g.types.get(g.mode.type_key)?.silo,h:views.some(v=>!v.blueprint),'clear-group':g.player!==null,j:views.some(v=>!v.blueprint&&!!g.types.get(v.type_key)?.production&&!g.types.get(v.type_key)?.silo)};
-    for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
+    const factory=g.factorySelection().length>0;
+    const allowed:Record<string,boolean>={q:false,r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production&&!g.types.get(g.mode.type_key)?.silo,'clear-group':g.player!==null};
+    for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=!g.actionAvailable(b.dataset.key!) || allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
     const produce=document.querySelector<HTMLButtonElement>('#actions [data-key="q"]');if(produce)produce.textContent=views.some(v=>g.types.get(v.type_key)?.silo)&&!factory?'Q Build missiles':'Q Build units';
     for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden)&&!col.querySelector('select');
     const options=$('mode-options');options.replaceChildren();
@@ -318,7 +317,7 @@ export class Experience {
     const card=document.createElement('section');card.className='factory-plan shared-factories';
     const heading=document.createElement('strong');heading.textContent=`${views.length} factories · shared commands`;card.append(heading);
     const warning=document.createElement('p');warning.className=aligned?'factory-order':'order-warning';
-    warning.textContent=aligned?`Aligned queues · New units: ${orderLabel(plan.order)}`:'Different configurations. Your next shared command requires confirmation and clears all selected factories’ queues and settings at this tick.';card.append(warning);
+    warning.textContent=aligned?`Aligned queues · New units: ${orderLabel(plan.order)}`:'Different configurations. Your next shared command clears all selected factories’ queues and settings at this tick, including active production and spent matter. Undo restores the draft.';card.append(warning);
     const edit=(change:(v:EntityView)=>void)=>g.editFactories(()=>{for(const v of g.factorySelection())change(v);});
     const configure=(v:EntityView,change:(s:NonNullable<EntityView['settings']>)=>void)=>{const settings=structuredClone(v.settings!);settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
     const loop=button(`↻ Loop new items: ${aligned?(plan.loop?'On':'Off'):'Mixed'}`,()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});}));card.append(loop);
