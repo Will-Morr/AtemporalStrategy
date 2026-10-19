@@ -98,6 +98,8 @@ Ore remains visible and readable through fog, but out-of-vision patches should b
 
 The game UI must not require scrolling, except when reviewing long command lists. Reduce discrete buttons and consolidate related actions where appropriate.
 
+The subsequent UI pass still occupies too much screen area. Propose several ways to reduce the overall interface footprint for user review before implementing another layout change. The user subsequently chose to keep the current UI sections and move timeline control buttons beside the timeline to reduce vertical space. The alternative dock and side-inspector sketches are not selected.
+
 Multiple selected factories must be edited only as a group. If their configurations differ, writing a command clears their queues/configurations at the chosen tick before applying the new shared command, with a visual warning that the player must accept before overriding. Exactly aligned factories can keep appending items to their shared queues. Individual factory editing remains available when selected alone.
 
 Warn visibly about queued units and factories without orders, especially miners and constructors, and make missing construction orders apparent before committing. Show a large colored banner while the player's turn is committed and waiting; remove it when execution starts. Highlight order ticks for the current selection on the timeline. Make unit statistics accessible before building units, with a clearly linked reference tab/page.
