@@ -105,3 +105,5 @@ Multiple selected factories must be edited only as a group. If their configurati
 Warn visibly about queued units and factories without orders, especially miners and constructors, and make missing construction orders apparent before committing. Show a large colored banner while the player's turn is committed and waiting; remove it when execution starts. Highlight order ticks for the current selection on the timeline. Make unit statistics accessible before building units, with a clearly linked reference tab/page.
 
 Keep unsupported actions unavailable for selected units, including keyboard shortcuts. Structure planning is a global action independent of constructor selection; placing a blueprint must not imply that a selected constructor has been assigned to build it. Constructor work orders remain a separate action.
+
+The remaining fixed-height workspace still wastes too much space, including for large selections. Reduce its overall footprint further while retaining the existing sections.

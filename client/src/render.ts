@@ -29,9 +29,13 @@ export class Renderer {
   }
 
   resize(): void {
+    const oldWidth=this.map.width, oldHeight=this.map.height, oldHeader=this.headerHeight;
     this.map.width = window.innerWidth;
     this.headerHeight = document.getElementById('top')!.offsetHeight;
     this.map.height = Math.max(100, document.getElementById('panels')!.getBoundingClientRect().top);
+    // Keep world positions stable on screen when the contextual workspace changes height.
+    this.camera.x += (this.map.width-oldWidth)/(2*this.camera.scale);
+    this.camera.y += (this.map.height+this.headerHeight-oldHeight-oldHeader)/(2*this.camera.scale);
     this.map.style.height = `${this.map.height}px`;
     this.minimap.width = this.minimap.clientWidth || 200;
     this.minimap.height = this.minimap.clientHeight || 200;

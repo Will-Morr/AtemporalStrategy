@@ -54,7 +54,10 @@ test('order warnings, committed banner, selection markers and unit reference fit
   const units=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0));const constructor=units.find(e=>e.type_key==='constructor');
   await expect(a.locator('#order-warnings')).toBeVisible();await expect(a.locator('#order-warnings')).toHaveAttribute('title',/miner has no orders/);
   for(const viewport of [{width:1920,height:1080},{width:1366,height:768}]){
-    await a.setViewportSize(viewport);await tile(a,constructor);await noPanelScroll(a);await review.capture(`constructor-${viewport.width}`,a);
+    await a.setViewportSize(viewport);await tile(a,constructor);await noPanelScroll(a);
+    expect(await a.locator('#panels').evaluate(e=>e.getBoundingClientRect().height)).toBeLessThanOrEqual(225);
+    await review.capture(`constructor-${viewport.width}`,a);
+    await a.locator('.selection-info>summary').click();await expect(a.locator('#unit-stats')).toBeVisible();await review.capture(`unit-info-${viewport.width}`,a);await a.locator('.selection-info>summary').click();
   }
   await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'factory'}).click();
   const site=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},true))return{x,y};});

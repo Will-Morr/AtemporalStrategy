@@ -957,6 +957,10 @@ export class Game {
     $('commit').onclick = () => void this.commit();
     window.addEventListener('keydown', e => this.key(e));
     window.addEventListener('resize', () => this.renderer.resize());
+    new ResizeObserver(()=>{
+      $('game').style.setProperty('--workspace-height',`${$('panels').getBoundingClientRect().height}px`);
+      this.renderer.resize();
+    }).observe($('panels'));
     this.renderer.resize();
   }
 
@@ -1341,7 +1345,7 @@ export class Game {
         if(t.silo)values.push(['Auto range',`${t.silo.auto_range} tiles`],['Launch range','Unlimited']);
         if(t.self_repair)values.push(['Repair',`${t.self_repair.rate*t.self_repair.hp_per_matter} HP / tick · ${t.self_repair.hp_per_matter} HP / matter`]);
         if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
-        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}if(t.production){const details=document.createElement('details');details.innerHTML='<summary>Unit stats</summary>';details.append(stats);body.append(details);}else { body.append(stats); const order=document.createElement('div');order.className='unit-order';order.textContent=`Order: ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order); }
+        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}const details=document.createElement('details');details.className='selection-info';details.innerHTML='<summary>Unit info</summary>';details.append(title,stats);body.append(details);if(!t.production){const order=document.createElement('div');order.className='unit-order';order.textContent=`HP ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)} · ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order);}
       } else {const label=document.createElement('strong');label.textContent=`${views.length} units selected`;body.append(label);}
       const eligible=views.filter(v=>this.priorityEligible(v));
       const priorities=new Set(eligible.map(v=>this.effectivePriority(v)));
