@@ -1,12 +1,14 @@
 # Architecture and deterministic simulation
 
+Current multi-game extension: [lobbies and bots](lobbies-and-bots.md), implementing [the latest user requirements](../user_spec/lobbies_and_bots.md). This supersedes single-match server scope below; standalone mode remains available for tools.
+
 > Status: a revisable assistant proposal unless explicitly attributed to the user. See [user specifications](../user_spec/README.md). Imperative wording describes the current candidate design, not a locked requirement.
 
 ## Processes and modules
 
 The slice implements this architecture end to end; see [contracts v2](contracts-v2.md), [development](development.md) and [Gate 2 measurements](gate2-measurements.md). Two measured deviations from the text below: intent computation currently runs serially (parallel intents are simulation breadth work), and movement `Move` events are not emitted because 5-tick samples suffice for playback and per-step events would dominate export volume. Everything else below remains the plan breadth agents extend.
 
-Use one Rust workspace with `content`, `contracts`, `sim`, `server`, and `runner` crates, plus a small TypeScript browser client. Server serves static game and player-guide files, HTTP bootstrap/archive endpoints and a WebSocket for live state. It owns slots, planning phases, accepted commands, scores, timing, and durable match revisions. No database; one match per server process is sufficient.
+Use one Rust workspace with `content`, `contracts`, `sim`, `server`, and `runner` crates, plus a small TypeScript browser client. Server serves static game and player-guide files, HTTP bootstrap/archive endpoints and a WebSocket for live state. It owns slots, planning phases, accepted commands, scores, timing, and durable match revisions. No database. The public coordinator persists a game directory and routes each game to a separate match worker process; standalone mode keeps the original one-match workflow.
 
 The server runs simulation work on a dedicated thread, using owned `SimRequest` jobs and typed `WorkerMessage` channels. IO never runs ticks on its event loop. A failed/canceled job leaves the last published revision intact; a cancellation flag is checked at each tick and stale job/revision results are ignored. Recoverable thread panics/errors become failed jobs with fresh per-job state; process-fatal failures still require archive recovery. The `runner` binary provides only the native peripheral, which invokes the same simulation library locally. No subprocess startup or simulation IPC is involved.
 

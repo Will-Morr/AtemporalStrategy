@@ -15,7 +15,7 @@ pub use output::{Output, RunResult};
 pub use world::Sim;
 
 /// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
-pub const RULES_VERSION: u32 = 6;
+pub const RULES_VERSION: u32 = 7;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -48,6 +48,13 @@ pub fn run_with_hook(
         }
         sim.step(emit)?;
         let now = sim.state.tick;
+        // Simple win ends on the first resolved loss, regardless of remaining orders,
+        // missiles, the optional decided cutoff or a requested minimum horizon.
+        if matches!(request.config.objective, Objective::SimpleWin { .. })
+            && sim.state.players.iter().any(|p| p.currently_eliminated)
+        {
+            return Ok(sim.finish(StopReason::Elimination, emit));
+        }
         if now >= request.end_tick_exclusive {
             return Ok(sim.finish(StopReason::AbsoluteHorizon, emit));
         }

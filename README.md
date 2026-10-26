@@ -20,13 +20,16 @@ From the repository folder, run:
 ./quickstart.sh
 ```
 
-This installs the browser dependencies, builds the game, and starts a fresh 1v1 server. The first build may take a few minutes.
+This installs the browser dependencies, builds the game, and starts the game coordinator. The first build may take a few minutes.
 
 1. Open **http://127.0.0.1:8080/**.
-2. Choose a name and color, then claim a player slot.
-3. Have your opponent claim the other slot and press **Start match** from the first occupied slot.
+2. Enter a username, then choose **Create game**. Keep the default 1v1 or select a bot opponent.
+3. Enter the lobby as a spectator, claim a slot, and choose a map.
+4. Once the slots are filled, press **Start match** from slot 0 (or the first occupied human slot).
 
-For a local test, use two tabs. To play on a LAN, your opponent opens `http://<host-ip>:8080/` on their computer. Extra players can spectate.
+The directory lists open lobbies, active games and recent replays. **My games** shows where this browser user has claimed a slot. Open different game links in separate tabs to play in parallel. Usernames are remembered without accounts or uniqueness checks; optional lobby passwords are simple access blockers.
+
+For a local human-vs-human test, use two tabs. To play on a LAN, your opponent opens `http://<host-ip>:8080/` on their computer. Extra players can spectate.
 
 Stop the server with **Ctrl+C**. To use another port:
 
@@ -71,7 +74,11 @@ Missile silos can stockpile satellites, cluster missiles and tactical nukes. Bui
 
 Match settings live in [config/game.yaml](config/game.yaml) (the default `seed` of 0 generates a fresh map for every match; set a nonzero seed to replay one layout); unit and building definitions live in [config/content.yaml](config/content.yaml). Change them before starting the server. The in-game guide generates its stats from the loaded content.
 
-Games are archived under `replays/`. An ordinary launch starts a new match; resume an existing one with:
+The coordinator saves its directory, open lobbies and per-game archives under `games/` (override with `--coordinator-dir DIR`). Restart on the same port and refresh a game tab to resume. Each game runs in a separate worker, reached through the same public address. Recent completed/archived games can be viewed read-only from the directory.
+
+**Rusher**, **Builder** and **Raider** bots use ordinary orders, resources and visibility. Bot-only playtests stop at the chosen round budget. They are intentionally simple learning opponents.
+
+For the original standalone workflow, add `--single-match`; its archives still live under `replays/`. Resume a standalone archive with:
 
 ```sh
 ./quickstart.sh --resume <match-id>

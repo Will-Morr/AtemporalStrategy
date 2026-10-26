@@ -7,3 +7,5 @@
 /artifacts/
 /client/test-results/
 /client/playwright-report/
+
+/games/

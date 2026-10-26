@@ -6,3 +6,6 @@ await rm(`${client}dist`,{recursive:true,force:true});
 await mkdir(`${client}dist`,{recursive:true});
 await cp(`${client}index.html`,`${client}dist/index.html`);
 await build({entryPoints:[`${client}src/main.ts`],bundle:true,format:'esm',target:'es2022',outfile:`${client}dist/app.js`,sourcemap:true});
+
+await cp(`${client}directory.html`,`${client}dist/directory.html`);
+await build({entryPoints:[`${client}src/directory.ts`],bundle:true,format:"esm",target:"es2022",outfile:`${client}dist/directory.js`,sourcemap:true});

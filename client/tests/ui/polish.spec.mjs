@@ -42,7 +42,8 @@ test('same-browser players refresh independently and uncommit restores an editab
   await a.locator('#commit').click(); await b.locator('#commit').click();
   await revision(a,1); await revision(b,1);
   await expect(a.locator('#commit')).not.toHaveText('Uncommit · edit my moves');
-  const chooser = await context.newPage(); await chooser.goto(server.url);
+  await a.getByRole('button',{name:'Switch / rejoin player',exact:true}).click();
+  const chooser = a;
   await expect(chooser.getByRole('button',{name:'Rejoin Window 0',exact:true})).toBeVisible();
   await expect(chooser.getByRole('button',{name:'Rejoin Window 1',exact:true})).toBeVisible();
   await review.capture('explicit-rejoin-player-choice',chooser);

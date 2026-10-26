@@ -1,5 +1,7 @@
 # Implementation and agent handoffs
 
+Current multi-game extension: [lobbies and bots](lobbies-and-bots.md), implementing [the latest user requirements](../user_spec/lobbies_and_bots.md). This supersedes single-match server scope below; standalone mode remains available for tools.
+
 > Status: a revisable assistant proposal unless explicitly attributed to the user. See [user specifications](../user_spec/README.md). Imperative wording describes the current candidate design, not a locked requirement.
 
 ## Execution policy
@@ -182,3 +184,13 @@ Verified with the clean repository check, 26/26 native-peripheral desktop browse
 Implementation interpretation: configuration alignment compares queue recipes/loop flags, active production progress, priority, output group and newborn orders. Item identities are excluded so independent but equivalent factories can be edited together. Resetting differing configurations is undoable and does not delete future commands at other ticks.
 
 Verification and known limits are recorded in [integration verification](integration-verification.md#compact-planning-ui-pass).
+
+## Game coordinator, users and basic bots
+
+- [x] Persistent game directory, open/active/recent filters, My games, optional passwords and simple creation with advanced existing settings.
+- [x] Unvalidated first-visit usernames, browser identity, explicit spectator-to-slot selection and independent saved identities across parallel games.
+- [x] Isolated game processes, stable game URLs, restart recovery, pinned content/guide, spectating and read-only recent replays.
+- [x] Rusher, Builder and Raider policies using visible published states and ordinary validated player commands; bounded bot-only playtests.
+- [x] Low-priority repository checks, real Chromium scenarios and screenshot review, plus replay hash verification.
+
+See [implementation details](lobbies-and-bots.md) and [actual verification limits](integration-verification.md#game-coordinator-users-and-basic-bots--2026-10-24).

@@ -16,7 +16,7 @@ export async function isolatedServer(testInfo, edit = () => {}, editContent = ()
   const port = probe.address().port; await new Promise(r=>probe.close(r));
   let child;
   const start = async (extra=[]) => {
-    child=spawn(`${root}target/release/atemporal-server`,['--port',String(port),'--config',configPath,'--content',contentPath,'--replays',`${dir}/replays`,...serverArgs,...extra],{cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,...env}});
+    child=spawn(`${root}target/release/atemporal-server`,[...(serverArgs.includes('--coordinator')?['--coordinator-dir',`${dir}/games`]:['--single-match']),'--port',String(port),'--config',configPath,'--content',contentPath,'--replays',`${dir}/replays`,...serverArgs.filter(a=>a!=='--coordinator'),...extra],{cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,...env}});
     await new Promise((resolve,reject)=>{
       const timeout=setTimeout(()=>reject(new Error('Server startup timeout')),15000);
       child.stdout.on('data',d=>{void appendFile(`${dir}/server.log`,d);if(String(d).includes('listening on')){clearTimeout(timeout);resolve();}});

@@ -1,3 +1,4 @@
+import {guideUrl} from './session';
 import {siloPanel} from './silo';
 import { scoreboard } from './scoreboard';
 import { slopePoints } from './plot';
@@ -49,7 +50,7 @@ export class Experience {
     }));
     planning.append(button('Discard all uncommitted changes', () => g.clearDraft()));
     planning.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
-    const guide = document.createElement('a'); guide.href = '/guide/'; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
+    const guide = document.createElement('a'); guide.href = guideUrl; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
     const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
     planning.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
     toolbar.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))for(const menu of Array.from(toolbar.querySelectorAll('details')))menu.open=false;});
@@ -72,7 +73,7 @@ export class Experience {
     rates.value = '1'; rates.onchange = () => { g.rate = Number(rates.value); g.updatePanels(); }; speedLabel.append(rates);$('transport').append(speedLabel);
     const navigation=document.createElement('details');navigation.id='timeline-navigation';navigation.innerHTML='<summary>Timeline tools</summary>'; $('transport').append(navigation);
     navigation.append(button('− Zoom', () => g.zoomTimeline(1.25)), button('+ Zoom', () => g.zoomTimeline(.8)), button('Pan ◀', () => g.panTimeline(-(g.view.t1-g.view.t0)/4)), button('Pan ▶', () => g.panTimeline((g.view.t1-g.view.t0)/4)));
-    const reference=document.createElement('a');reference.href='/guide/#units';reference.target='_blank';reference.rel='noopener';reference.textContent='Unit reference ↗';reference.id='unit-reference';$('transport').append(reference);
+    const reference=document.createElement('a');reference.href=`${guideUrl}#units`;reference.target='_blank';reference.rel='noopener';reference.textContent='Unit reference ↗';reference.id='unit-reference';$('transport').append(reference);
     const legend=document.createElement('span');legend.id='timeline-legend';legend.textContent='◆ Purple: selection orders · White outline: latest write';$('transport').append(legend);
     const strip=document.createElement('div');strip.id='timeline-strip';strip.append($('timeline'),$('transport'));$('panels').prepend(strip);
     const overlay = document.createElement('div'); overlay.id = 'statistics'; overlay.className = 'overlay';

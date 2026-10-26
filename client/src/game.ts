@@ -1,3 +1,4 @@
+import {guideUrl} from './session';
 import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
 import {flightPosition, missileName, setSiloPlan, siloPlan} from './silo';
@@ -143,7 +144,7 @@ export class Game {
 
   async start(): Promise<void> {
     $('game').style.setProperty('--timeline-height',`${Math.max(38,this.config.player_count*12+14)}px`);
-    this.content = await (await fetch('/guide/content.json')).json();
+    this.content = await (await fetch(`${guideUrl}content.json`)).json();
     for (const t of this.content.types) this.types.set(t.key, t);
     this.net.on('revision_published', m => { void this.onPublished(m).catch(error => this.failReplay(m.revision, error)); });
     this.net.on('planning_opened', m => {
@@ -1313,7 +1314,7 @@ export class Game {
     $('selection').classList.toggle('factory-selected', views.length === 1 && !!this.types.get(views[0].type_key)?.production);
 
     if (!views.length) {
-      body.innerHTML = this.viewingPreview ? '<p>Select units to inspect them, or scrub the completed replay. Orders reopen after verification.</p>' : this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : '<p>Select units to see their stats and orders.</p><p>Plan buildings with B. Separately select constructors and use C to assign their work area.</p><a href="/guide/" target="_blank">How to play ↗</a>';
+      body.innerHTML = this.viewingPreview ? '<p>Select units to inspect them, or scrub the completed replay. Orders reopen after verification.</p>' : this.finished ? '<p>Match ended. Select units, seek the timeline or open Statistics to inspect the replay.</p>' : this.spectator ? '<span class="muted">Spectating. Click or drag to inspect units, or seek any replay tick.</span>' : `<p>Select units to see their stats and orders.</p><p>Plan buildings with B. Separately select constructors and use C to assign their work area.</p><a href="${guideUrl}" target="_blank">How to play ↗</a>`;
     } else {
       body.replaceChildren();
       const icons=document.createElement('div'); icons.id='selection-icons';

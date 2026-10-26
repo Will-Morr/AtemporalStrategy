@@ -1542,7 +1542,11 @@ impl Sim {
             }
             let def = &self.content.types[self.ty[i]];
             let p = usize::from(e.owner);
-            active[p] |= def.counts_for_survival;
+            active[p] |= if matches!(self.config.objective, Objective::SimpleWin { .. }) {
+                def.kind == TypeKind::Structure
+            } else {
+                def.counts_for_survival
+            };
             build[p] |= def.provides_build_ability;
         }
         for p in 0..players {
@@ -1550,7 +1554,7 @@ impl Sim {
             if !active[p] {
                 reasons.push(Reason::NoActiveBuilding);
             }
-            if !build[p] {
+            if !build[p] && !matches!(self.config.objective, Objective::SimpleWin { .. }) {
                 reasons.push(Reason::NoBuildAbility);
             }
             let eliminated = !reasons.is_empty();

@@ -259,6 +259,44 @@ impl Controller {
 
     // ---- lobby -------------------------------------------------------------------------------
 
+    pub fn bot_token(&self, player: PlayerId) -> Option<String> {
+        self.tokens.get(usize::from(player)).cloned().flatten()
+    }
+    pub fn mark_bot_connected(&mut self, player: PlayerId) {
+        if let Some(slot) = self.lobby.slots.get_mut(usize::from(player)) {
+            slot.connected = true;
+            self.connections[usize::from(player)] = 1;
+        }
+    }
+    pub fn bot_pending(&self, player: PlayerId) -> bool {
+        self.phase == Phase::Planning && !self.committed.contains_key(&player)
+    }
+    pub fn open_lobby_record(&self) -> serde_json::Value {
+        serde_json::json!({"match_id":self.match_id,"lobby":self.lobby,"tokens":self.tokens})
+    }
+    pub fn restore_open_lobby(&mut self, value: serde_json::Value) -> Result<()> {
+        if self.phase != Phase::Lobby {
+            return Ok(());
+        }
+        let lobby: LobbyState =
+            serde_json::from_value(value["lobby"].clone()).map_err(|e| e.to_string())?;
+        let tokens: Vec<Option<String>> =
+            serde_json::from_value(value["tokens"].clone()).map_err(|e| e.to_string())?;
+        if lobby.slots.len() != self.tokens.len() || tokens.len() != self.tokens.len() {
+            return Err("saved lobby has wrong slot count".into());
+        }
+        self.match_id = value["match_id"]
+            .as_str()
+            .ok_or("saved lobby lacks match ID")?
+            .to_owned();
+        self.lobby = lobby;
+        self.tokens = tokens;
+        for slot in &mut self.lobby.slots {
+            slot.connected = false;
+        }
+        Ok(())
+    }
+
     pub fn player_for(&self, token: &str) -> Option<PlayerId> {
         self.tokens
             .iter()
@@ -331,11 +369,7 @@ impl Controller {
         Ok(())
     }
 
-    fn validate_profile(username: &str, color: &str) -> Result<()> {
-        let name = username.trim();
-        if name.is_empty() || name.len() > 24 {
-            return Err("username must be 1–24 characters".into());
-        }
+    fn validate_profile(_username: &str, color: &str) -> Result<()> {
         if color.len() != 7
             || !color.starts_with('#')
             || !color[1..].bytes().all(|b| b.is_ascii_hexdigit())
@@ -369,7 +403,7 @@ impl Controller {
         entry.connected = true;
         entry.profile = Some(PlayerProfile {
             player_id: slot,
-            username: username.trim().to_string(),
+            username,
             color,
             team_id,
         });
@@ -417,7 +451,7 @@ impl Controller {
         let name = username.unwrap_or_else(|| profile.username.clone());
         let color = color.unwrap_or_else(|| profile.color.clone());
         Self::validate_profile(&name, &color)?;
-        profile.username = name.trim().to_string();
+        profile.username = name;
         profile.color = color;
         if team_id.is_some() {
             profile.team_id = team_id;
@@ -961,8 +995,9 @@ impl Controller {
         let outcome = data.outcome.clone().ok_or("missing outcome")?;
         let round = data.round;
         if round > 0 {
-            if let Objective::Scoreboard { rules } | Objective::Hybrid { rules, .. } =
-                &self.config.objective
+            if let Objective::SimpleWin { rules }
+            | Objective::Scoreboard { rules }
+            | Objective::Hybrid { rules, .. } = &self.config.objective
             {
                 let previous = self.scores.last();
                 let score = scoring::resolve_round(
@@ -2106,7 +2141,7 @@ pub fn minimum_end_tick(config: &MatchConfig, editable_from: Tick) -> Tick {
         } => editable_from
             .saturating_add(lock_ticks_per_round)
             .min(config.max_tick),
-        Objective::Scoreboard { .. } => 0,
+        Objective::SimpleWin { .. } | Objective::Scoreboard { .. } => 0,
     }
 }
 
@@ -2398,6 +2433,15 @@ fn rule_summary(config: &MatchConfig, content: &Content) -> String {
         0.0
     };
     let objective = match &config.objective {
+        Objective::SimpleWin { rules } => {
+            let goal = match rules.victory_rule {
+                VictoryRule::FixedTarget { points } => format!("first to {points} points"),
+                VictoryRule::Lead { margin } => format!("lead every rival by {margin} points"),
+            };
+            format!(
+                "simple win: {goal}; timeline stops immediately when a player has no completed buildings"
+            )
+        }
         Objective::Scoreboard { rules } => match rules.victory_rule {
             VictoryRule::FixedTarget { points } => {
                 format!("scoreboard: first to {points} points, every resolved round scores")
@@ -2684,7 +2728,9 @@ pub(crate) mod tests {
                 .unwrap_err()
                 .contains("first occupied")
         );
-        assert!(c.update_profile(&a, Some(" ".into()), None, None).is_err());
+        // Usernames are intentionally unvalidated, including whitespace and duplicate names.
+        c.update_profile(&a, Some(" ".into()), None, None).unwrap();
+        assert_eq!(c.lobby.slots[0].profile.as_ref().unwrap().username, " ");
         assert!(
             c.update_profile(&a, None, Some("red".into()), None)
                 .is_err()
@@ -2814,6 +2860,26 @@ pub(crate) mod tests {
             loaded,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn simple_win_scores_without_locking_history_and_restores() {
+        let mut c = started(false, |setup| {
+            setup.match_defaults.objective = Objective::SimpleWin {
+                rules: ScoreboardRules::default(),
+            };
+        });
+        assert!(commit(&mut c, 0, "simple-a", 0).is_none());
+        let rx = commit(&mut c, 1, "simple-b", 0).unwrap();
+        run_round(&mut c, rx);
+        assert_eq!(c.editable_from, 0);
+        assert!(c.revisions[&c.current].score.is_some());
+        assert!(c.timed.is_none());
+        let restored = reopen(&c);
+        assert_eq!(restored.config.objective, c.config.objective);
+        assert_eq!(restored.scores, c.scores);
+        let (_, loaded) = Archive::open(&c.replay_root, &c.match_id).unwrap();
+        assert!(verify_archive(&loaded, &c.content).unwrap());
     }
 
     #[test]

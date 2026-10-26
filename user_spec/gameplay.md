@@ -30,6 +30,10 @@ Simulations have three result types:
 - **Win:** a player was eliminated and another survives; multiplayer can have multiple scoring survivors.
 - **Draw:** all players were eliminated.
 
+## Simple win game type
+
+Add a game type called **Simple win**: a player loses the timeline as soon as no buildings remain, and the simulation stops at that point. This mode supersedes the recovery and continued-simulation rules above for that timeline.
+
 ## Simultaneous turns
 
 All players plan against the same published timeline. Reveal their orders and rerun the simulation for everyone only after all players commit. This was explicitly confirmed after the initial request.
@@ -76,7 +80,7 @@ The original request's optional time-based score penalty remains in scope. Team 
 
 The game process must accept a command-line port argument. Restarting it on the same port should let all players return by refreshing their existing browser tab. Startup/restore behavior should preserve that stable address; specific CLI naming and default port remain implementation choices.
 
-Provide a quickstart script that builds and launches the default 1v1 server.
+Provide a quickstart script that builds and launches the server. The later [coordinator requirements](lobbies_and_bots.md) make this a multi-game directory, with the existing 1v1 setup as the default for new games.
 
 ## Allied traffic and deadlocks
 

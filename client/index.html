@@ -80,7 +80,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 #selection-icons,.queue-icons,.recipe-icons,.factory-settings{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .unit-icon{width:27px;height:27px;flex:none;vertical-align:middle}.unit-chip,.queue-item{display:inline-flex;gap:4px;align-items:center;background:#233647;border:1px solid #3d566b;border-radius:5px;padding:2px 4px;font-size:11px}
 .unit-stats{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin:5px 0;font-size:11px;color:#d0dfe9}.factory-plan>strong{display:flex;align-items:center;gap:6px}.factory-plan{border-top:1px solid #476075;padding-top:5px;margin-top:5px}.factory-plan small{color:#ffe1a0}.factory-settings{margin:4px 0}.factory-settings button[aria-pressed=true]{color:#9bf3b7;border-color:#4cd482;background:#204839}.factory-order{font-size:11px;margin:4px 0;color:#d9e8f5}.queue-item.active{width:100%;border-color:#b89b4a}.queue-item button{font-size:16px!important;padding:0 5px!important}.recipe-icons{margin:4px 0}.recipe-icons button{display:flex;align-items:center;padding:1px!important}.recipe-icons .unit-icon{width:23px;height:23px}#queue>section>button{margin:3px 4px 0 0}
-#switch-player{font-size:10px;margin-left:auto}#selection-body>p{margin:5px 0}#selection>h3{margin:3px 0}#recipient{font-size:11px;margin:0}#selection>details{font-size:11px}#selection>details#groups{margin-top:5px}
+#switch-player{font-size:10px;margin-left:auto;pointer-events:auto}#selection-body>p{margin:5px 0}#selection>h3{margin:3px 0}#recipient{font-size:11px;margin:0}#selection>details{font-size:11px}#selection>details#groups{margin-top:5px}
 @media(max-width:1000px){#panels>div{height:8.4rem}#panels #timeline-wrap{height:14rem}#minimap{bottom:23.4rem}#stop-archive{bottom:30.9rem}#toast{bottom:23.4rem}.unit-stats{grid-template-columns:1fr}#actions{gap:3px}#switch-player{font-size:9px}#draft-list{max-height:3.5rem}}
 /* Keep factory output visible in the shorter selection panel. */
 #selection>h3{display:none}.factory-selected #selection-body{display:flex;align-items:center;flex-wrap:wrap;gap:5px}.factory-selected #selection-body>strong{font-size:11px}.factory-selected #selection-body>details{margin-left:auto;font-size:10px}.factory-plan>strong{font-size:11px}.factory-selected .factory-plan>strong{display:none}.factory-plan small{font-size:10px}.factory-plan{margin-top:3px;padding-top:3px}.factory-order{margin:2px 0}.factory-settings{margin:2px 0}.queue-icons .unit-icon{width:20px;height:20px}.queue-icons{gap:3px}.factory-selected #groups{margin-top:3px}
@@ -145,6 +145,9 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 .silo-production>strong,.silo-production>small{display:none}.silo-production .recipe-icons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.silo-production .recipe-icons button{min-width:0;font-size:10px!important;line-height:1.1}.silo-production .recipe-icons .unit-icon{width:18px;height:18px}
 #help{columns:auto;width:min(900px,calc(100vw - 32px))}.help-columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.help-columns table{width:100%}#help td{padding:4px}
 #mode-options:empty{display:none}#timeline-wrap:has(#mode-options:not(:empty)) #queue{display:none}
+#lobby [hidden]{display:none!important}
+#roster li.open-slot{cursor:pointer}#roster li.open-slot:hover,#roster li.open-slot:focus-visible{outline:1px solid var(--accent)}
+#roster li span:nth-of-type(2){min-width:0;overflow-wrap:anywhere;flex:1}#top-phase{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style></head><body>
 
 <section id="lobby">
@@ -152,7 +155,7 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
   <p><a href="/guide/" id="guide-link" target="_blank">How to play / Unit reference</a></p>
   <p id="rules"></p>
   <div class="row">
-    <label>Username <input id="username" maxlength="24" placeholder="your name"></label>
+    <label>Username <input id="username"  placeholder="your name"></label>
     <label>Color <input id="color" type="color" value="#4fc3f7"></label>
     <span id="team-wrap" style="display:none"><label>Team <select id="team"></select></label></span>
   </div>
@@ -160,7 +163,7 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
   <section id="map-picker" aria-label="Choose a map"><h2>Choose the battlefield</h2><p id="map-choice-status"></p><div id="map-choices"></div></section>
   <div class="row">
     <button id="start" disabled>Start match</button>
-    <button id="spectate">Spectate</button>
+    <button id="spectate" disabled>Spectate</button>
     <button id="release" style="display:none">Release slot</button>
     <span id="lobby-error"></span>
   </div>

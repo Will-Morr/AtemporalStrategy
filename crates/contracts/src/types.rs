@@ -192,6 +192,9 @@ impl Default for ScoreboardRules {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Objective {
+    SimpleWin {
+        rules: ScoreboardRules,
+    },
     Timed {
         lock_ticks_per_round: Tick,
     },

@@ -23,7 +23,7 @@ export class Net {
     window.addEventListener('offline', () => { this.connected = false; this.ws?.close(); this.onClose(); });
   }
   connect(): Promise<void> {
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${location.pathname.startsWith('/games/') ? location.pathname.replace(/\/$/, '') : ''}/ws`;
     this.ws = new WebSocket(url);
     this.ws.onmessage = event => {
       const text = String(event.data);

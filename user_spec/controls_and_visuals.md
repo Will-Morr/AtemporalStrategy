@@ -30,6 +30,8 @@ Units have health bars showing damage and rotate to indicate the direction they 
 
 ## Player guide and lobby
 
+The later [lobbies and user identity requirements](lobbies_and_bots.md) put the game directory at the public landing page; the setup controls described here remain inside each game lobby.
+
 Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
 
 Link the guide from the landing page where players select teams. Players enter a username and choose a color. During setup, all usernames and player colors must be clearly visible and update for everyone as they change, so the full lobby state is known before starting.
@@ -102,7 +104,7 @@ The subsequent UI pass still occupies too much screen area. Propose several ways
 
 Multiple selected factories must be edited only as a group. If their configurations differ, writing a command clears their queues/configurations at the chosen tick before applying the new shared command, with an inline yellow visual warning. The latest user instruction supersedes the earlier acceptance requirement: do not show a browser warning/confirmation dialog; the inline warning is sufficient. Exactly aligned factories can keep appending items to their shared queues. Individual factory editing remains available when selected alone.
 
-Warn visibly about queued units and factories without orders, especially miners and constructors, and make missing construction orders apparent before committing. Show a large colored banner while the player's turn is committed and waiting; remove it when execution starts. Highlight order ticks for the current selection on the timeline. Make unit statistics accessible before building units, with a clearly linked reference tab/page.
+Warn visibly about queued units and factories without orders, especially miners and constructors, and make missing construction orders apparent before committing. Show “Needs orders” only once the player has started giving orders in the current draft, and assess only that intervention tick; do not warn during idle replay browsing or at other ticks. Mixed factory queues are normal gameplay: a mining newborn order with miners and grunts must not trigger an incompatibility warning. Warn about missing orders, not an order being unusable by some queued unit types. Show a large colored banner while the player's turn is committed and waiting; remove it when execution starts. Highlight order ticks for the current selection on the timeline. Make unit statistics accessible before building units, with a clearly linked reference tab/page.
 
 Keep unsupported actions unavailable for selected units, including keyboard shortcuts. Structure planning is a global action independent of constructor selection; placing a blueprint must not imply that a selected constructor has been assigned to build it. Constructor work orders remain a separate action.
 

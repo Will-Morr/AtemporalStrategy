@@ -12,3 +12,5 @@ serde_json.workspace = true
 axum = { version = "=0.8.9", features = ["ws"] }
 tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "sync", "net", "time", "fs"] }
 futures-util = "=0.3.34"
+
+tokio-tungstenite = "=0.29.0"

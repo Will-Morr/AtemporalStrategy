@@ -1,7 +1,7 @@
 import { Net } from './net';
 import { runLobby, type Session } from './lobby';
 import { Game } from './game';
-import { tabToken, rememberPlayer } from './session';
+import { tabToken, rememberPlayer, slotStorageKey } from './session';
 
 const status = document.getElementById('status') as HTMLParagraphElement;
 const net = new Net();
@@ -38,9 +38,23 @@ net.on('match_reset', () => {
   showConnection('Opening the next game. Your player slot is retained. ');
   location.reload();
 });
-const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem('atemporal-slot-token'); location.href = location.pathname; }; document.getElementById('top')!.append(switchPlayer);
+const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=location.pathname.includes('/replays/'); document.getElementById('top')!.append(switchPlayer);
 
 async function boot(): Promise<void> {
+  if (location.pathname.startsWith('/games/')) {
+    (document.getElementById('guide-link') as HTMLAnchorElement).href=`${location.pathname.match(/^\/games\/[^/]+/)![0]}/guide/`;
+    for (const parent of [document.getElementById('lobby'),document.getElementById('top')]) {
+      const link=document.createElement('a');link.href='/';link.textContent='All games';link.style.pointerEvents='auto';parent?.prepend(link);
+    }
+    const identity=await fetch('/api/directory').then(r=>r.json());
+    if(identity.user===null){location.replace(`/?join=${encodeURIComponent(location.pathname)}`);return;}
+    (document.getElementById('username') as HTMLInputElement).value=identity.user;
+    document.getElementById('username')!.closest('label')!.hidden=true;
+    const entry=identity.games.find((g:{id:string})=>g.id===location.pathname.split('/')[2]);
+    if(entry){document.body.dataset.gameName=entry.name;document.querySelector('#lobby h1')!.textContent=entry.name;}
+    document.body.dataset.botOnly=String(!!entry?.bots?.length && entry.bots.every((bot:unknown)=>bot!==null));
+    if(location.pathname.includes('/replays/')) sessionStorage.removeItem(slotStorageKey);
+  }
   try {
     await net.connect();
   } catch {
@@ -58,7 +72,7 @@ async function boot(): Promise<void> {
   // The server confirms the private slot before welcome; no timing guess is needed.
   if (session.slot === null) {
     session.token = null;
-    sessionStorage.removeItem('atemporal-slot-token');
+    sessionStorage.removeItem(slotStorageKey);
   }
   if (session.slot !== null && session.token) rememberPlayer(w.match_id, session.slot, session.token, w.lobby.slots[session.slot]?.profile?.username ?? `Player ${session.slot}`);
   status.textContent = `Connected · ${w.config.player_count} players · ${w.phase}`;

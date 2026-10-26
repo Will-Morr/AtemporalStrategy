@@ -23,7 +23,7 @@ export async function buildServer() {
 export async function startServer(work, name, extra, env = {}) {
   const port = await freePort();
   const log = [];
-  const child = spawn(`${root}target/release/atemporal-server`, ['--port', port, '--replays', `${work}/${name}/replays`, ...extra], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  const child = spawn(`${root}target/release/atemporal-server`, ['--single-match','--port', port, '--replays', `${work}/${name}/replays`, ...extra], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   child.stdout.on('data', c => log.push(c.toString()));
   child.stderr.on('data', c => log.push(c.toString()));
   await new Promise((ok, err) => {

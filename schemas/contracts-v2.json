@@ -2861,6 +2861,23 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
+              "const": "simple_win",
+              "type": "string"
+            },
+            "rules": {
+              "$ref": "#/$defs/ScoreboardRules"
+            }
+          },
+          "required": [
+            "kind",
+            "rules"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
               "const": "timed",
               "type": "string"
             },

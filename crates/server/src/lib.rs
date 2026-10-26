@@ -7,3 +7,6 @@ pub mod controller;
 pub mod ws;
 
 pub mod preview;
+
+pub mod bots;
+pub mod coordinator;

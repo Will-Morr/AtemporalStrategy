@@ -171,7 +171,9 @@ pub fn validate_config(c: &MatchConfig) -> Result<()> {
     }
     scoring::sides(c.player_count, &c.multiplayer)?;
     match &c.objective {
-        Objective::Scoreboard { rules } => scoring::validate_rules(rules)?,
+        Objective::SimpleWin { rules } | Objective::Scoreboard { rules } => {
+            scoring::validate_rules(rules)?
+        }
         Objective::Hybrid {
             rules,
             lock_ticks_per_round,

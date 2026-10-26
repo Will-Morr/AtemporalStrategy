@@ -1,7 +1,7 @@
-//! `atemporal-server --port 8080 --config config/game.yaml`: one match per process, same-origin
+//! `atemporal-server --port 8080`: multi-game coordinator; `--single-match` runs a worker. Same-origin
 //! assets/guide/WebSocket on exactly the requested port. `--resume <match_id>` reopens an archive
 //! under its pinned config/content; `--verify <match_id>` replays it and compares hashes.
-use atemporal_server::{adapter, archive, controller, ws};
+use atemporal_server::{adapter, archive, bots, controller, coordinator, ws};
 use atemporal_sim::*;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -24,11 +24,11 @@ fn run() -> Result<()> {
     while let Some(key) = args.next() {
         if key == "--help" {
             println!(
-                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--seed N] [--memory-budget-mb N] [--results-budget-mb N] [--inputs-only] [--resume MATCH_ID | --verify MATCH_ID]"
+                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--seed N] [--memory-budget-mb N] [--results-budget-mb N] [--coordinator-dir DIR] [--single-match] [--inputs-only] [--resume MATCH_ID | --verify MATCH_ID]"
             );
             return Ok(());
         }
-        if key == "--inputs-only" {
+        if ["--inputs-only", "--single-match", "--managed"].contains(&key.as_str()) {
             options.insert(key, "true".into());
             continue;
         }
@@ -120,6 +120,42 @@ fn run() -> Result<()> {
     ));
     atemporal_content::write_guide(&content, &prose, &guide_dir)?;
     let replay_root = PathBuf::from(option("--replays", &setup.match_defaults.replay_directory));
+    if !options.contains_key("--single-match")
+        && !options.contains_key("--resume")
+        && !options.contains_key("--inputs-only")
+    {
+        let coordinator = coordinator::Coordinator::new(
+            PathBuf::from(option("--coordinator-dir", "games")),
+            client_dir,
+            guide_dir,
+            PathBuf::from(option("--content", "config/content.yaml")),
+            PathBuf::from(option("--prose", "client/guide/introduction.html")),
+            setup,
+        )?;
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .map_err(|e| e.to_string())?;
+        return runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("atemporal-server listening on http://127.0.0.1:{port}/ (game coordinator)");
+            axum::serve(listener, coordinator::router(coordinator))
+                .await
+                .map_err(|e| e.to_string())
+        });
+    }
+    // Managed workers exit when the coordinator's stdin pipe closes (including parent crashes).
+    if options.contains_key("--managed") {
+        std::thread::spawn(|| {
+            use std::io::Read;
+            let mut byte = [0];
+            let _ = std::io::stdin().read(&mut byte);
+            std::process::exit(0);
+        });
+    }
     let sim = adapter::SimThread::spawn();
     let (mut controller, mode) = match resume {
         Some((match_id, (archive, loaded))) => (
@@ -159,6 +195,21 @@ fn run() -> Result<()> {
     };
     controller.memory_budget = budget("--memory-budget-mb", controller::DEFAULT_MEMORY_BUDGET)?;
     controller.disk_budget = budget("--results-budget-mb", controller::DEFAULT_DISK_BUDGET)?;
+    let lobby_file = options.get("--lobby-file").map(PathBuf::from);
+    if controller.phase == Phase::Lobby
+        && let Some(path) = &lobby_file
+        && path.exists()
+    {
+        controller
+            .restore_open_lobby(serde_json::from_str(&read(path)?).map_err(|e| e.to_string())?)?;
+    }
+    let bots: bots::BotConfig = match options.get("--bots") {
+        Some(path) => serde_json::from_str(&read(Path::new(path))?).map_err(|e| e.to_string())?,
+        None => bots::BotConfig::default(),
+    };
+    bots.install(&mut controller)?;
+    let status_file = options.get("--status-file").map(PathBuf::from);
+    let bind = option("--bind", "0.0.0.0");
     let match_id = controller.match_id.clone();
     let app = ws::App {
         controller: Arc::new(Mutex::new(controller)),
@@ -167,11 +218,12 @@ fn run() -> Result<()> {
         inputs_only: options.contains_key("--inputs-only"),
     };
     let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
     runtime.block_on(async move {
-        let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
+        let listener = tokio::net::TcpListener::bind((bind.as_str(), port))
             .await
             .map_err(|e| format!("cannot bind port {port}: {e}"))?;
         println!("atemporal-server listening on http://127.0.0.1:{port}/ ({mode} {match_id}; guide {}; replays {}{})", guide_dir.display(), replay_root.display(), if app.inputs_only { "; inputs-only: world state only through peripherals" } else { "" });
@@ -187,6 +239,7 @@ fn run() -> Result<()> {
         if let Some(rx) = pending? {
             ws::drive_job(app.clone(), rx);
         }
+        bots::drive(app.clone(), bots, status_file, lobby_file);
         axum::serve(listener, ws::router(app)).await.map_err(|e| e.to_string())
     })
 }

@@ -1,12 +1,14 @@
 # Browser interaction plan
 
+The public landing page is now the [game directory](lobbies-and-bots.md): remembered usernames, open/active/replay filters, game creation and bot selection. The roster and map picker described below live at each game URL; tokens are scoped to that URL.
+
 > Status: a revisable assistant proposal unless explicitly attributed to the user. See [user specifications](../user_spec/README.md). Imperative wording describes the current candidate design, not a locked requirement.
 
 Use a canvas map and ordinary HTML controls around it. User visual direction: simple grayscale floor/wall terrain, with units and other gameplay objects standing out in contrast; minimalist movement, attack, projectile and explosion animations; health bars only below full health and facing based on last movement. Proposed art stays geometric: circles/rectangles with directional marks, small type glyphs, player colors plus owner numbers, completion bars and selection outlines. The map consumes most of the screen; bottom left shows selection, bottom center timeline, bottom right minimap. A compact top strip shows phase, selected tick, bank, readiness, score/time ratio, and simulation duration.
 
 ## Planning flow
 
-1. On the landing page, open the player guide or join a slot/spectate. Enter a username, choose a color and select an available team; see live roster updates, configured rules and fixed-target/lead victory condition in the lobby. Start publishes the initial full simulation.
+1. On the landing page, open the player guide or join a slot/spectate. The directory supplies the username (standalone mode keeps its local username field). Choose a color and select an available team; see live roster updates, configured rules and fixed-target/lead victory condition in the lobby. Start publishes the initial full simulation.
 2. Scrub the published timeline and select entities. Inspection is unrestricted, including immutable history; order entry is allowed only in the editable interval.
 3. The first staged command chooses the turn's timestamp. Show a persistent marker and ghost paths/sites at that tick. Browsing other ticks does not silently change the draft timestamp.
 4. Stage any allowed commands through hotkeys or visible buttons. A list shows each command, affected entity count, future-order policy/estimated skipped-command count, and validation status. Undo/redo and per-command deletion operate locally. Single-order mode replaces the draft command only after an explicit action.
@@ -172,3 +174,7 @@ The full-width timeline sits above a three-column deck: selection information, c
 Multi-factory selection exposes one shared editor. Equivalent recipes, loop flags, active progress, newborn orders, group binding and priority preserve additive queue editing despite differing item identities. Differing plans show an inline warning and require acceptance of a browser confirmation before resetting queues, active work, priority, loop, group binding and newborn order at the draft tick. The reset and requested edit undo together. Single-order matches reject a shared edit requiring multiple protocol commands without retaining a partial draft. This is a client implementation constraint, not a new gameplay rule.
 
 Missing-order feedback checks the viewed tick's projected state, prioritizes selected entities, and cycles the camera/selection through affected entities. It reports idle mobiles, empty factory queues, newborns lacking orders or with incompatible mining/construction templates, and blueprints/sites outside every constructor's assigned work area. It does not predict path reachability, funding, future command success or later orders. A large green committed banner remains visible while waiting and disappears on uncommit, execution or match completion.
+
+Order warnings appear only when the current draft contains commands and the viewed tick equals its intervention tick. Empty drafts and browsing other replay ticks show no “Needs orders” warning.
+
+Mixed factory production does not produce capability-mismatch warnings for newborn orders; mining/constructing orders may intentionally apply to only part of the queue. The Switch / rejoin player control accepts pointer input and returns to saved-player selection.

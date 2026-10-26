@@ -386,6 +386,10 @@ export type Multiplayer =
  */
 export type Objective =
   | {
+      kind: "simple_win";
+      rules: ScoreboardRules;
+    }
+  | {
       kind: "timed";
       lock_ticks_per_round: number;
     }

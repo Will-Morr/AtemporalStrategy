@@ -52,7 +52,7 @@ test('order warnings, committed banner, selection markers and unit reference fit
   const server=await isolatedServer(testInfo,c=>{c.match_defaults.max_tick=300;});review.afterClose(server.stop);
   const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
   const units=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0));const constructor=units.find(e=>e.type_key==='constructor');
-  await expect(a.locator('#order-warnings')).toBeVisible();await expect(a.locator('#order-warnings')).toHaveAttribute('title',/miner has no orders/);
+  await expect(a.locator('#order-warnings')).toBeHidden();
   for(const viewport of [{width:1920,height:1080},{width:1366,height:768}]){
     await a.setViewportSize(viewport);await tile(a,constructor);await noPanelScroll(a);
     expect(await a.locator('#panels').evaluate(e=>e.getBoundingClientRect().height)).toBeLessThanOrEqual(225);
@@ -61,11 +61,16 @@ test('order warnings, committed banner, selection markers and unit reference fit
   }
   await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'factory'}).click();
   const site=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},true))return{x,y};});
-  await tile(a,site);await tile(a,site);await a.getByRole('button',{name:'Queue miner',exact:true}).click();
+  await tile(a,site);await tile(a,site);await a.getByRole('button',{name:'Queue miner',exact:true}).click();await a.getByRole('button',{name:'Queue grunt',exact:true}).click();
   await expect(a.locator('#order-warnings')).toHaveAttribute('title',/will start idle/);await expect(a.locator('#order-warnings')).toHaveAttribute('title',/no constructor assigned/);
-  await a.keyboard.press('m');await area(a,site);await expect(a.locator('#order-warnings')).not.toHaveAttribute('title',/will start idle/);
+  await expect(a.locator('#order-warnings')).toBeVisible();
+  await seek(a,1);await expect(a.locator('#order-warnings')).toBeHidden();
+  await seek(a,0);await expect(a.locator('#order-warnings')).toBeVisible();
+  await a.keyboard.press('m');await area(a,site);await expect(a.locator('#order-warnings')).not.toHaveAttribute('title',/will start idle|cannot follow/);
   await expect(a.locator('#timeline')).toHaveAttribute('data-order-ticks','0');await noPanelScroll(a);await review.capture('factory-no-scroll-1366',a);
   await tile(a,constructor);await a.keyboard.press('c');await area(a,site);await expect(a.locator('#order-warnings')).not.toHaveAttribute('title',/no constructor assigned/);
+  await tile(a,units.find(e=>e.type_key==='miner'));await a.keyboard.press('m');await area(a,site);
+  await expect(a.locator('#order-warnings')).toBeHidden();await tile(a,site);await review.capture('mixed-production-mining-without-warning',a);await tile(a,constructor);
   await a.locator('#actions .planning>summary').click();await review.capture('planning-menu-1366',a);
   expect(await a.locator('#actions .planning').evaluate(e=>e.getBoundingClientRect().top>=0)).toBe(true);
   await a.locator('#actions .planning>summary').click();
@@ -73,7 +78,7 @@ test('order warnings, committed banner, selection markers and unit reference fit
   const popup=a.waitForEvent('popup');await a.locator('#unit-reference').click();const reference=await popup;await reference.waitForLoadState();await expect(reference.locator('#units')).toContainText('Unit reference');await expect(reference.locator('body')).toContainText('miner');
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeVisible();await review.capture('committed-waiting-1366',a);
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeHidden();
-  await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeVisible();await b.locator('#commit').click();await revision(a,1);await expect(a.locator('#turn-banner')).toBeHidden();
+  await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeVisible();await b.locator('#commit').click();await revision(a,1);await expect(a.locator('#turn-banner')).toBeHidden();await expect(a.locator('#order-warnings')).toBeHidden();
   await seek(a,0);await tile(a,constructor);await expect(a.locator('#timeline')).toHaveAttribute('data-order-ticks','0');await review.capture('published-selection-markers-1366',a);
   await a.keyboard.press('Escape');await expect(a.locator('#timeline')).toHaveAttribute('data-order-ticks','');
 });

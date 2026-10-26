@@ -1,6 +1,6 @@
 // Gate 2 browser walkthrough against the real server: two players and a spectator play the
 // opening with actual mouse/keyboard input, commit, seek non-sample ticks and play back.
-// Run: ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --replays target/ui-replays' npm run ui:review --prefix client -- --grep slice --project=desktop-chromium
+// Run: ATEMPORAL_UI_SERVER_COMMAND='cargo run --release -q -p atemporal-server -- --single-match --replays target/ui-replays' npm run ui:review --prefix client -- --grep slice --project=desktop-chromium
 import { test, expect } from './fixtures.mjs';
 import { isolatedServer } from './game-helpers.mjs';
 
@@ -387,7 +387,7 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
   const port = probe.address().port; await new Promise(resolve => probe.close(resolve));
   let child;
   const start = async () => {
-    child = spawn(`${root}target/release/atemporal-server`,['--port',String(port),'--config',configPath,'--replays',`${dir}/replays`],{cwd:root,stdio:['ignore','pipe','pipe']});
+    child = spawn(`${root}target/release/atemporal-server`,['--single-match','--port',String(port),'--config',configPath,'--replays',`${dir}/replays`],{cwd:root,stdio:['ignore','pipe','pipe']});
     await new Promise((resolve,reject) => {
       const timeout = setTimeout(() => reject(new Error('Timed server startup timeout')),10000);
       child.stdout.on('data',data => { if(String(data).includes('listening on')) {clearTimeout(timeout);resolve();} });

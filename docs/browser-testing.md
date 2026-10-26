@@ -11,7 +11,7 @@ npm ci --prefix client
 npm run ui:install --prefix client
 cargo build --release -p atemporal-server -p atemporal-runner
 npm run build --prefix client
-ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --seed 42 --replays target/ui-replays' npm run ui:review --prefix client
+ATEMPORAL_UI_SERVER_COMMAND='target/release/atemporal-server --single-match --seed 42 --replays target/ui-replays' npm run ui:review --prefix client
 ```
 
 Chromium is pinned by Playwright 1.63.0. On a Linux machine missing browser libraries, install Playwright's documented OS dependencies with `cd client && npx playwright install-deps chromium`; this can require administrator access. The current development host already runs the browser successfully.
@@ -166,3 +166,20 @@ On 2026-10-18, all three `declutter.spec.mjs` scenarios passed through the real 
 The three workspace sections now size to content with a 126px minimum, rather than reserving 230px. Unit details open in an Info popover; health and orders remain in the selection summary. The map canvas and warning/minimap offsets follow actual panel height, preserving world positions on screen when the workspace resizes. Normal constructor selections use a 212px total bottom deck (previously 316px after the timeline-control change).
 
 Five real-server scenarios passed in `artifacts/ui/2026-10-19T03-02-37.389Z-74535/`: shared factories, order feedback, global placement/action compatibility, map/production playtest, and silo production/launch/rewrite. The initial run exposed map-coordinate shifts during panel resize; these were fixed before the passing run. A final selection-packing change passed the feedback scenario again in `artifacts/ui/2026-10-19T03-03-44.921Z-75359/`, with a deck-height assertion and opening/closing unit information at both desktop sizes. Inspected full-frame constructor, unit-info, shared-factory and expanded silo screenshots, including 1366×768 and 1920×1080 constructor frames. Builds include TypeScript checks. All runs used six-core affinity and at most two browser workers. Four-player layouts and the full repository suite were not rerun for this client-only change.
+
+## Coordinator, identities and basic bots
+
+`coordinator.spec.mjs` launches isolated real coordinators, each with its own directory and worker processes. It covers first-visit unvalidated usernames, password entry, bot selection, shared map choice, two parallel games and per-game identities, open/active/My games filters, spectator access, same-port coordinator restart, bot-only budgets, recent read-only replays, and four-player bot teams with hybrid history and single-order limits. Standalone gameplay helpers now explicitly pass `--single-match`; this preserves their existing contract after the default server became a directory.
+
+For the user's current busy-device constraint, run heavy checks sequentially with **two cores**, two Rust test/build threads, low priority, and **one browser worker**. This supersedes the earlier six-core recommendation while that constraint is in effect:
+
+```sh
+taskset -c 0-1 nice -n 15 env CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 scripts/check.sh
+taskset -c 0-1 nice -n 15 env CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 npm run ui:review --prefix client -- coordinator.spec.mjs --workers=1
+```
+
+Coordinator scenarios own and close their workers. To reuse an already-built binary without the harness's default build/server phase, set `ATEMPORAL_UI_BASE_URL=http://127.0.0.1:1`; these scenarios navigate only to their own isolated servers. Do not use this shortcut for scenarios that rely on the shared base URL. Review the full-frame directory, creation dialog, human/bot lobby, live spectator and archived replay screenshots before declaring visual verification.
+
+### Simple win game type
+
+The focused `simple win game type can be selected and started` coordinator scenario passed on 2026-10-25. It selects Simple win through the creation form, creates a real human/bot lobby and starts the match with the authoritative `simple_win` configuration. Inspected the full-frame creation and lobby screenshots in `artifacts/ui/2026-10-25T21-47-31.729Z-11280/`; labels, rule summary and controls are readable. The build includes schema generation and TypeScript checks. Exact destruction-tick termination, continued building survival without constructors, unfinished sites and simultaneous losses are covered by Rust simulation tests; the browser scenario checks selection/startup, not a complete combat match. Used two CPU cores, low priority and one browser worker.
