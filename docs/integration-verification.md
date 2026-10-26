@@ -268,3 +268,25 @@ Client build and TypeScript checks passed. All six coordinator and compact-plann
 The Switch / rejoin player button now explicitly accepts pointer events instead of inheriting the noninteractive HUD style. Factory warning checks no longer flag a mining or construction newborn order merely because some queued unit types cannot use it. Empty queues and missing newborn/work/construction orders retain their existing warnings.
 
 Client build/type checks and three real-server Chromium scenarios passed in `artifacts/ui/2026-10-25T04-43-03.035Z-557321`: coordinator switch/rejoin and recovery, standalone switching to another saved player, and mixed miner/grunt production with mining orders. The scenarios click the actual switch control rather than opening another tab to bypass it, and verify the warning disappears after assigning the remaining work orders. Manually inspected the coordinator chooser and the mixed-queue factory with no warning at 1366×768. Checks used two CPU cores, low priority and one browser worker. This focused client-only pass did not repeat the complete Rust or native-peripheral suites.
+
+## Two heuristic opponents — 2026-10-26
+
+Raider and Builder replace the three narrow policies. Both grow mining economies, replenish workers, expand factories, produce every existing mobile unit type, construct turrets, explore using observed-space memory, and react to visible threats. Coarse loss-based rewinds and horizon revisits use the published timeline; unit orders replace their own later orders. Independent command validation preserves useful orders when a placement fails. Single-order priorities reserve periodic opportunities for army movement and scouting. Legacy `rusher` configurations load as Raider. Walls and silos are intentionally outside these policies.
+
+`scripts/check.sh` passed with all 36 server tests, including 12 bot tests, workspace tests, strict Clippy, simulator no-default-features tests, client build/tests and generated-file consistency. The intended guide regeneration was staged before the generated-file drift check. Existing explicitly ignored expensive tests remain ignored. Log: `artifacts/bots/2026-10-26/check.log`.
+
+The bot tests include three 40-step generated-map matchups (Raider mirror, Builder mirror and mixed), a single-order matchup, and 24 rounds through the actual controller with published revisions, validated commits and loss-triggered rewinds. Continuous simulation scenarios require both sides to grow at least four miners, two factories and six combat/scout units and deal damage. Timestamp scenarios additionally require every supported unit/building type to appear for both players. The actual-controller scenario verifies economic growth, combat by both sides and an earlier intervention. Separate regressions cover constructor mining after miner loss, exploration memory, loss rewinds bounded by locked history, partial validation failure, legacy configuration and hidden-state isolation.
+
+All four coordinator browser scenarios passed; inspected creation/lobby screenshots at both desktop sizes. See [browser testing](browser-testing.md#two-capable-bot-choices) for artifacts. All heavy work ran sequentially with two-core affinity and low priority; Rust tests and browser scenarios used one worker.
+
+A separate release-server run exercised all three pairings with the normal five-point scoreboard, 48×48 generated maps, a 3,000-tick horizon and a 32-round budget. Archives, runner source, server logs and a machine-readable summary are retained in `artifacts/bots/2026-10-26/matchups/`:
+
+| Pairing | Seed | Result | Peak armed units by side | Peak miners by side | Peak factories by side |
+| --- | --- | --- | --- | --- | --- |
+| Raider / Raider | 43 | Budget archive after 32 rounds; first timeline wins at rounds 31–32 | 223 / 76 | 23 / 21 | 6 / 6 |
+| Builder / Builder | 44 | Budget archive after 32 rounds; win, stalemate and draw timelines appeared | 112 / 101 | 22 / 32 | 7 / 6 |
+| Raider / Builder | 42 | Builder reached five points on round 22 | 62 / 123 | 16 / 20 | 5 / 6 |
+
+These peaks are measured across the final published timeline, and armed counts include scouts. Every supported unit/building type appeared for both sides in every pairing. In the mixed match, winning timelines reverted to stalemates at rounds 15 and 19 before the eventual win. Planning targets are not hard population caps: rewrites can preserve previously queued production and later construction, producing counts above the desired workforce/factory targets.
+
+These are bounded heuristic checks rather than proof of balanced or consistently entertaining play across all seeds. The full native-peripheral/browser matrix, WAN performance and tournament-strength evaluation were not repeated. The policies do not perform tactical search, simulate alternative plans or inspect pending human orders.

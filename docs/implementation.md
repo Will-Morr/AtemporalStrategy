@@ -190,7 +190,7 @@ Verification and known limits are recorded in [integration verification](integra
 - [x] Persistent game directory, open/active/recent filters, My games, optional passwords and simple creation with advanced existing settings.
 - [x] Unvalidated first-visit usernames, browser identity, explicit spectator-to-slot selection and independent saved identities across parallel games.
 - [x] Isolated game processes, stable game URLs, restart recovery, pinned content/guide, spectating and read-only recent replays.
-- [x] Rusher, Builder and Raider policies using visible published states and ordinary validated player commands; bounded bot-only playtests.
+- [x] Raider and Builder policies with economic growth/recovery, mixed production, exploration and heuristic timeline intervention using visible published states and ordinary validated player commands; bounded bot-only playtests.
 - [x] Low-priority repository checks, real Chromium scenarios and screenshot review, plus replay hash verification.
 
 See [implementation details](lobbies-and-bots.md) and [actual verification limits](integration-verification.md#game-coordinator-users-and-basic-bots--2026-10-24).

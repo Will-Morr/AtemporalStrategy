@@ -18,9 +18,11 @@ On the first visit, let players enter a username without validation. Provide a b
 
 ## Minimal opponents and automated playtesting
 
-Bots provide easy, repeatable sandbox opponents for learning without requiring another person. They must not cheat and should work through logic similar to a player. Several simple bot varieties are useful both as opponents and as mechanics playtesters.
+Bots provide easy, repeatable sandbox opponents for learning without requiring another person. They must not cheat and should work through logic similar to a player. Both bot styles should be useful as opponents and as mechanics playtesters.
 
-Sophisticated planning and strong play are unnecessary. The suggested approach is a small opening action set, followed by a simple filter choosing a timeline intervention tick and queuing attacks there. Exact policies and bot personalities are implementation choices.
+The latest request replaces the initial minimal opponents with **two roughly capable bots**. Both must grow an economy, produce large armies, and construct and roughly use every available unit and building (walls and silos may be omitted). They need exploration to discover player locations and should support interesting back-and-forth self-play and matches against each other. Use practical heuristics rather than ideal or solved play. Nondeterministic early aggression or caution is acceptable; specific personality names and tuning remain implementation choices.
+
+Address economic recovery, meaningful reactions to visible enemies, timeline intervention around losses, deliberate single-order planning, and preservation of useful actions when another action fails validation. Bots must retain ordinary player visibility and order validation.
 
 ## Execution constraints
 

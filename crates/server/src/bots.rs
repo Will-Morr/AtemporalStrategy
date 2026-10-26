@@ -1,4 +1,4 @@
-//! Deliberately small, deterministic opponents. Policies receive a visibility-filtered published
+//! Two bounded heuristic opponents. Policies receive a visibility-filtered published
 //! state and emit normal drafts; the controller validates them exactly like human input.
 use crate::{controller::Controller, coordinator::atomic_json, ws};
 use atemporal_sim::*;
@@ -8,30 +8,21 @@ use std::{path::PathBuf, time::Duration};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Style {
-    Rusher,
     Builder,
+    #[serde(alias = "rusher")]
     Raider,
 }
 impl Style {
     fn name(self) -> &'static str {
         match self {
-            Self::Rusher => "Rusher",
             Self::Builder => "Builder",
             Self::Raider => "Raider",
         }
     }
     fn interval(self) -> Tick {
         match self {
-            Self::Rusher => 50,
-            Self::Builder => 150,
-            Self::Raider => 100,
-        }
-    }
-    fn unit(self) -> &'static str {
-        match self {
-            Self::Rusher => "grunt",
-            Self::Builder => "tank",
-            Self::Raider => "grinder",
+            Self::Builder => 90,
+            Self::Raider => 70,
         }
     }
 }
@@ -183,6 +174,55 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
         .filter(|t| t.player == player)
         .map(|t| t.tick)
         .max();
+    // Occasionally revisit the lead-up to a substantial loss instead of marching beyond
+    // dead units forever. This is a coarse heuristic, not a search over solved timelines.
+    if last.is_some() && c.round.is_multiple_of(3) {
+        let mut previous: Option<(&Tick, &WorldState)> = None;
+        let mut repairs = vec![];
+        for (tick, state) in data
+            .checkpoints
+            .range(c.editable_from..=c.available_through())
+        {
+            if let Some((before_tick, before)) = previous {
+                let assets = |s: &WorldState| {
+                    s.entities
+                        .iter()
+                        .filter(|e| e.owner == player)
+                        .map(|e| {
+                            c.content
+                                .types
+                                .iter()
+                                .find(|d| d.key == e.type_key)
+                                .map_or(0.0, |d| d.matter_cost)
+                        })
+                        .sum::<f64>()
+                };
+                let losses = |s: &WorldState| {
+                    s.players
+                        .iter()
+                        .find(|p| p.player_id == player)
+                        .map_or(0.0, |p| p.counters.lost_invested_matter)
+                };
+                let old = assets(before);
+                if old > 0.0
+                    && (assets(state) < old * 0.65
+                        || losses(state) - losses(before) > (old * 0.15).max(120.0))
+                {
+                    repairs.push(before_tick.saturating_sub(30).max(c.editable_from));
+                }
+            }
+            previous = Some((tick, state));
+        }
+        if !repairs.is_empty() {
+            return repairs[(c.round as usize / 3) % repairs.len()].min(c.config.max_tick - 1);
+        }
+        // At the horizon, an earlier intervention has time to matter; repeatedly ordering
+        // units on the last tick cannot change a stalemate.
+        if last.is_some_and(|t| t.saturating_add(style.interval()) >= c.available_through()) {
+            let span = c.available_through().saturating_sub(c.editable_from);
+            return c.editable_from + span / 4 * (1 + (c.round / 3) % 3);
+        }
+    }
     let wanted = last
         .map_or(c.editable_from, |t| t.saturating_add(style.interval()))
         .max(c.editable_from)
@@ -204,229 +244,8 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
         .filter(|(tick, _)| **tick <= wanted.saturating_add(style.interval()))
         .map_or(wanted, |(t, _)| *t)
 }
-pub fn plan(
-    state: &WorldState,
-    player: PlayerId,
-    style: Style,
-    config: &MatchConfig,
-    content: &Content,
-    revision: Revision,
-) -> TurnDraft {
-    let mut commands = vec![];
-    let mut push = |command| {
-        let local_id = format!("bot-{}", commands.len());
-        commands.push(DraftCommand {
-            local_id: local_id.clone(),
-            command,
-            future_orders: FutureOrderPolicy::Keep,
-        });
-        local_id
-    };
-    let own: Vec<_> = state
-        .entities
-        .iter()
-        .filter(|e| e.owner == player && e.lifecycle == Lifecycle::Complete)
-        .collect();
-    let def = |e: &EntityState| content.types.iter().find(|t| t.key == e.type_key);
-    let Some(home) = own
-        .iter()
-        .find(|e| def(e).is_some_and(|t| t.construction.is_some()))
-        .or_else(|| own.first())
-        .map(|e| e.tile)
-    else {
-        return TurnDraft {
-            based_on_revision: revision,
-            tick: state.tick,
-            commands,
-        };
-    };
-    let area = Rect {
-        min: Tile { x: 0, y: 0 },
-        max: Tile {
-            x: state.terrain.width - 1,
-            y: state.terrain.height - 1,
-        },
-    };
-    let mut miners: Vec<_> = own
-        .iter()
-        .filter(|e| {
-            def(e).is_some_and(|t| t.mining.is_some() && t.construction.is_none())
-                && matches!(e.action, Order::Idle {})
-        })
-        .map(|e| e.id.clone())
-        .collect();
-    miners.sort();
-    if !miners.is_empty() {
-        push(Command::AssignOrder {
-            entities: miners,
-            order: Order::Mine { area: area.clone() },
-        });
-    }
-    let target = state
-        .entities
-        .iter()
-        .filter(|e| !allied(config, player, e.owner))
-        .min_by_key(|e| distance(e.tile, home))
-        .map(|e| e.tile)
-        .unwrap_or_else(|| {
-            let desired = match style {
-                Style::Raider if state.tick < 300 => Tile {
-                    x: state.terrain.width - 1 - home.x,
-                    y: state.terrain.height / 2,
-                },
-                _ => Tile {
-                    x: state.terrain.width - 1 - home.x,
-                    y: state.terrain.height - 1 - home.y,
-                },
-            };
-            (0..state.terrain.height)
-                .flat_map(|y| (0..state.terrain.width).map(move |x| Tile { x, y }))
-                .filter(|t| {
-                    state.terrain.cells
-                        [usize::from(t.y) * usize::from(state.terrain.width) + usize::from(t.x)]
-                        == TerrainCell::Floor
-                })
-                .min_by_key(|t| distance(*t, desired))
-                .unwrap_or(home)
-        });
-    let recipe = content
-        .types
-        .iter()
-        .find(|t| t.key == "factory")
-        .and_then(|d| d.production.as_ref())
-        .and_then(|p| {
-            p.recipes
-                .iter()
-                .find(|k| k.as_str() == style.unit())
-                .or_else(|| p.recipes.first())
-        })
-        .cloned();
-    let has_factory = state
-        .entities
-        .iter()
-        .any(|e| e.owner == player && e.type_key == "factory")
-        || state
-            .blueprints
-            .iter()
-            .any(|b| b.owner == player && b.type_key == "factory");
-    let constructors: Vec<_> = own
-        .iter()
-        .filter(|e| def(e).is_some_and(|t| t.construction.is_some()))
-        .collect();
-    if !has_factory && !constructors.is_empty() && recipe.is_some() {
-        let site = (0..state.terrain.height)
-            .flat_map(|y| (0..state.terrain.width.saturating_sub(1)).map(move |x| Tile { x, y }))
-            .filter(|t| {
-                let i = usize::from(t.y) * usize::from(state.terrain.width) + usize::from(t.x);
-                distance(*t, home) <= 36
-                    && state.terrain.cells[i] == TerrainCell::Floor
-                    && state.terrain.cells[i + 1] == TerrainCell::Floor
-                    && state.ore[i] == 0.0
-                    && !state.entities.iter().any(|e| e.tile == *t)
-                    && !state.blueprints.iter().any(|b| b.tile == *t)
-            })
-            .min_by_key(|t| (distance(*t, home), t.y, t.x));
-        if let Some(tile) = site {
-            let placement = push(Command::PlaceBlueprints {
-                type_key: "factory".into(),
-                tiles: vec![tile],
-                priority: Priority::High,
-                output_directions: Some(vec![CardinalDirection::E]),
-            });
-            // The following reference is resolved by the ordinary draft machinery.
-            push(Command::ConfigureBlueprints {
-                blueprint_ids: vec![DraftItemRef::Draft {
-                    local_id: placement,
-                    item_index: 0,
-                }],
-                settings: BlueprintSettings {
-                    queue: vec![recipe.clone().unwrap()],
-                    queue_loop_flags: vec![true],
-                    order: Order::AttackMove {
-                        destination: target,
-                    },
-                    priority: Priority::High,
-                    loop_enabled: true,
-                    silo_plan: None,
-                },
-            });
-        }
-    }
-    let mut builders: Vec<_> = constructors
-        .iter()
-        .filter(|e| !matches!(e.action, Order::Construct { .. }))
-        .map(|e| e.id.clone())
-        .collect();
-    builders.sort();
-    if !builders.is_empty() {
-        push(Command::AssignOrder {
-            entities: builders,
-            order: Order::Construct { area },
-        });
-    }
-    for factory in own.iter().filter(|e| e.type_key == "factory") {
-        if let Some(p) = &factory.production {
-            if p.active_item.is_none()
-                && p.pending_items.is_empty()
-                && let Some(recipe) = &recipe
-            {
-                push(Command::EditProduction {
-                    factories: vec![factory.id.clone()],
-                    edit: ProductionEdit::Append {
-                        items: vec![recipe.clone()],
-                    },
-                });
-            }
-            if !p.loop_enabled {
-                push(Command::SetQueueLoop {
-                    factories: vec![factory.id.clone()],
-                    enabled: true,
-                });
-            }
-            if p.stored_order
-                != (Order::AttackMove {
-                    destination: target,
-                })
-            {
-                push(Command::SetStoredOrder {
-                    factories: vec![factory.id.clone()],
-                    order: Order::AttackMove {
-                        destination: target,
-                    },
-                });
-            }
-        }
-    }
-    let mut army: Vec<_> = own
-        .iter()
-        .filter(|e| {
-            def(e).is_some_and(|t| t.weapon.is_some() && t.movement.is_some())
-                && (e.action
-                    != (Order::AttackMove {
-                        destination: target,
-                    })
-                    || e.goal_settled)
-        })
-        .map(|e| e.id.clone())
-        .collect();
-    army.sort();
-    if !army.is_empty() {
-        push(Command::AssignOrder {
-            entities: army,
-            order: Order::AttackMove {
-                destination: target,
-            },
-        });
-    }
-    if config.control_limit == ControlLimit::SingleOrder {
-        commands.truncate(1);
-    }
-    TurnDraft {
-        based_on_revision: revision,
-        tick: state.tick,
-        commands,
-    }
-}
+mod planner;
+pub use planner::{Knowledge, plan};
 
 /// Also writes coordinator status and open-lobby recovery records. No world state is written to
 /// the directory. Bots sleep between rounds and share the worker's existing simulation thread.
@@ -516,21 +335,22 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
                 continue;
             }
             let view = visible_state(&state, player, &c.config, &c.content);
-            let draft = plan(&view, player, *style, &c.config, &c.content, revision);
+            let mut knowledge = Knowledge::new(&state);
+            for (_, checkpoint) in c.revisions[&revision].checkpoints.range(..=tick) {
+                knowledge.observe(checkpoint, player, &c.config, &c.content);
+            }
+            knowledge.observe(&state, player, &c.config, &c.content);
+            let draft = planner::plan_known(
+                &view, player, *style, &c.config, &c.content, revision, &knowledge,
+            );
             let mut request = CommitRequest {
                 request_id: format!("bot-{player}-{}", c.round),
                 slot_token: c.bot_token(player).ok_or("bot slot lost")?,
                 draft,
             };
             c.precheck_commit(player, &request)?;
-            let mut commands = draft::resolve_local_references(&request.draft, c.round, player)?;
-            if let Err(e) = c.validate_against_state(player, &commands, &state) {
-                // An occupied/unavailable site is an ordinary failed plan, never permission to
-                // inspect hidden state and replan. Pass this turn through the same contract.
-                eprintln!("bot {} plan rejected; passing: {e}", style.name());
-                request.draft.commands.clear();
-                commands.clear();
-            }
+            retain_legal_actions(&c, player, &mut request.draft, &state)?;
+            let commands = draft::resolve_local_references(&request.draft, c.round, player)?;
             let round = c.round;
             c.planning_ready(player, round);
             c.accept_commit(player, &request, commands)?.1
@@ -542,11 +362,30 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
     Ok(())
 }
 
+// These plans deliberately contain independent commands. Keep useful orders when another
+// candidate fails; never use hidden validation details to choose replacement placements.
+fn retain_legal_actions(
+    c: &Controller,
+    player: PlayerId,
+    plan: &mut TurnDraft,
+    state: &WorldState,
+) -> Result<()> {
+    let candidates = std::mem::take(&mut plan.commands);
+    for candidate in candidates {
+        plan.commands.push(candidate);
+        let resolved = draft::resolve_local_references(plan, c.round, player)?;
+        if c.validate_against_state(player, &resolved, state).is_err() {
+            plan.commands.pop();
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::adapter::SimThread;
-    fn setup() -> (Controller, WorldState) {
+    pub(super) fn setup() -> (Controller, WorldState) {
         let yaml = include_str!("../../../config/game.yaml");
         let content_yaml = include_str!("../../../config/content.yaml");
         let mut setup = atemporal_content::load_setup(yaml).unwrap();
@@ -570,7 +409,7 @@ mod tests {
     #[test]
     fn openings_are_deterministic_valid_normal_commands() {
         let (c, state) = setup();
-        for style in [Style::Rusher, Style::Builder, Style::Raider] {
+        for style in [Style::Builder, Style::Raider] {
             let view = visible_state(&state, 1, &c.config, &c.content);
             let draft = plan(&view, 1, style, &c.config, &c.content, 0);
             assert_eq!(draft, plan(&view, 1, style, &c.config, &c.content, 0));
@@ -610,7 +449,7 @@ mod tests {
             };
         }
         let after = visible_state(&changed, 1, &c.config, &c.content);
-        for style in [Style::Rusher, Style::Builder, Style::Raider] {
+        for style in [Style::Builder, Style::Raider] {
             assert_eq!(
                 plan(&before, 1, style, &c.config, &c.content, 0),
                 plan(&after, 1, style, &c.config, &c.content, 0)
@@ -641,7 +480,7 @@ mod tests {
     fn bot_only_budget_and_human_host_are_explicit() {
         assert!(
             BotConfig {
-                slots: vec![Some(Style::Rusher), None],
+                slots: vec![Some(Style::Raider), None],
                 playtest_rounds: 20
             }
             .validate(2)
@@ -657,7 +496,7 @@ mod tests {
         );
         assert!(
             BotConfig {
-                slots: vec![Some(Style::Rusher); 2],
+                slots: vec![Some(Style::Raider); 2],
                 playtest_rounds: 0
             }
             .validate(2)
@@ -665,3 +504,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod scenarios;

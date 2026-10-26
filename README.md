@@ -76,7 +76,7 @@ Match settings live in [config/game.yaml](config/game.yaml) (the default `seed` 
 
 The coordinator saves its directory, open lobbies and per-game archives under `games/` (override with `--coordinator-dir DIR`). Restart on the same port and refresh a game tab to resume. Each game runs in a separate worker, reached through the same public address. Recent completed/archived games can be viewed read-only from the directory.
 
-**Rusher**, **Builder** and **Raider** bots use ordinary orders, resources and visibility. Bot-only playtests stop at the chosen round budget. They are intentionally simple learning opponents.
+**Raider** and **Builder** bots grow mining economies, expand factories, explore, and field mixed armies using ordinary orders, resources and visibility. Raider favors early pressure; Builder favors a larger economy and defensive positions. Both use practical heuristics rather than perfect planning. Bot-only playtests stop at the chosen round budget.
 
 For the original standalone workflow, add `--single-match`; its archives still live under `replays/`. Resume a standalone archive with:
 

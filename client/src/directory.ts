@@ -1,5 +1,5 @@
 import type {Setup, LobbySlot} from './contracts.generated';
-type Style='rusher'|'builder'|'raider';
+type Style='builder'|'raider';
 interface Entry {id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
 interface Directory {games:Entry[];user:string|null;defaults:Setup}
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
@@ -43,8 +43,8 @@ function slots():void {
   const container=$('bot-slots'),previous=Array.from(container.querySelectorAll('select')).map(s=>s.value),all=$<HTMLInputElement>('all-bots').checked;container.replaceChildren();
   for(let i=0;i<Number($<HTMLSelectElement>('player-count').value);i++){
     const label=document.createElement('label');label.className='field';label.textContent=`Slot ${i}`;const select=document.createElement('select');select.id=`bot-${i}`;
-    for(const [value,text] of [['','Human'],['rusher','Rusher bot'],['builder','Builder bot'],['raider','Raider bot']]){if(all&&!value||!all&&i===0&&value)continue;const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);}
-    select.value=all?(previous[i]||['rusher','builder','raider'][i%3]):i===0?'':previous[i]??'';label.append(select);container.append(label);
+    for(const [value,text] of [['','Human'],['builder','Builder bot'],['raider','Raider bot']]){if(all&&!value||!all&&i===0&&value)continue;const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);}
+    select.value=all?(previous[i]||['raider','builder'][i%2]):i===0?'':previous[i]??'';label.append(select);container.append(label);
   }
   $('round-budget-label').hidden=!all;
 }
