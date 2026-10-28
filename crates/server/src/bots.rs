@@ -164,6 +164,23 @@ pub fn visible_state(
     view.rng_state.clear();
     view
 }
+/// A scored winning timeline needs preservation, not another speculative rewrite. Pending
+/// human commits remain private; a changed outcome can be addressed after it is published.
+fn preserve_winning_timeline(c: &Controller, player: PlayerId) -> bool {
+    // The opening is still provisional: establish follow-up production before settling
+    // into passes against an opponent who has not yet issued follow-up worker orders.
+    c.current > 1
+        && matches!(
+            c.config.objective,
+            Objective::Scoreboard { .. } | Objective::SimpleWin { .. } | Objective::Hybrid { .. }
+        )
+        && c.revisions[&c.current].outcome.as_ref().is_some_and(|o| {
+            o.kind == OutcomeKind::Win
+                && o.survivors.contains(&player)
+                && o.survivors.iter().all(|p| allied(&c.config, player, *p))
+        })
+}
+
 /// Select a useful checkpoint, rather than reacting to unpublished human drafts. Opening plans
 /// begin at the editable boundary; later interventions advance modestly through the timeline.
 pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
@@ -172,11 +189,25 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
         .turns
         .iter()
         .filter(|t| t.player == player)
-        .map(|t| t.tick)
-        .max();
+        .max_by_key(|t| t.round)
+        .map(|t| t.tick);
+    let wanted = last
+        .map_or(c.editable_from, |t| t.saturating_add(style.interval()))
+        .max(c.editable_from)
+        .min(c.available_through())
+        .min(c.config.max_tick - 1);
+    if preserve_winning_timeline(c, player) {
+        return wanted;
+    }
     // Occasionally revisit the lead-up to a substantial loss instead of marching beyond
     // dead units forever. This is a coarse heuristic, not a search over solved timelines.
-    if last.is_some() && c.round.is_multiple_of(3) {
+    let terminal_loss = data.checkpoints.last_key_value().is_some_and(|(_, state)| {
+        state
+            .players
+            .iter()
+            .any(|p| p.player_id == player && p.currently_eliminated)
+    });
+    if last.is_some() && (terminal_loss || c.round.is_multiple_of(3)) {
         let mut previous: Option<(&Tick, &WorldState)> = None;
         let mut repairs = vec![];
         for (tick, state) in data
@@ -213,8 +244,10 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
             }
             previous = Some((tick, state));
         }
-        if !repairs.is_empty() {
-            return repairs[(c.round as usize / 3) % repairs.len()].min(c.config.max_tick - 1);
+        if repairs.first().is_some_and(|tick| *tick <= wanted) {
+            // Intervene before the first collapse; choosing a later loss can leave no
+            // surviving units to order and turn recovery into an empty pass.
+            return repairs[0].min(c.config.max_tick - 1);
         }
         // At the horizon, an earlier intervention has time to matter; repeatedly ordering
         // units on the last tick cannot change a stalemate.
@@ -223,11 +256,39 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
             return c.editable_from + span / 4 * (1 + (c.round / 3) % 3);
         }
     }
-    let wanted = last
-        .map_or(c.editable_from, |t| t.saturating_add(style.interval()))
-        .max(c.editable_from)
-        .min(c.available_through())
-        .min(c.config.max_tick - 1);
+    // A turn must address the published future as well as the opening. Once a force
+    // finishes its advance, intervene there instead of spending every round in the
+    // first few hundred ticks while a large army sits idle for the rest of the timeline.
+    if last.is_some()
+        && !terminal_loss
+        && let Some((tick, _)) =
+            data.checkpoints
+                .range(wanted..=c.available_through())
+                .find(|(_, s)| {
+                    let army: Vec<_> = s
+                        .entities
+                        .iter()
+                        .filter(|e| {
+                            e.owner == player
+                                && e.lifecycle == Lifecycle::Complete
+                                && e.type_key != "scout"
+                                && c.content.types.iter().any(|d| {
+                                    d.key == e.type_key
+                                        && d.weapon.is_some()
+                                        && d.movement.is_some()
+                                })
+                        })
+                        .collect();
+                    army.len() >= 8
+                        && army
+                            .iter()
+                            .filter(|e| e.goal_settled && e.engaged_target.is_none())
+                            .count()
+                            >= (army.len() / 3).max(3)
+                })
+    {
+        return (*tick).min(c.config.max_tick - 1);
+    }
     // Prefer the first published checkpoint with a mobile army to redirect near the desired tick.
     data.checkpoints
         .range(wanted..c.config.max_tick)
@@ -340,9 +401,17 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
                 knowledge.observe(checkpoint, player, &c.config, &c.content);
             }
             knowledge.observe(&state, player, &c.config, &c.content);
-            let draft = planner::plan_known(
-                &view, player, *style, &c.config, &c.content, revision, &knowledge,
-            );
+            let draft = if preserve_winning_timeline(&c, player) {
+                TurnDraft {
+                    based_on_revision: revision,
+                    tick,
+                    commands: vec![],
+                }
+            } else {
+                planner::plan_known(
+                    &view, player, *style, &c.config, &c.content, revision, &knowledge,
+                )
+            };
             let mut request = CommitRequest {
                 request_id: format!("bot-{player}-{}", c.round),
                 slot_token: c.bot_token(player).ok_or("bot slot lost")?,
@@ -362,8 +431,8 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
     Ok(())
 }
 
-// These plans deliberately contain independent commands. Keep useful orders when another
-// candidate fails; never use hidden validation details to choose replacement placements.
+// Keep useful orders when a candidate fails; dependent blueprint settings are discarded
+// with a rejected placement. Never use hidden validation details to choose replacement sites.
 fn retain_legal_actions(
     c: &Controller,
     player: PlayerId,
@@ -373,8 +442,9 @@ fn retain_legal_actions(
     let candidates = std::mem::take(&mut plan.commands);
     for candidate in candidates {
         plan.commands.push(candidate);
-        let resolved = draft::resolve_local_references(plan, c.round, player)?;
-        if c.validate_against_state(player, &resolved, state).is_err() {
+        let legal = draft::resolve_local_references(plan, c.round, player)
+            .and_then(|resolved| c.validate_against_state(player, &resolved, state));
+        if legal.is_err() {
             plan.commands.pop();
         }
     }

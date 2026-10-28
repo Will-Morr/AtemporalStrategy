@@ -213,6 +213,11 @@ pub fn plan_known(
                 let unseen = !knowledge.seen[*i];
                 (
                     unseen,
+                    own.iter()
+                        .map(|e| distance(tile(*i, state.terrain.width), e.tile))
+                        .min()
+                        .unwrap_or(0)
+                        / 32,
                     (i.wrapping_mul(2654435761)
                         .wrapping_add(salt.wrapping_mul(1013904223)))
                         % 4096,
@@ -221,21 +226,13 @@ pub fn plan_known(
             })
             .map_or(home, |(i, _)| tile(i, state.terrain.width))
     };
-    let target = threat
-        .or_else(|| {
-            enemies
-                .iter()
-                .min_by_key(|e| {
-                    // Exposed production/economy are useful targets; combat near home takes precedence above.
-                    let value = if e.type_key == "factory" || e.type_key == "miner" {
-                        0
-                    } else {
-                        40
-                    };
-                    distance(e.tile, home).saturating_add(value)
-                })
-                .map(|e| e.tile)
-        })
+    // Reinforcements need a durable strategic destination: an observed structure or a
+    // distant unexplored region. A transient scout must not pin all future production at home.
+    let strategic_target = enemies
+        .iter()
+        .filter(|e| definition(e).is_some_and(|d| d.kind == TypeKind::Structure))
+        .min_by_key(|e| distance(e.tile, home))
+        .map(|e| e.tile)
         .or_else(|| {
             knowledge
                 .targets
@@ -244,6 +241,7 @@ pub fn plan_known(
                 .copied()
         })
         .unwrap_or_else(|| explore(variety));
+    let target = threat.unwrap_or(strategic_target);
     let count = |key: &str| own.iter().filter(|e| e.type_key == key).count();
     let bank = state
         .players
@@ -254,7 +252,7 @@ pub fn plan_known(
     let factories = count("factory");
     let desired_miners = (if aggressive { 6 } else { 9 }) + factories.min(4) * 2;
     let desired_builders = 2 + factories / 2;
-    let desired_factories = (1 + miners / if aggressive { 3 } else { 4 }).min(6);
+    let desired_factories = (1 + miners / 2).min(6);
     let army: Vec<_> = own
         .iter()
         .filter(|e| {
@@ -319,9 +317,37 @@ pub fn plan_known(
         }
     }
     let mix = if aggressive {
-        ["grunt", "grinder", "grunt", "tank", "artillery", "scout"]
+        [
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "tank",
+            "artillery",
+            "grinder",
+            "grunt",
+            "scout",
+        ]
     } else {
-        ["tank", "grunt", "artillery", "tank", "grinder", "scout"]
+        [
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "grunt",
+            "tank",
+            "grunt",
+            "artillery",
+            "tank",
+            "grunt",
+            "grinder",
+            "scout",
+        ]
     };
     for (fi, factory) in own.iter().filter(|e| e.type_key == "factory").enumerate() {
         let Some(p) = &factory.production else {
@@ -330,53 +356,35 @@ pub fn plan_known(
         let recipes = definition(factory)
             .and_then(|d| d.production.as_ref())
             .map(|p| &p.recipes);
-        if p.loop_enabled {
-            add(
-                99,
-                Command::SetQueueLoop {
-                    factories: vec![factory.id.clone()],
-                    enabled: false,
-                },
-            );
-        }
-        let looping: Vec<_> = p
-            .pending_items
-            .iter()
-            .filter(|q| q.loop_enabled)
-            .map(|q| DraftItemRef::Persistent {
-                id: q.item_id.clone(),
-            })
-            .chain(p.active_item.iter().filter(|q| q.loop_enabled).map(|q| {
-                DraftItemRef::Persistent {
-                    id: q.item_id.clone(),
-                }
-            }))
-            .collect();
-        if !looping.is_empty() {
-            add(
-                99,
-                Command::EditProduction {
-                    factories: vec![factory.id.clone()],
-                    edit: ProductionEdit::SetItemLoop {
-                        item_ids: looping,
-                        enabled: false,
-                    },
-                },
-            );
-        }
         let emergency = (miners == 0 && !p.pending_items.iter().any(|q| q.type_key == "miner"))
             || (count("constructor") == 0
                 && !p.pending_items.iter().any(|q| q.type_key == "constructor"));
-        if p.pending_items.len() <= 1 || emergency {
+        let queued_workers = p
+            .pending_items
+            .iter()
+            .map(|q| q.type_key.as_str())
+            .chain(p.active_item.iter().map(|q| q.type_key.as_str()))
+            .any(|key| key == "miner" || key == "constructor");
+        let mut worker_batch = queued_workers;
+        if p.pending_items.is_empty() && p.active_item.is_none() || emergency {
             let mut items = vec![];
-            for slot in 0..8 {
+            worker_batch = totals.get("miner").copied().unwrap_or(0) < desired_miners
+                || totals.get("constructor").copied().unwrap_or(0) < desired_builders;
+            let batch_size = if config.control_limit == ControlLimit::SingleOrder && !worker_batch {
+                mix.len()
+            } else {
+                8
+            };
+            for slot in 0..batch_size {
                 let n = |key: &str| totals.get(key).copied().unwrap_or(0);
-                let key = if n("constructor") == 0 {
-                    "constructor"
-                } else if n("miner") < desired_miners && (slot % 2 == 0 || miners < 3) {
-                    "miner"
-                } else if n("constructor") < desired_builders && slot == 1 {
-                    "constructor"
+                let key = if worker_batch {
+                    if n("constructor") < desired_builders && (slot == 1 || n("constructor") == 0) {
+                        "constructor"
+                    } else if n("miner") < desired_miners {
+                        "miner"
+                    } else {
+                        break;
+                    }
                 } else if n("scout") == 0 {
                     "scout"
                 } else {
@@ -389,7 +397,13 @@ pub fn plan_known(
             }
             if !items.is_empty() {
                 add(
-                    if emergency { 105 } else { 85 },
+                    if emergency {
+                        105
+                    } else if config.control_limit == ControlLimit::SingleOrder && !worker_batch {
+                        101
+                    } else {
+                        85
+                    },
                     Command::EditProduction {
                         factories: vec![factory.id.clone()],
                         edit: if emergency {
@@ -401,10 +415,71 @@ pub fn plan_known(
                 );
             }
         }
-        let order = Order::AttackMove { destination: rally };
+        // Combat queues must keep fighting through the whole published simulation. Worker
+        // queues stay finite so an idle opponent cannot turn every bit of ore into miners.
+        let sustain = !worker_batch;
+        let default_repeat = sustain;
+        if p.loop_enabled != default_repeat {
+            add(
+                107,
+                Command::SetQueueLoop {
+                    factories: vec![factory.id.clone()],
+                    enabled: default_repeat,
+                },
+            );
+        }
+        {
+            let looping = p
+                .pending_items
+                .iter()
+                .filter(|q| q.loop_enabled != sustain)
+                .map(|q| DraftItemRef::Persistent {
+                    id: q.item_id.clone(),
+                })
+                .chain(
+                    p.active_item
+                        .iter()
+                        .filter(|q| q.loop_enabled != sustain)
+                        .map(|q| DraftItemRef::Persistent {
+                            id: q.item_id.clone(),
+                        }),
+                )
+                .collect::<Vec<_>>();
+            if !looping.is_empty() {
+                add(
+                    99,
+                    Command::EditProduction {
+                        factories: vec![factory.id.clone()],
+                        edit: ProductionEdit::SetItemLoop {
+                            item_ids: looping,
+                            enabled: sustain,
+                        },
+                    },
+                );
+            }
+        }
+        // A factory has one inherited order. Never mix workers into a combat batch:
+        // miners and constructors must start earning immediately, without another human round.
+        let order = if worker_batch {
+            Order::Mine { area: area.clone() }
+        } else {
+            Order::AttackMove {
+                destination: strategic_target,
+            }
+        };
         if p.stored_order != order {
             add(
-                35,
+                if worker_batch {
+                    106
+                } else if !matches!(p.stored_order, Order::AttackMove { .. }) {
+                    if config.control_limit == ControlLimit::SingleOrder {
+                        108
+                    } else {
+                        86
+                    }
+                } else {
+                    35
+                },
                 Command::SetStoredOrder {
                     factories: vec![factory.id.clone()],
                     order,
@@ -420,7 +495,18 @@ pub fn plan_known(
         .collect();
     let pending_factories = projects.iter().filter(|b| b.type_key == "factory").count();
     let has_builder = count("constructor") > 0;
+    // With one action per turn, activate existing capacity before spending more turns
+    // placing empty factories. Timestamp plans can configure and expand together.
+    let idle_capacity = config.control_limit == ControlLimit::SingleOrder
+        && factories >= 2
+        && own.iter().any(|e| {
+            e.type_key == "factory"
+                && e.production
+                    .as_ref()
+                    .is_some_and(|p| p.pending_items.is_empty() && p.active_item.is_none())
+        });
     let build_type = if factories + pending_factories < desired_factories
+        && !idle_capacity
         && has_builder
         && (factories == 0 || miners >= 3 || bank > 500.0)
     {
@@ -450,7 +536,7 @@ pub fn plan_known(
             .enumerate()
             .filter(|(i, d)| {
                 **d >= 2
-                    && **d <= 18
+                    && **d <= if key == "turret" { 6 } else { 18 }
                     && state.ore[*i] == 0.0
                     && !occupied(tile(*i, state.terrain.width))
             })
@@ -486,14 +572,66 @@ pub fn plan_known(
                 } else {
                     CardinalDirection::N
                 };
+                let mut tiles = vec![t];
+                let mut directions = vec![direction];
+                // Plan the economic opening and its follow-up military production together.
+                // A timestamp turn spans the whole simulation, not only the next 90 ticks.
+                if key == "factory"
+                    && factories == 0
+                    && pending_factories == 0
+                    && config.control_limit != ControlLimit::SingleOrder
+                {
+                    let second = routes
+                        .iter()
+                        .enumerate()
+                        .filter(|(k, d)| {
+                            **d >= 2
+                                && **d <= 12
+                                && state.ore[*k] == 0.0
+                                && !occupied(tile(*k, state.terrain.width))
+                                && distance(tile(*k, state.terrain.width), t) >= 4
+                        })
+                        .filter(|(k, _)| {
+                            neighbors(*k, w, routes.len())
+                                .iter()
+                                .filter(|j| {
+                                    routes[**j] != u32::MAX
+                                        && !occupied(tile(**j, state.terrain.width))
+                                })
+                                .count()
+                                >= 3
+                        })
+                        .min_by_key(|(k, d)| **d * 10 + (*k % 7) as u32);
+                    if let Some((k, _)) = second {
+                        let second_tile = tile(k, state.terrain.width);
+                        if let Some(j) = neighbors(k, w, routes.len()).into_iter().find(|j| {
+                            routes[*j] != u32::MAX
+                                && !occupied(tile(*j, state.terrain.width))
+                                && tile(*j, state.terrain.width) != t
+                                && tile(*j, state.terrain.width) != o
+                        }) {
+                            let output = tile(j, state.terrain.width);
+                            tiles.push(second_tile);
+                            directions.push(if output.x > second_tile.x {
+                                CardinalDirection::E
+                            } else if output.x < second_tile.x {
+                                CardinalDirection::W
+                            } else if output.y > second_tile.y {
+                                CardinalDirection::S
+                            } else {
+                                CardinalDirection::N
+                            });
+                        }
+                    }
+                }
                 add(
                     if factories == 0 { 95 } else { 92 },
                     Command::PlaceBlueprints {
                         type_key: key.into(),
-                        tiles: vec![t],
+                        tiles,
                         priority: Priority::High,
                         output_directions: if key == "factory" {
-                            Some(vec![direction])
+                            Some(directions)
                         } else {
                             None
                         },
@@ -592,11 +730,63 @@ pub fn plan_known(
         } else {
             FutureOrderPolicy::Keep
         };
+        let factory_placements = match &command {
+            Command::PlaceBlueprints {
+                type_key, tiles, ..
+            } if type_key == "factory" => tiles.len(),
+            _ => 0,
+        };
+        let local_id = format!("bot-{}", draft.commands.len());
         draft.commands.push(DraftCommand {
-            local_id: format!("bot-{}", draft.commands.len()),
+            local_id: local_id.clone(),
             command,
             future_orders,
         });
+        for item_index in 0..factory_placements {
+            if config.control_limit == ControlLimit::SingleOrder {
+                break;
+            }
+            let economic = miners < 3 && item_index == 0;
+            draft.commands.push(DraftCommand {
+                local_id: format!("bot-{}", draft.commands.len()),
+                command: Command::ConfigureBlueprints {
+                    blueprint_ids: vec![DraftItemRef::Draft {
+                        local_id: local_id.clone(),
+                        item_index: item_index as u32,
+                    }],
+                    settings: BlueprintSettings {
+                        queue: if economic {
+                            ["miner", "miner", "miner", "constructor", "miner"]
+                                .into_iter()
+                                .map(String::from)
+                                .collect()
+                        } else {
+                            mix.into_iter().map(String::from).collect()
+                        },
+                        queue_loop_flags: if economic {
+                            vec![false; 5]
+                        } else {
+                            vec![true; mix.len()]
+                        },
+                        order: if economic {
+                            Order::Mine { area: area.clone() }
+                        } else {
+                            Order::AttackMove {
+                                destination: strategic_target,
+                            }
+                        },
+                        priority: if !economic && factories == 0 {
+                            Priority::Low
+                        } else {
+                            Priority::High
+                        },
+                        loop_enabled: !economic,
+                        silo_plan: None,
+                    },
+                },
+                future_orders: FutureOrderPolicy::Keep,
+            });
+        }
     }
     draft
 }

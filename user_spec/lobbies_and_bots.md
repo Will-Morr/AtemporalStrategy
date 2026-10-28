@@ -24,6 +24,10 @@ The latest request replaces the initial minimal opponents with **two roughly cap
 
 Address economic recovery, meaningful reactions to visible enemies, timeline intervention around losses, deliberate single-order planning, and preservation of useful actions when another action fails validation. Bots must retain ordinary player visibility and order validation.
 
+The user reported that both recent human-versus-AI games appeared broken and requested investigation and useful postgame analysis tooling for agents. Use saved game evidence to diagnose behavior and verify fixes. The opening should almost certainly send out a few miners: prioritize getting a small mining workforce earning immediately. Exact opening counts and production sequencing remain implementation choices.
+
+The user subsequently requested reworking the bot until it can win against the full saved move sequence from their most recent game. Preserve those human turns as a repeatable opponent scenario and verify a match win, not just an improved opening. Keep the existing fair-visibility and ordinary-validation requirements. The user emphasized economic competence against scout spam over avoiding a first-turn loss, and asked whether balance is responsible; a unit-balance change has not been decided.
+
 ## Execution constraints
 
 Proceed independently through implementation and verification without asking for further input. While the device is busy, keep builds and tests low priority and resource usage limited; use at most two CPU cores and run heavy checks sequentially. This temporarily supersedes the earlier six-core test allowance.
