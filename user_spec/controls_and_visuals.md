@@ -30,7 +30,7 @@ Units have health bars showing damage and rotate to indicate the direction they 
 
 ## Player guide and lobby
 
-The later [lobbies and user identity requirements](lobbies_and_bots.md) put the game directory at the public landing page; the setup controls described here remain inside each game lobby.
+The latest [landing-page requirements](lobbies_and_bots.md#landing-page-and-quick-play) put a title, description and three main actions at the public home page. View Lobby leads to the game directory; setup controls remain inside each game lobby.
 
 Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
 

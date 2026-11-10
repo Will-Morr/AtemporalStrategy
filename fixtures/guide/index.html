@@ -1,11 +1,44 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal Strategy — How to play</title>
-<style>body{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}a{color:#79d7ff}.table-scroll{overflow:auto}table{border-collapse:collapse;font-size:.85rem}th,td{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}th{background:#333}code{overflow-wrap:anywhere}</style></head>
-<body><a href="/">Back to lobby</a><h1>How to play Atemporal Strategy</h1>
-<p>Plan robot orders at a moment in the timeline, then commit. When everyone commits, the battlefield runs again from the earliest change. Inspect the new future and plan the next round. Passing is a valid turn. While waiting for another player, use Uncommit to restore your moves and edit them. The turn starts immediately when everyone commits.</p>
-<nav aria-label="Guide contents"><a href="#economy">Economy</a> · <a href="#orders">Orders and groups</a> · <a href="#survival">Survival</a> · <a href="#controls">Controls</a> · <a href="#inspection">Graphs and replay</a></nav>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal — Game Explained</title>
+<style>body{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}a{color:#79d7ff}.table-scroll{overflow:auto}table{border-collapse:collapse;font-size:.85rem}th,td{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}th{background:#333}code{overflow-wrap:anywhere}h1{font-size:2.6rem;letter-spacing:-.04em}h2{margin-top:2rem}nav{display:flex;flex-wrap:wrap;gap:.7rem}li{margin:.6rem 0}details{margin:2rem 0;padding:1rem;border:1px solid #555;border-radius:8px}summary{cursor:pointer;color:#79d7ff}.unit-roles{display:grid;grid-template-columns:130px 1fr;gap:.6rem 1rem}dt{font-weight:700}dd{margin:0}:target{scroll-margin-top:1rem}</style></head>
+<body><a href="/">← Atemporal</a><h1>Game Explained</h1>
+<p>Atemporal is an RTS you can inspect and rewrite through time. Choose a moment, give your units orders, and commit. When every player commits, the battlefield runs again from the earliest change. Watch what happened, then change your plan in the next round.</p>
+<nav aria-label="Guide contents"><a href="#ui">The UI</a> · <a href="#command-types">Commands</a> · <a href="#unit-roles">Unit roles</a> · <a href="#units">Unit stats</a> · <a href="#full-rules">Full rules</a></nav>
+<h2 id="ui">Your first turn</h2>
+<ol>
+<li><strong>Inspect the battlefield.</strong> Click or drag a box to select units. Your selection and available actions appear below the map; the minimap helps you navigate. The top bar shows matter, scores and your current round.</li>
+<li><strong>Choose when to act.</strong> Use the timeline below the map to play, pause or seek. Orders apply at the chosen tick. The first order fixes your draft’s tick; use Rebase draft here if you want to move the whole draft.</li>
+<li><strong>Plan and commit.</strong> Set up mining, construction or attacks. The plan panel shows your pending changes, with undo/redo. Commit submits them together; an empty commit passes. Uncommit lets you edit while waiting, until everyone has committed. Inspect the resulting replay and repeat.</li>
+</ol>
+<p>You begin with a miner, constructor and turret. A useful opening is to send the miner to ore, place a factory blueprint, and tell the constructor to build in that area. Queue units at the factory and give its output an order so new units know where to go.</p>
+<h2 id="command-types">What commands do</h2>
+<ul>
+<li><strong>Attack-move and Support:</strong> move toward a destination while attacking, or follow a friendly unit and assist using the selected unit’s capabilities. Idle stops its assigned task.</li>
+<li><strong>Mine and Construct:</strong> drag an area to gather ore or build available blueprints. Place a blueprint first; placing one does not automatically assign a constructor.</li>
+<li><strong>Production and settings:</strong> queue units or missiles, choose whether queue items repeat, and set matter priority. Off pauses spending. Factory output orders and groups determine what newborn units do.</li>
+<li><strong>Groups:</strong> assign units to groups 0–9, recall a group with its number, and command its members together. Factories can add new units to a group.</li>
+<li><strong>Missile launches:</strong> choose a missile type and a target. The preview shows flight time and affected area; a launch waits for matching ammunition. Automatic targeting can fire stored missiles at visible enemies.</li>
+</ul>
+<p>Actions only appear for compatible units. New task orders can keep or replace later orders; inspect the plan before committing. Detailed keyboard shortcuts and replacement rules are below.</p>
+<h2 id="unit-roles">Meet your units</h2>
+<dl class="unit-roles">
+<dt>Miner</dt><dd>Gathers matter from ore to fund your army.</dd>
+<dt>Constructor</dt><dd>Builds structures and can also mine, more slowly than a miner.</dd>
+<dt>Factory</dt><dd>Produces mobile units from a queue and assigns their initial orders.</dd>
+<dt>Grunt</dt><dd>A light, direct-fire fighter for early attacks.</dd>
+<dt>Scout</dt><dd>Explores and supplies vision, with a light weapon.</dd>
+<dt>Tank</dt><dd>A durable direct-fire combat unit.</dd>
+<dt>Grinder</dt><dd>Closes the distance to attack at melee range.</dd>
+<dt>Artillery</dt><dd>Provides long-range indirect fire.</dd>
+<dt>Turret</dt><dd>A stationary weapon for defending an area; repairs itself using matter.</dd>
+<dt>Wall</dt><dd>Blocks routes and shapes movement through an area.</dd>
+<dt>Silo</dt><dd>Builds and stores missiles, then launches them at chosen targets.</dd>
+<dt>Missiles</dt><dd>Satellite provides vision, Cluster damages a wide area, and Tac nuke destroys units and structures in a smaller area. Explosions can hit allies too.</dd>
+</dl>
+<p><a href="#units">Compare unit stats ↓</a> — costs, health, movement, weapons and work rates come directly from this server’s game content.</p>
+<details id="full-rules"><summary>Full rules, keyboard shortcuts and advanced controls</summary>
 <h2>Games and practice opponents</h2>
-<p>Enter a username on the game directory, then create a game or enter an open lobby. Names do not need to be unique. Joining defaults to spectating; claim a slot before starting to play. The first occupied human slot chooses from five shared maps and starts once all slots are filled. Open game links in separate tabs to play multiple matches. The directory offers active/open filters, your games, and read-only recent replays.</p>
+<p>For an immediate solo game, choose <strong>Play Against Bot</strong> on the home page. To customize a game, choose <strong>View Lobby</strong>, enter a username on the game directory, then create a game or enter an open lobby. Names do not need to be unique. Joining defaults to spectating; claim a slot before starting to play. The first occupied human slot chooses from five shared maps and starts once all slots are filled. Open game links in separate tabs to play multiple matches. The directory offers active/open filters, your games, and read-only recent replays.</p>
 <p>For solo practice, add a Rusher (grunts), Builder (tanks), or Raider (flanking grinders) at creation. These simple bots use normal resources, visibility and validated orders. They establish mining and production, then intervene at later timeline ticks. They are intentionally easy, with no deep planning. Bot-only playtests stop and archive at their selected round budget; human games have no added round limit.</p>
 <h2 id="economy">Build an economy</h2>
 <p>You begin with a miner, constructor, and turret. Send the miner onto ore, place a factory blueprint, and assign the constructor to build in that area. Constructors can also mine at half the miner’s throughput. Matter flows into your bank and pays for construction and production continuously. High priority gets funded before medium and low; consumers within a tier share the available matter. Off stops spending. With default content, turrets automatically repair at 0.5 HP per tick for 1 matter per HP, half their construction efficiency; repair continues while firing.</p>
@@ -70,6 +103,8 @@
 <p>The amber Needs orders notice reports idle units, empty production queues, newborns without usable starting orders, and buildings without a constructor assigned to their area at the viewed tick. Review next selects and centers an affected unit or building. Assign miners a mining area and constructors a construction area; placing a building alone does not command a constructor to build it. These notices do not predict whether funding, paths or later commands will succeed.</p>
 <p>Selecting several factories opens one shared editor. Matching configurations let you append units to every queue. If they differ, an override warning asks you to accept clearing every selected factory’s queue, active production and output settings at this tick before applying the shared command. Spent matter on cancelled active work is lost. Cancel preserves the plans; undo restores the entire shared edit. Select one factory to change it independently.</p>
 <p>A large green Turn committed banner means your plan has been submitted and is waiting for the other players. Uncommit restores editing while waiting. The banner disappears when execution starts.</p>
+
+</details>
 <h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
 <div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Missiles</th><th>Survival flags</th></tr></thead><tbody><tr><td>artillery</td><td>Unit</td><td>80</td><td>50</td><td>5</td><td>4 neighbors / 6 ticks</td><td>35 damage / 10 range / 10 ticks; indirect</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>false / false</td></tr>
 <tr><td>cluster</td><td>Missile</td><td>125</td><td>— (inventory)</td><td>0</td><td>Static</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>Cluster: radius 7; damage 100; speed 3 tiles/tick; flight ≤ 30 ticks; destination reveal 0 ticks</td><td>false / false</td></tr>

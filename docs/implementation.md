@@ -16,6 +16,14 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 6. [x] Preserve recent completed games as spectator replays until expiry.
 7. [x] Run server and real-browser checks, inspect screenshots, document hosting, commit and push.
 
+## Landing page checklist
+
+1. [x] Record landing-page, quick-play and explainer requirements.
+2. [x] Add the home page, editable placeholder prose and navigation.
+3. [x] Start a human-versus-default-bot game with one click.
+4. [x] Introduce UI, commands and unit roles above generated unit stats.
+5. [x] Verify real-browser flows and screenshots, update docs, commit and push.
+
 ## Execution policy
 
 The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.

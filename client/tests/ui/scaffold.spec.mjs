@@ -10,7 +10,7 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
   const link=page.getByRole('link',{name:'How to play / Unit reference'});
   await page.keyboard.press('Tab');await expect(link).toBeFocused();
   const popup=page.waitForEvent('popup');await page.keyboard.press('Enter');page=await popup;await expect(page).toHaveURL(/\/guide\/$/);
-  await expect(page.getByRole('heading',{name:'How to play Atemporal Strategy'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Game Explained'})).toBeVisible();
   const content=await (await request.get(`${server.url}guide/content.json`)).json();
   const rows=page.locator('.table-scroll tbody tr');await expect(rows).toHaveCount(content.types.length);
   for(const type of content.types) {
@@ -21,7 +21,7 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
   // Tables may scroll internally; the page itself must fit the desktop viewport.
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await review.capture('guide');
-  await page.getByRole('link',{name:'Back to lobby'}).click();await expect(page).toHaveURL(/\/$/);
+  await page.getByRole('link',{name:'← Atemporal'}).click();await expect(page).toHaveURL(/\/$/);
 });
 
 test('two players and spectator can use isolated browser contexts',async({review},testInfo)=>{

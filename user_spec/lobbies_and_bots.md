@@ -24,9 +24,17 @@ Backward compatibility with older game data is not required. A quick migration s
 
 Track these requests in an ordered TODO list and update it as implementation proceeds.
 
+## Landing page and quick play
+
+The public home page shows **Atemporal**, the subtitle **An RTS from the perspective of God.**, and several paragraphs of description. The user will write the description by hand; provide a separate editable file containing lorem ipsum.
+
+Place large navigation buttons at the bottom, with **Play Against Bot** first. One click creates a new lobby with the player and the default best available AI, then starts immediately without setup friction. **View Lobby** opens the game directory. **Game Explained** opens a quick explanation of the UI, command types and unit roles, including unit stats.
+
+For this quick-play path, skip the previous first-visit username prompt and manual map/start steps. Keep normal multiplayer lobby setup available through View Lobby.
+
 ## Lightweight users
 
-On the first visit, let players enter a username without validation. Provide a basic user identity so the coordinator can track who is playing which games. Pass this username into game lobbies without a duplicate username input. No authentication or unique-name requirement was requested; browser persistence and identity mechanics are implementation choices.
+On the first visit to the game directory, let players enter a username without validation. Quick play bypasses this prompt. Provide a basic user identity so the coordinator can track who is playing which games. Pass this username into game lobbies without a duplicate username input. No authentication or unique-name requirement was requested; browser persistence and identity mechanics are implementation choices.
 
 ## Minimal opponents and automated playtesting
 

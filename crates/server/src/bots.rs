@@ -12,6 +12,9 @@ pub enum Style {
     Builder,
     Raider,
 }
+/// Default quick-play opponent; keep selection centralized as bot policies improve.
+pub const DEFAULT_STYLE: Style = Style::Rusher;
+
 impl Style {
     fn name(self) -> &'static str {
         match self {

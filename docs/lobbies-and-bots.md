@@ -2,6 +2,14 @@
 
 Requirements: [user specification](../user_spec/lobbies_and_bots.md).
 
+## Home page and quick play
+
+`/` introduces **Atemporal** with the requested subtitle and repository-authored placeholder description. Edit `client/landing-description.html`; the client build inserts that fragment into `client/landing.html`. Large buttons lead to one-click bot play, the directory at `/lobbies/`, and the explainer at `/guide/`.
+
+Quick play reuses a saved username or silently creates a `Player` identity. It copies the server's default match settings into a two-player authoritative FFA, picks the first generated map, creates a lobby, claims slot 0 through the ordinary protocol, and starts before navigating to the game. It retains the player token for refresh. A disabled button prevents repeat clicks; a pending game URL permits retry without creating another lobby. The default opponent is centralized in `bots::DEFAULT_STYLE`, currently Rusher. This is the existing aggressive baseline, not a measured strongest-policy ranking. Both the choice and guest name are implementation defaults.
+
+The explainer gives a short UI walkthrough, command summaries and unit roles. Full rules are expandable; unit statistics are still generated from effective server content, with game-specific guides using pinned match content.
+
 ## Current implementation
 
 The public server runs as a coordinator. Each game has a stable `/games/<id>/` address, an isolated worker process and its own archive directory. The coordinator forwards WebSocket messages to loopback workers; simulation and match state remain in the worker. Workers begin at lobby creation to reuse the existing live roster and five-map picker, but simulation begins only after Start. This lifecycle is an implementation choice.

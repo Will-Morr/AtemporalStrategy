@@ -44,10 +44,10 @@ async function boot(): Promise<void> {
   if (location.pathname.startsWith('/games/')) {
     (document.getElementById('guide-link') as HTMLAnchorElement).href=`${location.pathname.match(/^\/games\/[^/]+/)![0]}/guide/`;
     for (const parent of [document.getElementById('lobby'),document.getElementById('top')]) {
-      const link=document.createElement('a');link.href='/';link.textContent='All games';link.style.pointerEvents='auto';parent?.prepend(link);
+      const link=document.createElement('a');link.href='/lobbies/';link.textContent='All games';link.style.pointerEvents='auto';parent?.prepend(link);
     }
     const identity=await fetch('/api/directory').then(r=>r.json());
-    if(identity.user===null){location.replace(`/?join=${encodeURIComponent(location.pathname)}`);return;}
+    if(identity.user===null){location.replace(`/lobbies/?join=${encodeURIComponent(location.pathname)}`);return;}
     (document.getElementById('username') as HTMLInputElement).value=identity.user;
     document.getElementById('username')!.closest('label')!.hidden=true;
     const entry=identity.games.find((g:{id:string})=>g.id===location.pathname.split('/')[2]);

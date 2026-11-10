@@ -98,16 +98,16 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
     let hash = content_hash(&content)?;
     Ok(format!(
         r#"<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal Strategy — How to play</title>
-<style>body{{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}}a{{color:#79d7ff}}.table-scroll{{overflow:auto}}table{{border-collapse:collapse;font-size:.85rem}}th,td{{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}}th{{background:#333}}code{{overflow-wrap:anywhere}}</style></head>
-<body><a href="/">Back to lobby</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal — Game Explained</title>
+<style>body{{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#eee;background:#222}}a{{color:#79d7ff}}.table-scroll{{overflow:auto}}table{{border-collapse:collapse;font-size:.85rem}}th,td{{border:1px solid #666;padding:.5rem;text-align:left;vertical-align:top}}th{{background:#333}}code{{overflow-wrap:anywhere}}h1{{font-size:2.6rem;letter-spacing:-.04em}}h2{{margin-top:2rem}}nav{{display:flex;flex-wrap:wrap;gap:.7rem}}li{{margin:.6rem 0}}details{{margin:2rem 0;padding:1rem;border:1px solid #555;border-radius:8px}}summary{{cursor:pointer;color:#79d7ff}}.unit-roles{{display:grid;grid-template-columns:130px 1fr;gap:.6rem 1rem}}dt{{font-weight:700}}dd{{margin:0}}:target{{scroll-margin-top:1rem}}</style></head>
+<body><a href="/">← Atemporal</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
 <div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Missiles</th><th>Survival flags</th></tr></thead><tbody>{rows}</tbody></table></div>
 <footer><p>Content: <code>{hash}</code></p></footer></body></html>
 "#
     ))
 }
 fn rules_build(prose: &str) -> String {
-    sha256(format!("atemporal-guide-renderer-v3\n{prose}").as_bytes())
+    sha256(format!("atemporal-guide-renderer-v4\n{prose}").as_bytes())
 }
 fn artifacts(content: &Content, prose: &str) -> Result<(GuideManifest, BTreeMap<String, Vec<u8>>)> {
     let content = normalize_content(content.clone())?;

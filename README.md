@@ -23,11 +23,11 @@ From the repository folder, run:
 This installs the browser dependencies, builds the game, and starts the game coordinator. The first build may take a few minutes.
 
 1. Open **http://127.0.0.1:8080/**.
-2. Enter a username, then choose **Create game**. Keep the default 1v1 or select a bot opponent.
-3. Enter the lobby as a spectator, claim a slot, and choose a map.
-4. Once the slots are filled, press **Start match** from slot 0 (or the first occupied human slot).
+2. Choose **Play Against Bot** to start a 1v1 immediately. No username or setup screen is required.
+3. For multiplayer or custom settings, choose **View Lobby**, enter a username, and create or join a game. Claim a slot, choose a map, and start when the slots are filled.
+4. Choose **Game Explained** for a quick UI walkthrough, command and unit explanations, and generated unit stats.
 
-The directory lists open lobbies, active games and recent replays. **My games** shows where this browser user has claimed a slot. Open different game links in separate tabs to play in parallel. Usernames are remembered without accounts or uniqueness checks; optional lobby passwords are simple access blockers.
+The directory at `/lobbies/` lists games with connected players; **Show inactive games** and **Recent replays** expose games awaiting players or review until they expire. **My games** shows where this browser user has claimed a slot. Open different game links in separate tabs to play in parallel. Usernames are remembered without accounts or uniqueness checks; optional lobby passwords are simple access blockers.
 
 For a local human-vs-human test, use two tabs. To play on a LAN, your opponent opens `http://<host-ip>:8080/` on their computer. Extra players can spectate.
 
@@ -105,3 +105,5 @@ npm run ui:review --prefix client        # real-browser gameplay scenarios
 To combine the default first-to-five scoreboard with 100 ticks of fixed history per round, launch `./quickstart.sh --config config/hybrid.yaml`.
 
 For a small unattended remote host, see [hosting and automatic updates](docs/hosting.md).
+
+The home-page description lives in [`client/landing-description.html`](client/landing-description.html). Replace its lorem ipsum paragraphs and run `npm run build --prefix client` to include your prose. The page shell is `client/landing.html`.

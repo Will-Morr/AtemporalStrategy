@@ -390,7 +390,7 @@ async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
         replays.sort();replays.reverse();replays.truncate(12);
         json!({"active_players":c.active_players(g, &status),"id":g.id,"name":g.name,"created":g.created,"locked":!g.password.is_empty(),"status":status,"players":g.setup.match_defaults.player_count,"bots":g.bots.slots,"mine":user.as_ref().is_some_and(|u|g.members.get(u).is_some_and(|slots|slots.iter().any(|slot|status["slots"].as_array().is_some_and(|ss|ss.iter().any(|s|s["slot"]==*slot&&s["claimed"]==true))))),"replays":replays})
     }).collect();
-    Json(json!({"games":games,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults})).into_response()
+    Json(json!({"games":games,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults,"default_bot":crate::bots::DEFAULT_STYLE})).into_response()
 }
 #[derive(Deserialize)]
 struct IdentityInput {
@@ -537,7 +537,7 @@ async fn page(c: Coordinator, id: String, h: HeaderMap) -> Response {
     };
     if !allowed(&game, &h) {
         // IDs are generated internally; user-provided names never enter HTML.
-        return Html(format!(r#"<!doctype html><meta charset="utf-8"><title>Lobby password</title><body style="background:#0e141c;color:#edf4fa;font:18px system-ui;padding:4rem"><h1>Lobby password</h1><form><label>Password <input type="password" autofocus></label> <button>Enter lobby</button><p role="alert"></p></form><a href="/">All games</a><script>document.querySelector('form').onsubmit=async e=>{{e.preventDefault();const r=await fetch('/api/games/{id}/join',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{password:document.querySelector('input').value}})}});const d=await r.json();if(d.error)document.querySelector('p').textContent=d.error;else location.reload();}};</script>"#)).into_response();
+        return Html(format!(r#"<!doctype html><meta charset="utf-8"><title>Lobby password</title><body style="background:#0e141c;color:#edf4fa;font:18px system-ui;padding:4rem"><h1>Lobby password</h1><form><label>Password <input type="password" autofocus></label> <button>Enter lobby</button><p role="alert"></p></form><a href="/lobbies/">All games</a><script>document.querySelector('form').onsubmit=async e=>{{e.preventDefault();const r=await fetch('/api/games/{id}/join',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{password:document.querySelector('input').value}})}});const d=await r.json();if(d.error)document.querySelector('p').textContent=d.error;else location.reload();}};</script>"#)).into_response();
     }
     ws::serve(&c.client, "index.html").await
 }
@@ -665,7 +665,9 @@ async fn guide_file(State(c): State<Coordinator>, Path(path): Path<String>) -> R
 }
 async fn asset(State(c): State<Coordinator>, uri: axum::http::Uri) -> Response {
     match uri.path() {
-        "/" => ws::serve(&c.client, "directory.html").await,
+        "/" => ws::serve(&c.client, "landing.html").await,
+        "/lobbies/" => ws::serve(&c.client, "directory.html").await,
+        "/lobbies" => Redirect::to("/lobbies/").into_response(),
         "/guide" => Redirect::to("/guide/").into_response(),
         p => ws::serve(&c.client, p.trim_start_matches('/')).await,
     }

@@ -19,11 +19,11 @@ export class Net {
   onInstanceChange: () => void = () => {};
   onClose: () => void = () => {};
 
-  constructor() {
+  constructor(private readonly path = location.pathname) {
     window.addEventListener('offline', () => { this.connected = false; this.ws?.close(); this.onClose(); });
   }
   connect(): Promise<void> {
-    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${location.pathname.startsWith('/games/') ? location.pathname.replace(/\/$/, '') : ''}/ws`;
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${this.path.startsWith('/games/') ? this.path.replace(/\/$/, '') : ''}/ws`;
     this.ws = new WebSocket(url);
     this.ws.onmessage = event => {
       const text = String(event.data);
@@ -60,6 +60,7 @@ export class Net {
       this.ws.onerror = () => reject(new Error('cannot connect'));
     });
   }
+  disconnect(): void { this.ws?.close(); }
   on<K extends Kind>(kind: K, handler: (m: Of<K>) => void): void {
     const list = this.handlers.get(kind) ?? [];
     list.push(handler as (m: ServerMessage) => void);

@@ -9,7 +9,7 @@ export function updateRematch(g:Game):void {
     menu=document.createElement('section');menu.id='new-game-menu';menu.setAttribute('role','dialog');menu.setAttribute('aria-label','Game complete');menu.hidden=true;
     const heading=document.createElement('h2');heading.textContent='Game complete';
     const note=document.createElement('p');note.id='new-game-note';
-    const start=document.createElement('button');start.id='new-game-start';start.textContent=botOnly?'Create another game':'Choose maps for a new game';start.onclick=()=>{if(botOnly){location.href='/';return;}if(g.session.token&&g.net.matchId){start.disabled=true;note.textContent='Opening the new lobby for everyone…';g.net.send({kind:'new_match',slot_token:g.session.token,based_on_match_id:g.net.matchId});}};
+    const start=document.createElement('button');start.id='new-game-start';start.textContent=botOnly?'Create another game':'Choose maps for a new game';start.onclick=()=>{if(botOnly){location.href='/lobbies/';return;}if(g.session.token&&g.net.matchId){start.disabled=true;note.textContent='Opening the new lobby for everyone…';g.net.send({kind:'new_match',slot_token:g.session.token,based_on_match_id:g.net.matchId});}};
     const close=document.createElement('button');close.textContent='Keep viewing replay';close.onclick=()=>{menu!.hidden=true;};
     menu.append(heading,note,start,close);document.getElementById('game')!.append(menu);
     opener=document.createElement('button');opener.id='new-game-open';opener.textContent='New game…';opener.onclick=()=>{menu!.hidden=false;};document.getElementById('top')!.append(opener);

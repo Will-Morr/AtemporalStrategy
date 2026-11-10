@@ -187,3 +187,7 @@ The focused `simple win game type can be selected and started` coordinator scena
 ### Small-host lifecycle
 
 `coordinator.spec.mjs` also covers Show inactive games, an update held pending during play, the 30-second idle shutdown grace, same-address recovery, and six-hour expiry blocking direct game/guide/replay access across restart. The expiry test ages the persisted activity timestamp. The existing recent-replay scenario verifies spectator review before expiry. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.
+
+### Home page and quick play
+
+`landing.spec.mjs` covers the first-visit landing page, one-click default-bot startup, real commits and refresh, lobby/guide navigation, existing names, retry after a failed creation response and generated stats from modified server content. It captures desktop, laptop and narrow landing layouts. Coordinator scenarios now open `/lobbies/` to test the directory; standalone workers still open directly into their game lobby. The guide assertions use the Game Explained heading. See the [verification record](integration-verification.md#home-page-quick-play-and-explainer--2026-11-10) for results and screenshot review.
