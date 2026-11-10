@@ -13,5 +13,6 @@ await build({entryPoints:[`${client}src/directory.ts`],bundle:true,format:"esm",
 // Repository-authored HTML fragment: edit the description without changing the page shell.
 const landing=await readFile(`${client}landing.html`,'utf8');
 const description=await readFile(`${client}landing-description.html`,'utf8');
-await writeFile(`${client}dist/landing.html`,landing.replace('<!-- GAME_DESCRIPTION -->',description));
+const [intro,note='']=description.split('<!-- BUTTONS -->');
+await writeFile(`${client}dist/landing.html`,landing.replace('<!-- GAME_DESCRIPTION -->',intro).replace('<!-- EXPERIMENT_NOTE -->',note));
 await build({entryPoints:[`${client}src/landing.ts`],bundle:true,format:'esm',target:'es2022',outfile:`${client}dist/landing.js`,sourcemap:true});

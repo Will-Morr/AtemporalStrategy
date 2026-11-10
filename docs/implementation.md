@@ -30,6 +30,13 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 2. [x] Share actual game-control silhouettes with guide unit descriptions and stats; illustrate battlefield elements.
 3. [x] Run browser checks, inspect desktop/narrow screenshots, refresh generated guide, commit and push.
 
+## Intro and private feedback checklist
+
+1. [x] Give the intro a quick factual review; preserve wording except the approved 3-to-5 correction.
+2. [x] Publish the intro, buttons and experiment note in the requested order; start a persistent WireGuard preview.
+3. [x] Add private persistent end-of-game feedback tied to the exact match log.
+4. [x] Verify browser flow, persistence, privacy and screenshots; update the idle preview, commit and push.
+
 ## Execution policy
 
 The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.

@@ -302,3 +302,15 @@ The generated guide starts with the exact requested “Chatbot Documentation War
 Four real-server Chromium scenarios in `landing.spec.mjs` and `scaffold.spec.mjs` passed in `artifacts/ui/2026-11-10T22-52-43.571Z-541024/`. They check the exact warning and top placement, all 14 role/stat icons, no unexpanded icon placeholders, narrow-page overflow, generated stats, shared selection icons during real gameplay, and existing guide/quick-play navigation. Manually inspected full desktop and narrow guide screenshots: the amber warning is first, unit icons align with their labels, and narrow role descriptions stack beneath the icons. SVGs are embedded in the HTML, without requiring JavaScript. The stats table scrolls horizontally within its own region.
 
 Verification is localhost Chromium, with a 390px-wide guide layout check; this is not mobile-gameplay or WAN validation. Heavy work uses two CPU cores at low priority and one browser worker.
+
+## Authored intro, private feedback and WireGuard preview — 2026-11-10
+
+The landing page now uses the user's exact prose except the explicitly approved change from three to five timeline wins. Buttons appear before the experiment note. A quick factual review identified the deterministic starting-state/seed assumption and the possibility of a simulation ending before resources run out; neither sentence was edited.
+
+The end-of-game dialog accepts a private message. The coordinator durably writes one JSON record per submission beside the exact match replay, including game, match, revision and user references. Same-ID retries are idempotent. There is no public read/list endpoint. The browser scenario verifies submission, restart persistence, duplicate retries, input bounds, invalid match paths and blocked direct reads. This is local persistent storage, not email delivery or a backup service.
+
+The three focused Chromium scenarios passed in `artifacts/ui/2026-11-10T23-03-37.705Z-589239/`. Inspected full rendered landing screenshots at laptop and narrow sizes and the feedback confirmation at 1366×768. Corrected the feedback open button's hidden styling after visual review.
+
+The persistent preview is served at `http://172.26.188.133:8080/` on WireGuard, under tmux session `atemporal-preview`, with state in `/home/tutor/.local/state/atemporal-preview/`. A copied release binary keeps worker spawning independent of subsequent builds. The server accepted an idle-update request and restarted onto the feedback build; the new endpoint was verified over the WireGuard address. This is a preview process, not installation of the production main-branch polling service.
+
+Full `scripts/check.sh` passed with pinned Rust 1.97.1. After the visibility correction, all three focused browser scenarios passed again in `artifacts/ui/2026-11-10T23-07-39.828Z-608435/`; inspected the updated feedback screenshot. A real Chromium visit over the WireGuard URL verified the landing button and guide warning. Work ran sequentially with two CPU cores, low priority and one browser worker.

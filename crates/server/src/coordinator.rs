@@ -365,6 +365,7 @@ pub fn router(c: Coordinator) -> Router {
         .route("/api/identity", post(identity_update))
         .route("/api/games", post(create))
         .route("/api/games/{id}/join", post(join))
+        .route("/api/games/{id}/feedback", post(feedback))
         .route("/games/{id}/guide/", get(game_guide))
         .route("/games/{id}/guide/{*path}", get(game_guide_file))
         .route("/games/{id}/ws", get(game_ws))
@@ -488,6 +489,81 @@ async fn create(State(c): State<Coordinator>, Json(mut input): Json<CreateInput>
         )
             .into_response(),
         e => error(format!("Could not start game: {e:?}")),
+    }
+}
+#[derive(Deserialize)]
+struct FeedbackInput {
+    match_id: String,
+    submission_id: String,
+    message: String,
+    revision: u64,
+}
+async fn feedback(
+    State(c): State<Coordinator>,
+    Path(id): Path<String>,
+    h: HeaderMap,
+    Json(input): Json<FeedbackInput>,
+) -> Response {
+    let _admission = Admission::new(&c);
+    let game = match c.game(&id) {
+        Ok(g) => g,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    if !allowed(&game, &h) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    if !valid_id(&input.match_id)
+        || !valid_id(&input.submission_id)
+        || input.message.trim().is_empty()
+        || input.message.chars().count() > 5000
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"Please enter a message of 1–5000 characters."})),
+        )
+            .into_response();
+    }
+    let root = c.game_root(&id).join("replays").join(&input.match_id);
+    if !root.join("manifest.json").is_file() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    // Serialize submissions with directory writes, including same-ID retries. Feedback is
+    // never returned by directory APIs and its storage is outside the served assets.
+    let d = c.directory.lock().unwrap();
+    let Some(user) = cookie(&h, "atemporal-user").filter(|u| d.users.contains_key(u)) else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let record = json!({"submission_id":input.submission_id,"game_id":id,"match_id":input.match_id,
+        "revision":input.revision,"message":input.message,"user_id":user,"username":d.users[&user],
+        "received_at_ms":now_ms(),"log_path":format!("{id}/replays/{}",input.match_id)});
+    let result = (|| -> Result<()> {
+        let folder = root.join("feedback");
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let path = folder.join(format!("{}.json", input.submission_id));
+        if path.exists() {
+            let previous: Value =
+                serde_json::from_slice(&std::fs::read(&path).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            if previous["message"] != input.message || previous["user_id"] != user {
+                return Err("Submission ID already used. Please reopen the form.".into());
+            }
+        } else {
+            atomic_json(&path, &record)?;
+        }
+        std::fs::File::open(&path)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+        std::fs::File::open(&folder)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => Json(json!({"saved":true})).into_response(),
+        Err(e) => {
+            eprintln!("feedback: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"Could not save feedback. Your message is still here; please retry."}))).into_response()
+        }
     }
 }
 #[derive(Deserialize)]

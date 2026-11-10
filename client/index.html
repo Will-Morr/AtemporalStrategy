@@ -109,7 +109,7 @@ input,select{font:inherit;color:var(--text);background:#141417;border:1px solid 
 .map-choice canvas{width:100%;height:auto;image-rendering:pixelated}.map-choice:disabled{opacity:1;cursor:default}
 .map-choice[aria-pressed=true]{border-color:#79d7ff;background:#21404e}.map-choice strong{padding:3px}
 #new-game-menu{position:absolute;z-index:12;right:20px;top:190px;width:330px;padding:18px;background:#1b2d39;border:1px solid #79d7ff;border-radius:8px;box-shadow:0 8px 30px #0008}
-#new-game-menu h2{margin:0;font-size:20px}#new-game-menu p{color:#c5d4df}#new-game-menu button{display:block;width:100%;margin-top:8px}
+#new-game-menu{max-height:calc(100vh - 210px);overflow-y:auto}#feedback-message{display:block;box-sizing:border-box;width:100%;min-height:120px;resize:vertical;background:#0e1721;color:#edf4fa;border:1px solid #7894aa;border-radius:5px;padding:10px;font:inherit}#feedback-form label{display:block;margin:12px 0 6px}#feedback-status{font-size:14px}#new-game-menu [hidden]{display:none}#new-game-menu h2{margin:0;font-size:20px}#new-game-menu p{color:#c5d4df}#new-game-menu button{display:block;width:100%;margin-top:8px}
 #new-game-start{background:#237447;font-weight:bold}#new-game-open{pointer-events:auto}
 
 /* Timeline controls sit beside the canvas; the three workspace sections stay unchanged. */

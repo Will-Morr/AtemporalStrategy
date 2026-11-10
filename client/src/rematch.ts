@@ -1,4 +1,5 @@
 import type {Game} from './game';
+import {feedbackForm} from './feedback';
 let shown=false;
 export function updateRematch(g:Game):void {
   if(location.pathname.includes('/replays/'))return;
@@ -11,7 +12,8 @@ export function updateRematch(g:Game):void {
     const note=document.createElement('p');note.id='new-game-note';
     const start=document.createElement('button');start.id='new-game-start';start.textContent=botOnly?'Create another game':'Choose maps for a new game';start.onclick=()=>{if(botOnly){location.href='/lobbies/';return;}if(g.session.token&&g.net.matchId){start.disabled=true;note.textContent='Opening the new lobby for everyone…';g.net.send({kind:'new_match',slot_token:g.session.token,based_on_match_id:g.net.matchId});}};
     const close=document.createElement('button');close.textContent='Keep viewing replay';close.onclick=()=>{menu!.hidden=true;};
-    menu.append(heading,note,start,close);document.getElementById('game')!.append(menu);
+    menu.append(heading,note,start,close);
+    if(location.pathname.startsWith('/games/'))menu.append(feedbackForm(g));document.getElementById('game')!.append(menu);
     opener=document.createElement('button');opener.id='new-game-open';opener.textContent='New game…';opener.onclick=()=>{menu!.hidden=false;};document.getElementById('top')!.append(opener);
   }
   opener!.hidden=!g.finished;

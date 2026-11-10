@@ -4,7 +4,7 @@ Requirements: [user specification](../user_spec/lobbies_and_bots.md).
 
 ## Home page and quick play
 
-`/` introduces **Atemporal** with the requested subtitle and repository-authored placeholder description. Edit `client/landing-description.html`; the client build inserts that fragment into `client/landing.html`. Large buttons lead to one-click bot play, the directory at `/lobbies/`, and the explainer at `/guide/`.
+`/` introduces **Atemporal** with the requested subtitle and user-authored description. Edit `client/landing-description.html`; the client build inserts the intro before the buttons and the experiment note after them, splitting at `<!-- BUTTONS -->`. Large buttons lead to one-click bot play, the directory at `/lobbies/`, and the explainer at `/guide/`.
 
 Quick play reuses a saved username or silently creates a `Player` identity. It copies the server's default match settings into a two-player authoritative FFA, picks the first generated map, creates a lobby, claims slot 0 through the ordinary protocol, and starts before navigating to the game. It retains the player token for refresh. A disabled button prevents repeat clicks; a pending game URL permits retry without creating another lobby. The default opponent is centralized in `bots::DEFAULT_STYLE`, currently Rusher. This is the existing aggressive baseline, not a measured strongest-policy ranking. Both the choice and guest name are implementation defaults.
 
@@ -25,3 +25,9 @@ Verification covers coordinator process isolation, passwords, multiple games and
 ## Simple win
 
 The game-type selector includes `simple_win`. It uses configurable scoreboard rules (five timeline wins by default), with no advancing history. Only completed structures count as buildings, including silos; construction ability is irrelevant. The first tick ending with any player lacking buildings ends the simulation, including in teams/FFA. Same-tick losses are resolved together. This cutoff overrides `stop_when_decided`, queued orders, missiles and minimum horizons. These multiplayer and completed-building details are implementation interpretations. Other game types retain their existing survival and cutoff rules.
+
+## Private end-of-game feedback
+
+Public coordinator game-end menus include Give feedback. A message is POSTed to `/api/games/<id>/feedback` and stored as `games/<id>/replays/<match-id>/feedback/<submission-id>.json` under the coordinator data root. Records include the exact match log path, game/match IDs, viewed revision, browser identity/name, receipt timestamp and message. The UI accepts up to 5,000 characters and keeps unsent text on failure. A per-message submission ID makes retries idempotent across coordinator restarts. The write is flushed before success is reported.
+
+Feedback has no read/list endpoint and is not included in the public directory. It remains on disk with the archived game even after public viewing expires. Existing lobby password access and a known browser identity are required; these remain casual identity/access controls, not verified accounts. The creator can inspect the JSON files directly. There is no email delivery, public inbox or standalone-worker feedback route.

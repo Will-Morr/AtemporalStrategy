@@ -106,4 +106,4 @@ To combine the default first-to-five scoreboard with 100 ticks of fixed history 
 
 For a small unattended remote host, see [hosting and automatic updates](docs/hosting.md).
 
-The home-page description lives in [`client/landing-description.html`](client/landing-description.html). Replace its lorem ipsum paragraphs and run `npm run build --prefix client` to include your prose. The page shell is `client/landing.html`.
+The home-page description lives in [`client/landing-description.html`](client/landing-description.html). Edit its intro and experiment note, preserving the `<!-- BUTTONS -->` marker between them, and run `npm run build --prefix client` to include your prose. The page shell is `client/landing.html`.
