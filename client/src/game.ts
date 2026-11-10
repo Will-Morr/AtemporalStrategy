@@ -133,6 +133,7 @@ export class Game {
   get spectator(): boolean {
     return this.session.slot === null;
   }
+  get fullVision(): boolean { return this.spectator || this.rev() !== null; }
   color(owner: number): string {
     const team = this.profiles[owner]?.profile?.team_id;
     if (team) { const first = this.profiles.find(s => s.profile?.team_id === team); if (first?.profile) return first.profile.color; }
@@ -425,9 +426,9 @@ export class Game {
   entities(): EntityView[] {
     const all = this.rawEntities();
     const visible = this.visibility(all);
-    const views = all.filter(e => this.spectator || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
+    const views = all.filter(e => this.fullVision || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
     if (this.exact?.revision === this.current && this.exact.tick === Math.floor(this.playhead)) {
-      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.spectator)) {
+      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.fullVision)) {
         views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
       }
     }
@@ -853,7 +854,7 @@ export class Game {
         return;
       }
       if (this.mode.kind === 'place' && this.mode.type_key !== 'wall') {
-        this.placeAt(tile);
+        this.placeAt(tile, tile, e.shiftKey);
         return;
       }
       if (this.mode.kind === 'support') {
@@ -886,7 +887,7 @@ export class Game {
       const b = this.renderer.tileAt(drag.x1, drag.y1);
       const rect = { min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) }, max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) } };
       if (this.mode.kind === 'place') {
-        this.placeAt(a, b);
+        this.placeAt(a, b, e.shiftKey);
         return;
       }
       if (this.mode.kind === 'area') {
@@ -989,7 +990,7 @@ export class Game {
     this.updateMode();
   }
 
-  placeAt(tile: Tile, end: Tile = tile): void {
+  placeAt(tile: Tile, end: Tile = tile, repeat = false): void {
     if (this.mode.kind !== 'place') return;
     const type_key = this.mode.type_key;
     const def = this.types.get(type_key);
@@ -997,7 +998,7 @@ export class Game {
     if (tiles.some(t => !this.validPlacement(t, !!def?.production && !def.silo))) { this.toast('Placement blocked: choose clear floor and an open factory output.'); return; }
     const command: Command = { kind: 'place_blueprints', type_key, tiles, priority: 'medium', output_directions: def?.production && !def.silo ? tiles.map(() => this.renderer.outputDirection) : null };
     this.stage(command);
-    this.mode = { kind: 'none' };
+    if (!repeat) this.mode = { kind: 'none' };
     this.updateMode();
   }
 
@@ -1292,7 +1293,15 @@ export class Game {
       result.dataset.outcome = verdict.toLowerCase();
       const banner = $('outcome-banner');
       banner.dataset.outcome = verdict.toLowerCase();
-      banner.textContent = `${this.finished ? 'MATCH ENDED · ' : 'TIMELINE RESULT · '}${verdict} · ${this.finished ? 'Replay remains available' : o.stop_reason === 'elimination' ? 'Simulation stopped: remaining opposition cannot act · Plan a new timeline or replay' : 'Simulation finished · Final survival determines this result · Replay available'}`;
+      const title=document.createElement('strong');
+      title.textContent=`TIMELINE ${rev.revision} · ${verdict}${this.finished ? ' · MATCH ENDED' : ''}`;
+      const explanation=document.createElement('div');
+      const eliminated=o.eliminated.includes(this.player!);
+      const transition=[...o.survival_transitions].reverse().find(t=>t.player_id===this.player && t.status==='eliminated');
+      const reasons=transition?.reasons.map(r=>r==='no_build_ability'?'no completed constructors or factories remained':'no completed survival buildings remained').join('; ');
+      explanation.textContent=eliminated ? `At the final tick (${o.terminal_state_tick}), ${reasons || 'your side was eliminated'}. Buildings visible at earlier ticks do not change that final result.` : `Final result at tick ${o.terminal_state_tick}. ${o.kind==='stalemate'?'Both sides still survived.':o.kind==='draw'?'No players survived.':'Survivors: '+o.survivors.map(p=>this.name(p)).join(', ')+'.'}`;
+      const end=document.createElement('button');end.textContent='View final state';end.onclick=()=>this.seek(o.terminal_state_tick);
+      banner.replaceChildren(title,explanation,end);
       const lines = [`<b>Revision ${rev.revision}</b>: ${o.kind} (${o.stop_reason.replace('_', ' ')} at tick ${o.terminal_state_tick}, last progress ${o.last_progress_tick})`];
       lines.push(`survivors: ${o.survivors.map(p => this.name(p)).join(', ') || 'none'}`);
       if (rev.score) lines.push(rev.score.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id}: +${e.raw_delta} → ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · '));

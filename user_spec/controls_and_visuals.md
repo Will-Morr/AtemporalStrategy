@@ -113,3 +113,7 @@ Warn visibly about queued units and factories without orders, especially miners 
 Keep unsupported actions unavailable for selected units, including keyboard shortcuts. Structure planning is a global action independent of constructor selection; placing a blueprint must not imply that a selected constructor has been assigned to build it. Constructor work orders remain a separate action.
 
 The remaining fixed-height workspace still wastes too much space, including for large selections. Reduce its overall footprint further while retaining the existing sections.
+
+## Latest playtest corrections
+
+Hold Shift while placing a building to keep that building selected for repeated placement, including wall lines. Recorded timelines and replays give all players full vision. This supersedes the earlier replay fog requirement. Put the timeline result explanation beneath its main label, state that it describes the final tick, and offer a jump to that state instead of generic “replay available” text. A completed living factory prevents elimination; an earlier replay frame must not be presented as the final state.

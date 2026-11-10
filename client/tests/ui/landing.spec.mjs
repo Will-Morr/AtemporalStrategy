@@ -105,6 +105,8 @@ test('end-of-game feedback is private, persistent and linked to the exact match'
   await page.goto(server.url);await page.getByRole('button',{name:'Play Against Bot',exact:true}).click();await revision(page,0);
   await page.locator('#commit').click();await revision(page,1);
   await expect(page.getByRole('dialog',{name:'Game complete'})).toBeVisible();
+  await expect(page.locator('#outcome-banner strong')).toContainText('LOSS');
+  await expect(page.locator('#outcome-banner > div')).toContainText('At the final tick');
   const match=await page.evaluate(()=>window.atemporal.net.matchId),id=new URL(page.url()).pathname.split('/')[2];
   await page.getByRole('button',{name:'Give feedback',exact:true}).click();
   const message='I liked changing the timeline. <script>This stays private.</script>';

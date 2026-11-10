@@ -46,6 +46,14 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 5. [x] Run focused real-browser scenarios, inspect screenshots, refresh fixtures and validate the generator.
 6. [x] Commit and push the isolated review branch for integration.
 
+## Latest playtest fixes
+
+1. [x] Inspect saved losses and verify completed factories prevent elimination.
+2. [x] Put final-tick explanations beneath the result heading with a jump to final state.
+3. [x] Keep building placement active when Shift is held.
+4. [x] Show full vision to all players in recorded timelines.
+5. [x] Verify browser interactions and screenshots; publish fixes and reviewed Game Docs.
+
 ## Execution policy
 
 The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.

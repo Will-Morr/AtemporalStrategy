@@ -72,3 +72,16 @@ fn unfinished_buildings_do_not_prevent_loss_and_simultaneous_losses_draw() {
     assert_eq!(run.result.outcome.kind, OutcomeKind::Draw);
     assert_eq!(run.result.outcome.eliminated, vec![0, 1]);
 }
+
+#[test]
+fn completed_factory_alone_prevents_scoreboard_elimination() {
+    let mut w = World::new(&MAP);
+    w.config.objective = Objective::Scoreboard {
+        rules: ScoreboardRules::default(),
+    };
+    w.spawn(0, "factory", 1, 1);
+    w.spawn(1, "factory", 12, 6);
+    let run = w.run();
+    assert_eq!(run.result.outcome.survivors, vec![0, 1]);
+    assert!(run.result.outcome.eliminated.is_empty());
+}
