@@ -30,6 +30,8 @@ Units have health bars showing damage and rotate to indicate the direction they 
 
 ## Player guide and lobby
 
+The documentation page should use the same dark blue color palette as the landing page and game UI.
+
 The latest [landing-page requirements](lobbies_and_bots.md#landing-page-and-quick-play) put a title, description and three main actions at the public home page. View Lobby leads to the game directory; setup controls remain inside each game lobby.
 
 At the top of the info page, clearly display: **“Chatbot Documentation Warning: No human has taken the time to document this part yet”**. Add attractive iconography matching the actual units and game elements.
