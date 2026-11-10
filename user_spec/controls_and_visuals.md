@@ -117,3 +117,5 @@ The remaining fixed-height workspace still wastes too much space, including for 
 ## Latest playtest corrections
 
 Hold Shift while placing a building to keep that building selected for repeated placement, including wall lines. Recorded timelines and replays give all players full vision. This supersedes the earlier replay fog requirement. Put the timeline result explanation beneath its main label, state that it describes the final tick, and offer a jump to that state instead of generic “replay available” text. A completed living factory prevents elimination; an earlier replay frame must not be presented as the final state.
+
+Remove assistant-written promotional subtitles/taglines from page headers and dialogs. Keep the user-authored landing subtitle and prose; use functional headings and instructions elsewhere.
