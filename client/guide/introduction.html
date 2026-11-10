@@ -1,6 +1,11 @@
 <h1>Game Explained</h1>
 <p>Atemporal is an RTS you can inspect and rewrite through time. Choose a moment, give your units orders, and commit. When every player commits, the battlefield runs again from the earliest change. Watch what happened, then change your plan in the next round.</p>
 <nav aria-label="Guide contents"><a href="#ui">The UI</a> · <a href="#command-types">Commands</a> · <a href="#unit-roles">Unit roles</a> · <a href="#units">Unit stats</a> · <a href="#full-rules">Full rules</a></nav>
+<div class="visual-key" aria-label="Battlefield visual key">
+<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" fill="#74747a"/><rect x="3" y="3" width="12" height="12" fill="#ffcd38"/><rect x="16" y="16" width="13" height="13" fill="#ffcd38"/></svg>Ore on the battlefield</span>
+<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 12H30" stroke="#4fc3f7" stroke-width="5"/><path d="M2 22H30" stroke="#aed581" stroke-width="5"/><path d="M19 5V29" stroke="#fff" stroke-width="2"/></svg>Player timelines &amp; playhead</span>
+<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="24" height="24" fill="none" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="4 3"/></svg>Planned construction</span>
+</div>
 <h2 id="ui">Your first turn</h2>
 <ol>
 <li><strong>Inspect the battlefield.</strong> Click or drag a box to select units. Your selection and available actions appear below the map; the minimap helps you navigate. The top bar shows matter, scores and your current round.</li>
@@ -19,18 +24,20 @@
 <p>Actions only appear for compatible units. New task orders can keep or replace later orders; inspect the plan before committing. Detailed keyboard shortcuts and replacement rules are below.</p>
 <h2 id="unit-roles">Meet your units</h2>
 <dl class="unit-roles">
-<dt>Miner</dt><dd>Gathers matter from ore to fund your army.</dd>
-<dt>Constructor</dt><dd>Builds structures and can also mine, more slowly than a miner.</dd>
-<dt>Factory</dt><dd>Produces mobile units from a queue and assigns their initial orders.</dd>
-<dt>Grunt</dt><dd>A light, direct-fire fighter for early attacks.</dd>
-<dt>Scout</dt><dd>Explores and supplies vision, with a light weapon.</dd>
-<dt>Tank</dt><dd>A durable direct-fire combat unit.</dd>
-<dt>Grinder</dt><dd>Closes the distance to attack at melee range.</dd>
-<dt>Artillery</dt><dd>Provides long-range indirect fire.</dd>
-<dt>Turret</dt><dd>A stationary weapon for defending an area; repairs itself using matter.</dd>
-<dt>Wall</dt><dd>Blocks routes and shapes movement through an area.</dd>
-<dt>Silo</dt><dd>Builds and stores missiles, then launches them at chosen targets.</dd>
-<dt>Missiles</dt><dd>Satellite provides vision, Cluster damages a wide area, and Tac nuke destroys units and structures in a smaller area. Explosions can hit allies too.</dd>
+<dt><span data-unit-icon="miner"></span>Miner</dt><dd>Gathers matter from ore to fund your army.</dd>
+<dt><span data-unit-icon="constructor"></span>Constructor</dt><dd>Builds structures and can also mine, more slowly than a miner.</dd>
+<dt><span data-unit-icon="factory"></span>Factory</dt><dd>Produces mobile units from a queue and assigns their initial orders.</dd>
+<dt><span data-unit-icon="grunt"></span>Grunt</dt><dd>A light, direct-fire fighter for early attacks.</dd>
+<dt><span data-unit-icon="scout"></span>Scout</dt><dd>Explores and supplies vision, with a light weapon.</dd>
+<dt><span data-unit-icon="tank"></span>Tank</dt><dd>A durable direct-fire combat unit.</dd>
+<dt><span data-unit-icon="grinder"></span>Grinder</dt><dd>Closes the distance to attack at melee range.</dd>
+<dt><span data-unit-icon="artillery"></span>Artillery</dt><dd>Provides long-range indirect fire.</dd>
+<dt><span data-unit-icon="turret"></span>Turret</dt><dd>A stationary weapon for defending an area; repairs itself using matter.</dd>
+<dt><span data-unit-icon="wall"></span>Wall</dt><dd>Blocks routes and shapes movement through an area.</dd>
+<dt><span data-unit-icon="silo"></span>Silo</dt><dd>Builds and stores missiles, then launches them at chosen targets.</dd>
+<dt><span data-unit-icon="satellite"></span>Satellite</dt><dd>Reveals the area along its flight and at its destination.</dd>
+<dt><span data-unit-icon="cluster"></span>Cluster</dt><dd>Damages units and structures across a wide area, including allies.</dd>
+<dt><span data-unit-icon="tac_nuke"></span>Tac nuke</dt><dd>Destroys units and structures in a smaller blast area, including allies.</dd>
 </dl>
 <p><a href="#units">Compare unit stats ↓</a> — costs, health, movement, weapons and work rates come directly from this server’s game content.</p>
 <details id="full-rules"><summary>Full rules, keyboard shortcuts and advanced controls</summary>

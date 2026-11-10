@@ -8,7 +8,7 @@ Requirements: [user specification](../user_spec/lobbies_and_bots.md).
 
 Quick play reuses a saved username or silently creates a `Player` identity. It copies the server's default match settings into a two-player authoritative FFA, picks the first generated map, creates a lobby, claims slot 0 through the ordinary protocol, and starts before navigating to the game. It retains the player token for refresh. A disabled button prevents repeat clicks; a pending game URL permits retry without creating another lobby. The default opponent is centralized in `bots::DEFAULT_STYLE`, currently Rusher. This is the existing aggressive baseline, not a measured strongest-policy ranking. Both the choice and guest name are implementation defaults.
 
-The explainer gives a short UI walkthrough, command summaries and unit roles. Full rules are expandable; unit statistics are still generated from effective server content, with game-specific guides using pinned match content.
+The explainer opens with the requested chatbot-documentation warning, then gives a short UI walkthrough, command summaries and unit roles. Its static unit SVGs share `client/unit-icons.json` with the game’s selection and production controls; a visual key illustrates ore, timelines and construction previews. Full rules are expandable; unit statistics are still generated from effective server content, with game-specific guides using pinned match content.
 
 ## Current implementation
 

@@ -191,3 +191,5 @@ The focused `simple win game type can be selected and started` coordinator scena
 ### Home page and quick play
 
 `landing.spec.mjs` covers the first-visit landing page, one-click default-bot startup, real commits and refresh, lobby/guide navigation, existing names, retry after a failed creation response and generated stats from modified server content. It captures desktop, laptop and narrow landing layouts. Coordinator scenarios now open `/lobbies/` to test the directory; standalone workers still open directly into their game lobby. The guide assertions use the Game Explained heading. See the [verification record](integration-verification.md#home-page-quick-play-and-explainer--2026-11-10) for results and screenshot review.
+
+The info-page checks also verify the exact chatbot warning at the top, 14 shared unit-role and stats icons, expanded static SVG markup, and no horizontal page overflow at 390px. The quick-play scenario selects all starting units to exercise the same icons in game controls. See the [shared-icon verification record](integration-verification.md#info-page-warning-and-shared-icons--2026-11-10).

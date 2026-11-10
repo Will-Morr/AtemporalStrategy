@@ -32,6 +32,8 @@ Units have health bars showing damage and rotate to indicate the direction they 
 
 The latest [landing-page requirements](lobbies_and_bots.md#landing-page-and-quick-play) put a title, description and three main actions at the public home page. View Lobby leads to the game directory; setup controls remain inside each game lobby.
 
+At the top of the info page, clearly display: **“Chatbot Documentation Warning: No human has taken the time to document this part yet”**. Add attractive iconography matching the actual units and game elements.
+
 Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
 
 Link the guide from the landing page where players select teams. Players enter a username and choose a color. During setup, all usernames and player colors must be clearly visible and update for everyone as they change, so the full lobby state is known before starting.
