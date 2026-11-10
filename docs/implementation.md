@@ -37,6 +37,15 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 3. [x] Add private persistent end-of-game feedback tied to the exact match log.
 4. [x] Verify browser flow, persistence, privacy and screenshots; update the idle preview, commit and push.
 
+## Game Docs review checklist
+
+1. [x] Inspect the rendered guide and verify instructions against the current UI and construction/group behavior.
+2. [x] Rename it Game Docs and put the five main actions and positional construction explanation first.
+3. [x] Cover the visible interface and command groups, with deeper mechanics at the bottom.
+4. [x] Group named unit descriptions and generated stat cards into Buildings, Utility, Combat and Missiles.
+5. [x] Run focused real-browser scenarios, inspect screenshots, refresh fixtures and validate the generator.
+6. [x] Commit and push the isolated review branch for integration.
+
 ## Execution policy
 
 The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.

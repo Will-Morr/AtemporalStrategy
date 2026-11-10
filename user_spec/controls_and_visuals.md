@@ -30,11 +30,11 @@ Units have health bars showing damage and rotate to indicate the direction they 
 
 ## Player guide and lobby
 
-The documentation page should use the same dark blue color palette as the landing page and game UI.
+The documentation page should use the same dark blue color palette as the landing page and game UI. Name the page and its navigation link **Game Docs**. Put the main play actions up front with concrete instructions: place buildings, queue units, set units to attack, set a mining area, and set a construction area. Cover the whole visible interface in useful depth, explicitly including command groups. Put the main actions first, the interface/control reference next, and deeper largely invisible mechanics at the bottom. Review the rendered guide manually and fix awkward formatting and phrasing. Unit icons and boxes must have clear names and explain what they represent. Group descriptions and stats as **Buildings**, **Utility** (miner and constructor), **Combat** (other mobile units), and **Missiles**, rather than one alphabetical list. Prominently explain the positional construction system: buildings are queued at map locations, not in a particular constructor’s queue; constructors are assigned areas to work in.
 
 The latest [landing-page requirements](lobbies_and_bots.md#landing-page-and-quick-play) put a title, description and three main actions at the public home page. View Lobby leads to the game directory; setup controls remain inside each game lobby.
 
-At the top of the info page, clearly display: **“Chatbot Documentation Warning: No human has taken the time to document this part yet”**. Add attractive iconography matching the actual units and game elements.
+At the top of the info page, clearly display: **“Chatbot Docs Warning: Better than nothing but this part is somewhat reviewed claudelist”**. Add attractive iconography matching the actual units and game elements.
 
 Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
 

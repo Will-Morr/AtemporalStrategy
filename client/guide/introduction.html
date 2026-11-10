@@ -1,78 +1,93 @@
-<h1>Game Explained</h1>
-<p>Atemporal is an RTS you can inspect and rewrite through time. Choose a moment, give your units orders, and commit. When every player commits, the battlefield runs again from the earliest change. Watch what happened, then change your plan in the next round.</p>
-<nav aria-label="Guide contents"><a href="#ui">The UI</a> · <a href="#command-types">Commands</a> · <a href="#unit-roles">Unit roles</a> · <a href="#units">Unit stats</a> · <a href="#full-rules">Full rules</a></nav>
-<div class="visual-key" aria-label="Battlefield visual key">
-<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" fill="#74747a"/><rect x="3" y="3" width="12" height="12" fill="#ffcd38"/><rect x="16" y="16" width="13" height="13" fill="#ffcd38"/></svg>Ore on the battlefield</span>
-<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 12H30" stroke="#4fc3f7" stroke-width="5"/><path d="M2 22H30" stroke="#aed581" stroke-width="5"/><path d="M19 5V29" stroke="#fff" stroke-width="2"/></svg>Player timelines &amp; playhead</span>
-<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="24" height="24" fill="none" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="4 3"/></svg>Planned construction</span>
-</div>
-<h2 id="ui">Your first turn</h2>
-<ol>
-<li><strong>Inspect the battlefield.</strong> Click or drag a box to select units. Your selection and available actions appear below the map; the minimap helps you navigate. The top bar shows matter, scores and your current round.</li>
-<li><strong>Choose when to act.</strong> Use the timeline below the map to play, pause or seek. Orders apply at the chosen tick. The first order fixes your draft’s tick; use Rebase draft here if you want to move the whole draft.</li>
-<li><strong>Plan and commit.</strong> Set up mining, construction or attacks. The plan panel shows your pending changes, with undo/redo. Commit submits them together; an empty commit passes. Uncommit lets you edit while waiting, until everyone has committed. Inspect the resulting replay and repeat.</li>
+<header class="guide-heading">
+<h1>Game Docs</h1>
+<p class="lead">Watch a battle play out, choose one moment to change your orders, then see how the new timeline unfolds.</p>
+</header>
+<nav aria-label="Guide contents"><a href="#main-actions">Main actions</a><a href="#ui">First turn</a><a href="#command-types">Commands</a><a href="#interface">Interface &amp; groups</a><a href="#unit-roles">Unit guide</a><a href="#units">Unit stats</a><a href="#full-rules">Detailed rules</a></nav>
+<section aria-labelledby="main-actions">
+<h2 id="main-actions">The five main actions</h2>
+<p>Select your units and choose a time on the timeline before giving orders. These are the actions you will use most:</p>
+<ol class="action-steps">
+<li><h3>Place buildings</h3><p>Select a constructor, press <kbd>B</kbd>, choose a building type, then click its location on the map. This places a <strong>blueprint</strong>. It does not give that constructor a build order.</p></li>
+<li><h3>Queue units</h3><p>Select a factory or its blueprint. Click a unit’s <strong>+</strong> button in the production panel to add it to the queue. Shift-click adds five. A blueprint’s queue starts once the factory is built.</p></li>
+<li><h3>Set units to attack</h3><p>Select combat units, press <kbd>F</kbd> for <strong>Attack-move</strong>, then click a destination. They move toward it and fight enemies they encounter.</p></li>
+<li><h3>Set a mining area</h3><p>Select miners or constructors, press <kbd>M</kbd>, then drag a rectangle over yellow ore. They collect ore inside that area and add matter to your bank.</p></li>
+<li><h3>Set a construction area</h3><p>Select constructors, press <kbd>C</kbd>, then drag a rectangle around your blueprints. They travel to reachable sites in that area and build them.</p></li>
 </ol>
-<p>You begin with a miner, constructor and turret. A useful opening is to send the miner to ore, place a factory blueprint, and tell the constructor to build in that area. Queue units at the factory and give its output an order so new units know where to go.</p>
+<p>Review these changes in <strong>Planning</strong>, then press <strong>Commit</strong> to submit your turn.</p>
+</section>
+<aside class="construction-note"><h3>Buildings are queued on the map</h3><p>A blueprint says <strong>what to build and where</strong>. It is not a job in one constructor’s personal queue. A constructor’s <strong>Construct</strong> order says <strong>which area to work in</strong>.</p><p>For example, place a factory and two turrets near your base, then drag a construction area around them. Your constructors assigned to that area choose reachable sites by travel distance. Several constructors can help with the same building. If one leaves or is destroyed, the blueprints remain for your other constructors to build.</p></aside>
+<section aria-labelledby="ui">
+<h2 id="ui">Your first turn</h2>
+<p>Each round gives you a replay of the battle. The timeline below the map lets you move backward and forward through it. Choose a time, plan your changes, then press <strong>Commit</strong>. Once everyone commits, the game runs the battle again from the earliest change.</p>
+<ol class="first-turn">
+<li><strong>Find your units.</strong> You start with a miner, a constructor and a turret. Click a unit to select it, or drag a box around several. Their names and available commands appear below the map.</li>
+<li><strong>Choose the time.</strong> Click the timeline to inspect a moment in the battle. Your first order sets the time for this round’s plan. All other changes in that plan use the same time. <strong>Rebase draft here</strong> moves the plan to the moment you are viewing.</li>
+<li><strong>Give orders.</strong> Select the miner, choose <strong>Mine</strong>, then drag over yellow ore. Select the constructor and place a factory blueprint. Choose <strong>Construct</strong> and drag over that blueprint so the constructor will build it.</li>
+<li><strong>Check your plan and commit.</strong> The Planning panel lists your changes. You can undo them before committing. Committing an empty plan passes. While waiting for another player, <strong>Uncommit</strong> lets you edit again.</li>
+</ol>
+<p>When the new replay is ready, inspect what worked and choose your next change. In the default game, the first player to win five timelines wins the match. Other game modes and win targets are shown in the lobby.</p>
+
+<div class="visual-key" aria-label="Battlefield visual key">
+<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" fill="#74747a"/><rect x="3" y="3" width="12" height="12" fill="#ffcd38"/><rect x="16" y="16" width="13" height="13" fill="#ffcd38"/></svg><span><strong>Yellow tiles: ore</strong><small>Mine it to collect matter. Exhausted ore turns gray.</small></span></span>
+<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><path d="M2 12H30" stroke="#4fc3f7" stroke-width="5"/><path d="M2 22H30" stroke="#aed581" stroke-width="5"/><path d="M19 5V29" stroke="#fff" stroke-width="2"/></svg><span><strong>Timeline: when orders happen</strong><small>Each player has a row. The white line is the time you are viewing.</small></span></span>
+<span><svg class="game-symbol" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="24" height="24" fill="none" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="4 3"/></svg><span><strong>Blueprint: planned building</strong><small>It still needs a constructor assigned to its area.</small></span></span>
+</div>
+</section>
+<section aria-labelledby="command-types">
 <h2 id="command-types">What commands do</h2>
-<ul>
-<li><strong>Attack-move and Support:</strong> move toward a destination while attacking, or follow a friendly unit and assist using the selected unit’s capabilities. Idle stops its assigned task.</li>
-<li><strong>Mine and Construct:</strong> drag an area to gather ore or build available blueprints. Place a blueprint first; placing one does not automatically assign a constructor.</li>
-<li><strong>Production and settings:</strong> queue units or missiles, choose whether queue items repeat, and set matter priority. Off pauses spending. Factory output orders and groups determine what newborn units do.</li>
-<li><strong>Groups:</strong> assign units to groups 0–9, recall a group with its number, and command its members together. Factories can add new units to a group.</li>
-<li><strong>Missile launches:</strong> choose a missile type and a target. The preview shows flight time and affected area; a launch waits for matching ammunition. Automatic targeting can fire stored missiles at visible enemies.</li>
-</ul>
-<p>Actions only appear for compatible units. New task orders can keep or replace later orders; inspect the plan before committing. Detailed keyboard shortcuts and replacement rules are below.</p>
-<h2 id="unit-roles">Meet your units</h2>
-<dl class="unit-roles">
-<dt><span data-unit-icon="miner"></span>Miner</dt><dd>Gathers matter from ore to fund your army.</dd>
-<dt><span data-unit-icon="constructor"></span>Constructor</dt><dd>Builds structures and can also mine, more slowly than a miner.</dd>
-<dt><span data-unit-icon="factory"></span>Factory</dt><dd>Produces mobile units from a queue and assigns their initial orders.</dd>
-<dt><span data-unit-icon="grunt"></span>Grunt</dt><dd>A light, direct-fire fighter for early attacks.</dd>
-<dt><span data-unit-icon="scout"></span>Scout</dt><dd>Explores and supplies vision, with a light weapon.</dd>
-<dt><span data-unit-icon="tank"></span>Tank</dt><dd>A durable direct-fire combat unit.</dd>
-<dt><span data-unit-icon="grinder"></span>Grinder</dt><dd>Closes the distance to attack at melee range.</dd>
-<dt><span data-unit-icon="artillery"></span>Artillery</dt><dd>Provides long-range indirect fire.</dd>
-<dt><span data-unit-icon="turret"></span>Turret</dt><dd>A stationary weapon for defending an area; repairs itself using matter.</dd>
-<dt><span data-unit-icon="wall"></span>Wall</dt><dd>Blocks routes and shapes movement through an area.</dd>
-<dt><span data-unit-icon="silo"></span>Silo</dt><dd>Builds and stores missiles, then launches them at chosen targets.</dd>
-<dt><span data-unit-icon="satellite"></span>Satellite</dt><dd>Reveals the area along its flight and at its destination.</dd>
-<dt><span data-unit-icon="cluster"></span>Cluster</dt><dd>Damages units and structures across a wide area, including allies.</dd>
-<dt><span data-unit-icon="tac_nuke"></span>Tac nuke</dt><dd>Destroys units and structures in a smaller blast area, including allies.</dd>
+<p>Only commands your selection can use are shown. Choose a command below the map, then click a target or drag an area as prompted.</p>
+<dl class="command-list">
+<div><dt>Attack-move</dt><dd>Move toward a point and fight enemies along the way.</dd></div>
+<div><dt>Support</dt><dd>Follow a friendly unit and help using the selected unit’s abilities.</dd></div>
+<div><dt>Mine</dt><dd>Collect matter from ore inside the rectangle you drag.</dd></div>
+<div><dt>Construct</dt><dd>Assign constructors to an area. They work on your reachable blueprints inside it; blueprints belong to map locations, not to a particular constructor.</dd></div>
+<div><dt>Idle</dt><dd>Stop the unit’s assigned task.</dd></div>
+<div><dt>Production</dt><dd>Queue units at a factory or missiles at a silo. Queue items can repeat. Give a factory’s new units a starting order so they know what to do.</dd></div>
+<div><dt>Matter priority</dt><dd>Choose which construction, production or repairs receive matter first. High goes before Medium and Low. Off pauses spending.</dd></div>
+<div><dt>Missile targets</dt><dd>Choose a missile and click its destination. The preview shows the blast area and flight time. A launch waits until that missile is in stock.</dd></div>
 </dl>
-<p><a href="#units">Compare unit stats ↓</a> — costs, health, movement, weapons and work rates come directly from this server’s game content.</p>
-<details id="full-rules"><summary>Full rules, keyboard shortcuts and advanced controls</summary>
-<h2>Games and practice opponents</h2>
-<p>For an immediate solo game, choose <strong>Play Against Bot</strong> on the home page. To customize a game, choose <strong>View Lobby</strong>, enter a username on the game directory, then create a game or enter an open lobby. Names do not need to be unique. Joining defaults to spectating; claim a slot before starting to play. The first occupied human slot chooses from five shared maps and starts once all slots are filled. Open game links in separate tabs to play multiple matches. The directory offers active/open filters, your games, and read-only recent replays.</p>
-<p>For solo practice, add a Rusher (grunts), Builder (tanks), or Raider (flanking grinders) at creation. These simple bots use normal resources, visibility and validated orders. They establish mining and production, then intervene at later timeline ticks. They are intentionally easy, with no deep planning. Bot-only playtests stop and archive at their selected round budget; human games have no added round limit.</p>
-<h2 id="economy">Build an economy</h2>
-<p>You begin with a miner, constructor, and turret. Send the miner onto ore, place a factory blueprint, and assign the constructor to build in that area. Constructors can also mine at half the miner’s throughput. Matter flows into your bank and pays for construction and production continuously. High priority gets funded before medium and low; consumers within a tier share the available matter. Off stops spending. With default content, turrets automatically repair at 0.5 HP per tick for 1 matter per HP, half their construction efficiency; repair continues while firing.</p>
-<p>Choose whether new queue items should loop, then queue units at a factory (Shift-click adds five), and give its output a stored order so newborn units leave the output tile. Each queued item keeps its own loop flag and rejoins the tail after spawning if marked ↻. Use its ↻ / 1× button to change that item; the Loop new items switch only affects later additions. Fully paid units wait when output is blocked. Canceling paid work loses its investment. A damaged construction site keeps its damage as it grows.</p>
-<h2 id="orders">Orders and control groups</h2>
-<p>Attack-move advances toward a destination and attacks when possible. Support follows an ally and assists with the unit’s available capabilities. Mining and construction use selected areas. Walkers can move diagonally without cutting wall corners; vehicles move along the axes. Allied mobile bots can yield by stepping aside or swapping when there is a legal space. Weapons, vision, movement, and work rates differ by type.</p>
-<p>Groups use keys 0–9. A group order commands its members once and is saved for newborn units from bound factories. Individual orders can override it until another group order arrives. Factory output binding and selecting a factory as a group member are separate settings.</p>
-<h2>Rewrite the future</h2>
-<p>Stage orders at one chosen tick and undo changes until committing. When assigning an action, keep future orders, drop all later orders for the selected recipients, or use the configured following time window. Priority, queue, and other settings keep future orders. Review the estimated skipped orders. A successful replacement locks older future assignments and settings for its following interval; same-round and newer orders still apply. If its target disappears after a rewrite, no lock is installed. Group locks also protect saved orders and are inherited by newborns. Single-order mode allows one command per turn; timestamp mode permits multiple commands at the selected tick.</p>
-<h2 id="survival">Survival and winning</h2>
-<p>A player needs both a completed active building (turret or factory) and a completed constructor or factory. Losing either requirement eliminates the player temporarily. Their remaining units keep acting, and finishing a factory can restore them. The simulation continues until inactivity or its maximum tick limit, including when everyone is temporarily eliminated.</p>
-<p>The final state determines the result: everyone alive is a stalemate, some alive is a win, and nobody alive is a draw. Stalemates never score. Wins score for final survivors; teams earn their surviving-member count. Draws award nobody or everyone according to setup.</p>
-<p><strong>Simple win</strong> ends a timeline immediately when any player has no completed buildings left. Turrets, factories and silos count; unfinished sites and mobile units do not. A remaining building keeps you alive even without a constructor. Remaining orders and missiles do not delay the stop. Simple win uses timeline-win scoring, with a default target of five points.</p>
-<p>Scoreboard mode awards each resolved round, including unchanged winning passes. The default target is 5, with tied leaders continuing until one qualifies alone. Setup can change the target, use a required lead, allow shared victory, or enable thinking-time penalties. Scoreboard rounds have no automatic round limit; the host can stop and archive an unfinished match without adding points. Timed mode locks a configured span of history after each planning round. A player loses timed eligibility when that locked state contains no completed constructor or factory; losing only active buildings is not enough. Hybrid mode combines the scoreboard target with a fixed advance of immutable history each round, without timed-mode permanent elimination. Inspect the lobby’s rules for the selected match.</p>
-<p>While the simulation runs, you can play or scrub the completed part of the new replay. The turquoise frontier marks the available ticks; the dark remainder is still being computed. Playback waits at that frontier and resumes as more ticks arrive. The result stays pending and orders remain closed until the full replay is verified. Refreshing rejoins the available preview, and final publication preserves the tick you are inspecting.</p>
+<p><strong>Groups</strong> let you recall and command units together with keys 0–9. When rewriting an order, choose whether to keep or remove its later orders. The detailed rules below explain groups, future orders and keyboard shortcuts.</p>
+</section>
+<section aria-labelledby="interface">
+<h2 id="interface">Read the interface</h2>
+<dl class="command-list">
+<div><dt>Top bar</dt><dd>Your identity, matter at the viewed tick, round and timeline-win totals. Scores stay current even when you inspect an older round. <strong>Switch / rejoin player</strong> changes your slot or spectator view; <strong>All games</strong> returns to the directory.</dd></div>
+<div><dt>Battlefield and minimap</dt><dd>Click to select, drag to box-select, and hold Shift to add to your selection. Pan with WASD or the middle mouse button; zoom with the wheel. Click or drag the minimap to move the camera. Player colors show ownership; allies share a color and have owner numbers.</dd></div>
+<div><dt>Timeline</dt><dd>Play, pause, step, or enter a tick directly. Each row is a player’s order history. White is the current playhead, dashed yellow is your draft’s time, purple marks orders for the selection, and hatched history cannot be changed. Open <strong>Timeline tools</strong> for zoom and pan controls.</dd></div>
+<div><dt>Selection</dt><dd>Names, icons, health and available actions describe what you selected. <strong>All army</strong> and <strong>All units</strong> help select a larger force. Unit details and <strong>Unit reference</strong> show stats. Mixed values mean selected units have different settings.</dd></div>
+<div><dt>Commands and Planning</dt><dd>The command panel changes with your selection. <strong>Planning</strong> contains undo/redo and the changes queued for this turn. Select an entry to inspect or remove it. The draft is not submitted until you press Commit.</dd></div>
+<div><dt>Needs orders</dt><dd>An amber notice points out idle units, empty queues, new units without starting orders, or buildings without a constructor assigned nearby. <strong>Review next</strong> selects and centers one. A warning is a prompt to check your plan, not a guarantee that a route or enough matter exists.</dd></div>
+</dl>
+<h3 id="command-groups">Command groups</h3>
+<p>A command group is a numbered set of units you can select and order together. It also lets a factory’s future units join an existing plan.</p>
+<ol>
+<li><strong>Add units:</strong> select them, open <strong>Groups</strong> and choose <strong>Add to group</strong>, then press a number from 0–9. The shortcut is <kbd>H</kbd>, then the number.</li>
+<li><strong>Recall and command:</strong> press the number on its own to recall that group. Check the recipient label, then give an order. Recalling a group is only selection; it does not spend a command.</li>
+<li><strong>Keep it separate from a one-off selection:</strong> a group order is saved for the group; an order to selected units affects that selection. An individual order can override the group until another group order arrives.</li>
+<li><strong>Add future factory output:</strong> select a factory, choose <strong>Output group</strong> (<kbd>J</kbd>), then the group number. Its new units join that group. This is different from making the factory itself a group member. Press <kbd>J</kbd>, then Backspace to clear the output binding.</li>
+<li><strong>Empty a group:</strong> choose <strong>Clear group</strong>, then its number. This removes membership, not the units. Expand <strong>Groups 0–9</strong> inside the Groups menu to inspect groups.</li>
+</ol>
+<h3>Factory queues and starting orders</h3>
+<p>Select a factory or its blueprint to see its active production, waiting queue, unit buttons and output settings. Click a unit’s + button to queue it; Shift-click adds five. The <strong>Loop new items</strong> switch affects new entries. Each queued item also has its own repeat toggle and remove button. <strong>Clear waiting queue</strong> removes pending entries.</p>
+<p>With the factory selected, use Attack-move, Support, Mine, Construct or Idle to set its new units’ starting order. Use the same click or drag gestures as for mobile units. The <strong>New units</strong> summary shows that order. Set <strong>Matter priority</strong> to control how quickly the factory receives funding.</p>
+<p>Selecting several factories opens one shared editor. If their settings differ, an inline warning explains that the next shared command clears their queues and settings at that tick, including active production and its spent matter. Undo restores the draft. Select one factory to edit it independently.</p>
+</section>
 <h2 id="controls">Browser controls</h2>
-<p>Choose a tick, select your units with a click or box drag, then choose an action below or press its key. Shift-click toggles a unit; Shift-drag adds units. The first command pins the draft tick. Use T to return to it, or Rebase draft here to move the draft to the inspected tick. Rebase is an estimate, and the server checks the full draft when you commit. Undo and redo preserve the command’s timestamp.</p>
+<p>Choose a tick, select your units with a click or box drag, then choose an action below or press its key. Shift-click toggles a unit; Shift-drag adds units. The first command pins the draft tick. Use T to return to it, or Rebase draft here to move the draft to the inspected tick. Check the plan after rebasing; some orders may no longer be possible at the new time. Undo and redo preserve the command’s timestamp.</p>
 <table><thead><tr><th>Keys</th><th>Action</th></tr></thead><tbody>
 <tr><td>F, then click</td><td>Attack-move to the tile.</td></tr>
 <tr><td>G, then click your unit</td><td>Support that unit.</td></tr>
 <tr><td>M / C, then drag</td><td>Mine / construct in a rectangle.</td></tr>
-<tr><td>B, then 1 / 2 / 3</td><td>Place a factory / turret / wall. Click a tile; drag for a connected wall line. R rotates factory output directions. Red previews are blocked.</td></tr>
-<tr><td>X</td><td>Idle the selected recipients.</td></tr>
+<tr><td>B, then building number</td><td>Choose a factory, turret, wall or silo from the on-screen list. Click a tile to place its blueprint; drag for a connected wall line. R rotates factory output directions. Red previews are blocked.</td></tr>
+<tr><td>X</td><td>Stop the selected units’ assigned task.</td></tr>
 <tr><td>H, then 0–9 / Clear group, then 0–9</td><td>Add selection / empty a group. Plain 0–9 recalls a group without spending a command. The recipient label distinguishes a group from selected units only.</td></tr>
-<tr><td>J, then 0–9 / Backspace</td><td>Bind / clear selected factories’ output group.</td></tr>
-<tr><td>Q, then recipe number</td><td>Append a unit. The on-screen prompt lists the loaded recipes in number order.</td></tr>
-<tr><td>L / P, then 1–4</td><td>Toggle looping for new queue items / choose high, medium, low or off priority.</td></tr>
+<tr><td>J, then 0–9 / J, then Backspace</td><td>Bind / clear selected factories’ output group.</td></tr>
+<tr><td>Q, then recipe number</td><td>Add a unit or missile to the production queue. The on-screen list shows which number to press.</td></tr>
+<tr><td>L</td><td>Toggle whether new production queue items repeat.</td></tr>
+<tr><td>P, then 1–4</td><td>Choose High, Medium, Low or Off matter priority.</td></tr>
 <tr><td>Select factory, then F / G / M / C / X</td><td>Set a factory’s stored attack-move, support, mine, construct or idle order using the same target gestures.</td></tr>
 <tr><td>Delete</td><td>Delete a selected blueprint or unfinished building of any type, or remove the selected draft entry. The selection panel also has Delete selected blueprints / Cancel selected construction. Removing a draft placement removes its dependent settings; undo restores the change. Invested matter is lost when an unfinished building is cancelled. Factory queue items have their own remove controls.</td></tr>
-<tr><td>O</td><td>Cycle keep, drop all, and the configured following window. The draft shows a non-authoritative member/slot lock estimate. Actual reasons appear in the round viewer after replay.</td></tr>
+<tr><td>O</td><td>Cycle keep, drop all, and the configured following window. Check Future-order details for an estimate of which orders will be replaced. The round viewer shows what actually changed after the replay.</td></tr>
 <tr><td>Ctrl+Z / Ctrl+U</td><td>Undo / redo the uncommitted draft.</td></tr>
 <tr><td>Enter / Escape</td><td>Commit or pass / cancel a gesture, then clear selection. Finish or cancel placement before committing.</td></tr>
 <tr><td>WASD / middle drag / wheel</td><td>Pan / pan / zoom the map around the pointer. Click or drag the minimap to move the camera.</td></tr>
@@ -92,9 +107,6 @@
 <p>Units start without a control group. Group numbers appear only after assignment; queued membership and priority changes appear immediately at the draft tick, including a Mixed label when the selection differs. Use the shared Matter priority dropdown for constructors, factories, turrets and unfinished buildings. Priority appears only in the bottom UI. Construction funding uses the target building’s priority; a constructor set to Off contributes no spending. Ore is yellow until exhausted, when it becomes gray; walls are darkest gray, unseen floor is medium gray, and seen floor is lightest.</p>
 <p>In Statistics, choose Display → Slope (smoothed) to compare rates such as matter mined per tick. The slope uses a local linear fit over up to five adjacent samples, does not bridge missing data, and can be negative. Thinking-time slopes use rounds instead of ticks.</p>
 
-<h2>Choosing a map and playing again</h2>
-<p>Every lobby offers five map previews showing terrain, ore and starting positions. The first occupied slot chooses; everyone sees the same selected map. After a match, the <strong>Game complete</strong> menu lets that player open a new lobby with five fresh maps. Player slots and profiles carry over, and the finished match remains saved in the server archive. Choose <strong>Keep viewing replay</strong> to inspect the result first; <strong>New game…</strong> reopens the menu.</p>
-<p>A factory with a completed unit pushes mobile output blockers aside, including a chain of units when space is available. Their orders are preserved. Walls and buildings cannot be pushed.</p>
 <h2>Missile silos</h2>
 <p>Select a constructor, press <kbd>B</kbd> and choose <strong>silo</strong>. The placement circle shows automatic targeting reach; manual launches can reach anywhere on the map. Turret placement also previews weapon reach.</p>
 <p>Select the silo or its blueprint. Build missiles using its production buttons; Shift-click queues five and each item can loop. Completed missiles appear in the <strong>Stock</strong> row below <strong>Build missiles</strong>. They stay stored until fired. Destroying the silo destroys its stock, but missiles already in flight continue.</p>
@@ -102,10 +114,59 @@
 <ul><li><strong>Satellite:</strong> reveals a large moving area throughout flight, then holds vision at the destination temporarily.</li><li><strong>Cluster:</strong> damages every unit and building in a wide radius. Default damage is 100: 40% of a full-health tank.</li><li><strong>Tac nuke:</strong> destroys all units and buildings within its smaller radius. Terrain rock and ore remain.</li></ul>
 <p><strong>Explosions also hit your own units and teammates.</strong> Missiles ignore walls, have unlimited flight range, and land within 30 ticks of launch. Matter priority controls spending; Off does not stop firing stored missiles. Exact costs, radii, flight speeds, cooldowns and satellite duration are listed in the content reference below.</p>
 
-<h2>Planning without missed orders</h2>
-<p>The timeline sits above selection information, contextual commands, and your draft. Groups and Planning hold secondary tools; Timeline tools holds zoom and pan controls. Unit reference opens every unit’s current stats before you build it. Purple timeline marks show orders affecting the current selection, including drafts.</p>
-<p>The amber Needs orders notice reports idle units, empty production queues, newborns without usable starting orders, and buildings without a constructor assigned to their area at the viewed tick. Review next selects and centers an affected unit or building. Assign miners a mining area and constructors a construction area; placing a building alone does not command a constructor to build it. These notices do not predict whether funding, paths or later commands will succeed.</p>
-<p>Selecting several factories opens one shared editor. Matching configurations let you append units to every queue. If they differ, an override warning asks you to accept clearing every selected factory’s queue, active production and output settings at this tick before applying the shared command. Spent matter on cancelled active work is lost. Cancel preserves the plans; undo restores the entire shared edit. Select one factory to change it independently.</p>
-<p>A large green Turn committed banner means your plan has been submitted and is waiting for the other players. Uncommit restores editing while waiting. The banner disappears when execution starts.</p>
+<h2>Choosing a map and playing again</h2>
+<p>Every lobby offers five map previews showing terrain, ore and starting positions. The first occupied slot chooses; everyone sees the same selected map. After a match, the <strong>Game complete</strong> menu lets that player open a new lobby with five fresh maps. Player slots and profiles carry over, and the finished match remains saved in the server archive. Choose <strong>Keep viewing replay</strong> to inspect the result first; <strong>New game…</strong> reopens the menu. <strong>Give feedback</strong> saves a private message for the creator with a reference to this match. Games become unavailable after six hours without game activity.</p>
+<p>A factory with a completed unit pushes mobile output blockers aside, including a chain of units when space is available. Their orders are preserved. Walls and buildings cannot be pushed.</p>
+
+<section aria-labelledby="unit-roles">
+<h2 id="unit-roles">Meet your units</h2>
+<p>These are the same icons used in the game’s selection and command panels. Each card names the unit and describes its job. Blue is an example player color, not a unit category. Buildings stay in place; utility and combat units move; missiles are ammunition stored in a silo.</p>
+<h3>Buildings</h3>
+<div class="unit-roles" aria-label="Buildings">
+<article class="role-card"><h4><span data-unit-icon="turret"></span>Turret</h4><p>Stationary defense. Fires at enemies in range and spends matter to repair itself.</p><a href="#stats-turret">Turret stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="factory"></span>Factory</h4><p>Builds mobile units. Queue production and set the orders those units receive when they appear.</p><a href="#stats-factory">Factory stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="wall"></span>Wall</h4><p>Blocks movement. Use walls to close routes or funnel units through a gap.</p><a href="#stats-wall">Wall stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="silo"></span>Silo</h4><p>Builds and stores missiles. Choose their targets manually or enable automatic launches.</p><a href="#stats-silo">Silo stats →</a></article>
+</div>
+<h3>Utility</h3>
+<div class="unit-roles" aria-label="Utility">
+<article class="role-card"><h4><span data-unit-icon="miner"></span>Miner</h4><p>Collects matter from ore. Give it a mining area to fund construction and production.</p><a href="#stats-miner">Miner stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="constructor"></span>Constructor</h4><p>Builds your blueprints. It can also mine, but more slowly than a miner.</p><a href="#stats-constructor">Constructor stats →</a></article>
+</div>
+<h3>Combat</h3>
+<div class="unit-roles" aria-label="Combat">
+<article class="role-card"><h4><span data-unit-icon="scout"></span>Scout</h4><p>Explores to reveal enemies and terrain. Carries a light weapon.</p><a href="#stats-scout">Scout stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="grunt"></span>Grunt</h4><p>A light fighter for direct attacks.</p><a href="#stats-grunt">Grunt stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="tank"></span>Tank</h4><p>A durable vehicle with a direct-fire weapon.</p><a href="#stats-tank">Tank stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="grinder"></span>Grinder</h4><p>Moves into close range to deal melee damage.</p><a href="#stats-grinder">Grinder stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="artillery"></span>Artillery</h4><p>Fires indirectly at long range.</p><a href="#stats-artillery">Artillery stats →</a></article>
+</div>
+<h3>Missiles</h3>
+<div class="unit-roles" aria-label="Missiles">
+<article class="role-card"><h4><span data-unit-icon="satellite"></span>Satellite</h4><p>Reveals the area along its flight, then keeps the destination visible for a limited time.</p><a href="#stats-satellite">Satellite stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="cluster"></span>Cluster</h4><p>Damages units and buildings in a wide blast, including your own and your allies’.</p><a href="#stats-cluster">Cluster stats →</a></article>
+<article class="role-card"><h4><span data-unit-icon="tac_nuke"></span>Tac nuke</h4><p>Destroys units and buildings in a smaller blast, including your own and your allies’.</p><a href="#stats-tac_nuke">Tac nuke stats →</a></article>
+</div>
+</section>
+
+<!-- UNIT_STATS -->
+<details id="full-rules"><summary>Detailed game rules: economy, time and survival</summary>
+<h2>Games and practice opponents</h2>
+<p>For an immediate solo game, choose <strong>Play Against Bot</strong> on the home page. To customize a game, choose <strong>View Lobby</strong>, enter a username on the game directory, then create a game or enter an open lobby. Names do not need to be unique. Joining defaults to spectating; claim a slot before starting to play. The first occupied human slot chooses from five shared maps and starts once all slots are filled. Open game links in separate tabs to play multiple matches. The directory offers active/open filters, your games, and read-only recent replays.</p>
+<p>For solo practice, add a Rusher (grunts), Builder (tanks), or Raider (flanking grinders) at creation. These simple bots use normal resources, visibility and validated orders. They establish mining and production, then intervene at later timeline ticks. They are intentionally easy, with no deep planning. Bot-only playtests stop and archive at their selected round budget; human games have no added round limit.</p>
+<h2 id="economy">Build an economy</h2>
+<p>You begin with a miner, constructor, and turret. Send the miner onto ore, place a factory blueprint, and assign the constructor to build in that area. Constructors can also mine at half the miner’s throughput. Matter flows into your bank and pays for construction and production continuously. High priority gets funded before medium and low; consumers within a tier share the available matter. Off stops spending. With default content, turrets automatically repair at 0.5 HP per tick for 1 matter per HP, half their construction efficiency; repair continues while firing.</p>
+<p>Choose whether new queue items should loop, then queue units at a factory (Shift-click adds five), and give its output a stored order so newborn units leave the output tile. Each queued item keeps its own loop flag and rejoins the tail after spawning if marked ↻. Use its ↻ / 1× button to change that item; the Loop new items switch only affects later additions. Fully paid units wait when output is blocked. Canceling paid work loses its investment. A damaged construction site keeps its damage as it grows.</p>
+<h2 id="orders">Orders and control groups</h2>
+<p>Attack-move advances toward a destination and attacks when possible. Support follows an ally and assists with the unit’s available capabilities. Mining and construction use selected areas. Walkers can move diagonally without cutting wall corners; vehicles move along the axes. Allied mobile bots can yield by stepping aside or swapping when there is a legal space. Weapons, vision, movement, and work rates differ by type.</p>
+<p>Groups use keys 0–9. A group order commands its members once and is saved for newborn units from bound factories. Individual orders can override it until another group order arrives. Factory output binding and selecting a factory as a group member are separate settings.</p>
+<h2>Rewrite the future</h2>
+<p>Stage orders at one chosen tick and undo changes until committing. When assigning an action, keep future orders, drop all later orders for the selected recipients, or use the configured following time window. Priority, queue, and other settings keep future orders. Review the estimated skipped orders. A successful replacement locks older future assignments and settings for its following interval; same-round and newer orders still apply. If its target disappears after a rewrite, no lock is installed. Group locks also protect saved orders and are inherited by newborns. Single-order mode allows one command per turn; timestamp mode permits multiple commands at the selected tick.</p>
+<h2 id="survival">Survival and winning</h2>
+<p>A player needs both a completed active building (turret or factory) and a completed constructor or factory. Losing either requirement eliminates the player temporarily. Their remaining units keep acting, and finishing a factory can restore them. The simulation continues until inactivity or its maximum tick limit, including when everyone is temporarily eliminated.</p>
+<p>The final state determines the result: everyone alive is a stalemate, some alive is a win, and nobody alive is a draw. Stalemates never score. Wins score for final survivors; teams earn their surviving-member count. Draws award nobody or everyone according to setup.</p>
+<p><strong>Simple win</strong> ends a timeline immediately when any player has no completed buildings left. Turrets, factories and silos count; unfinished sites and mobile units do not. A remaining building keeps you alive even without a constructor. Remaining orders and missiles do not delay the stop. Simple win uses timeline-win scoring, with a default target of five points.</p>
+<p>Scoreboard mode awards each resolved round, including unchanged winning passes. The default target is 5, with tied leaders continuing until one qualifies alone. Setup can change the target, use a required lead, allow shared victory, or enable thinking-time penalties. Scoreboard rounds have no automatic round limit; the host can stop and archive an unfinished match without adding points. Timed mode locks a configured span of history after each planning round. A player loses timed eligibility when that locked state contains no completed constructor or factory; losing only active buildings is not enough. Hybrid mode combines the scoreboard target with a fixed advance of immutable history each round, without timed-mode permanent elimination. Inspect the lobby’s rules for the selected match.</p>
+<p>While the simulation runs, you can play or scrub the completed part of the new replay. The turquoise frontier marks the available ticks; the dark remainder is still being computed. Playback waits at that frontier and resumes as more ticks arrive. The result stays pending and orders remain closed until the full replay is verified. Refreshing rejoins the available preview, and final publication preserves the tick you are inspecting.</p>
 
 </details>

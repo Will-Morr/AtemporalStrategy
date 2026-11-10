@@ -28,7 +28,7 @@ Track these requests in an ordered TODO list and update it as implementation pro
 
 The public home page shows **Atemporal**, the subtitle **An RTS from the perspective of God.**, and several paragraphs of description. The user-authored description is stored in a separate editable file. Preserve its wording without permission; the user approved changing its winning target from 3 to 5. Place the three navigation buttons between the main introduction and the user’s experiment note. Do not use horizontal divider lines between landing-page sections.
 
-Place large navigation buttons at the bottom, with **Play Against Bot** first. One click creates a new lobby with the player and the default best available AI, then starts immediately without setup friction. **View Lobby** opens the game directory. **Game Explained** opens a quick explanation of the UI, command types and unit roles, including unit stats.
+Place large navigation buttons at the bottom, with **Play Against Bot** first. One click creates a new lobby with the player and the default best available AI, then starts immediately without setup friction. **View Lobby** opens the game directory. **Game Docs** opens a quick explanation of the UI, command types and unit roles, including unit stats.
 
 For this quick-play path, skip the previous first-visit username prompt and manual map/start steps. Keep normal multiplayer lobby setup available through View Lobby.
 

@@ -2,6 +2,7 @@
 use super::*;
 use atemporal_contracts::identity::sha256;
 use std::{collections::BTreeMap, fs, path::Path};
+const GUIDE_STYLES: &str = include_str!("../../../client/guide/style.css");
 const UNIT_ICONS: &str = include_str!("../../../client/unit-icons.json");
 fn unit_icon(icons: &BTreeMap<String, String>, key: &str) -> String {
     let body = icons.get(key).unwrap_or(&icons["default"]);
@@ -22,11 +23,52 @@ fn readable_range(value: f64) -> String {
     }
     format!("≈{value:.3}")
 }
-fn work(rate: &Option<WorkRate>) -> String {
-    rate.as_ref().map_or_else(
-        || "—".into(),
-        |w| format!("{} / {} ticks", w.rate, w.cooldown),
-    )
+fn ticks(value: Tick) -> String {
+    format!("{value} tick{}", if value == 1 { "" } else { "s" })
+}
+fn display_name(key: &str) -> String {
+    let name = key.replace('_', " ");
+    let mut chars = name.chars();
+    chars.next().map_or_else(String::new, |c| {
+        c.to_uppercase().collect::<String>() + chars.as_str()
+    })
+}
+fn stat(stats: &mut String, label: &str, value: impl AsRef<str>) {
+    stats.push_str(&format!(
+        "<div><dt>{}</dt><dd data-stat=\"{}\">{}</dd></div>",
+        escape(label),
+        escape(label),
+        escape(value.as_ref())
+    ));
+}
+fn unit_group(t: &TypeDefinition) -> usize {
+    match t.kind {
+        TypeKind::Structure => 0,
+        TypeKind::Missile => 3,
+        TypeKind::Unit if t.mining.is_some() || t.construction.is_some() => 1,
+        TypeKind::Unit => 2,
+    }
+}
+fn unit_order(key: &str) -> usize {
+    [
+        "turret",
+        "factory",
+        "wall",
+        "silo",
+        "miner",
+        "constructor",
+        "scout",
+        "grunt",
+        "tank",
+        "grinder",
+        "artillery",
+        "satellite",
+        "cluster",
+        "tac_nuke",
+    ]
+    .iter()
+    .position(|name| *name == key)
+    .unwrap_or(usize::MAX)
 }
 /// Prose is trusted repository-authored HTML. All content-derived labels are escaped.
 pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
@@ -40,98 +82,204 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
             &unit_icon(&icons, key),
         );
     }
-    let mut rows = String::new();
-    for t in &content.types {
-        let movement = t.movement.as_ref().map_or_else(
-            || "Static".into(),
-            |m| {
-                format!(
-                    "{} neighbors / {} ticks",
-                    if m.neighbors == Neighbors::Four { 4 } else { 8 },
-                    m.cooldown
-                )
-            },
-        );
-        let weapon = t.weapon.as_ref().map_or_else(
-            || "—".into(),
-            |w| {
-                format!(
-                    "{} damage / {} range / {} ticks; {}",
-                    w.damage,
-                    readable_range(w.range),
-                    w.cooldown,
-                    if w.indirect { "indirect" } else { "direct" }
-                )
-            },
-        );
-        let production = t.production.as_ref().map_or_else(
-            || "—".into(),
-            |p| format!("{} / tick; {}", p.rate, p.recipes.join(", ")),
-        );
-        let healing = t.healing.as_ref().map_or_else(
-            || "—".into(),
-            |h| {
-                format!(
-                    "{} HP/matter; {} demand / {} ticks; range {}",
-                    h.hp_per_matter, h.demand, h.cooldown, h.range
-                )
-            },
-        );
-        let healing = if let Some(h) = &t.self_repair {
-            format!(
-                "Automatic self-repair: {} HP/matter; {} matter/tick",
-                h.hp_per_matter, h.rate
-            )
-        } else {
-            healing
-        };
-        let missile = t.missile.as_ref().map_or_else(||t.silo.as_ref().map_or_else(||"—".into(),|s|format!("Auto target {} tiles; manual unlimited; launch cooldown {} ticks",s.auto_range,s.launch_cooldown)),|m|format!("{:?}: radius {}; damage {}; speed {} tiles/tick; flight ≤ {} ticks; destination reveal {} ticks",m.effect,m.radius,if m.effect==MissileEffect::TacNuke {"annihilation".into()} else {m.damage.to_string()},m.speed,m.max_flight_ticks,m.reveal_ticks));
-        let values = vec![
-            t.key.clone(),
-            format!("{:?}", t.kind),
-            t.matter_cost.to_string(),
-            if t.missile.is_some() {
-                "— (inventory)".into()
-            } else {
-                t.max_hp.to_string()
-            },
-            t.vision.to_string(),
-            movement,
-            weapon,
-            work(&t.mining),
-            work(&t.construction),
-            production,
-            healing,
-            missile,
-            format!("{} / {}", t.counts_for_survival, t.provides_build_ability),
-        ];
-        rows.push_str("<tr>");
-        for (index, value) in values.iter().enumerate() {
-            if index == 0 {
-                rows.push_str(&format!(
-                    r#"<td><span class="unit-label">{}{}</span></td>"#,
-                    unit_icon(&icons, &t.key),
-                    escape(value)
-                ));
-            } else {
-                rows.push_str(&format!("<td>{}</td>", escape(value)));
-            }
+    let mut cards = String::new();
+    for (group, name) in ["Buildings", "Utility", "Combat", "Missiles"]
+        .iter()
+        .enumerate()
+    {
+        let mut types: Vec<_> = content
+            .types
+            .iter()
+            .filter(|t| unit_group(t) == group)
+            .collect();
+        types.sort_by_key(|t| (unit_order(&t.key), &t.key));
+        if types.is_empty() {
+            continue;
         }
-        rows.push_str("</tr>\n");
+        cards.push_str(&format!("<section class=\"stats-group\" aria-label=\"{name} stats\"><h3>{name}</h3><div class=\"unit-stats\">"));
+        for t in types {
+            let mut stats = String::new();
+            stat(&mut stats, "Cost", t.matter_cost.to_string());
+            if t.missile.is_none() {
+                stat(&mut stats, "Health", t.max_hp.to_string());
+                stat(&mut stats, "Vision", format!("{} tiles", t.vision));
+                stat(
+                    &mut stats,
+                    "Movement",
+                    t.movement.as_ref().map_or_else(
+                        || "Stationary".into(),
+                        |m| {
+                            format!(
+                                "One tile every {}; {}",
+                                ticks(m.cooldown),
+                                if m.neighbors == Neighbors::Four {
+                                    "no diagonal movement"
+                                } else {
+                                    "diagonal movement allowed"
+                                }
+                            )
+                        },
+                    ),
+                );
+                stat(
+                    &mut stats,
+                    "Weapon",
+                    t.weapon.as_ref().map_or_else(
+                        || "None".into(),
+                        |w| {
+                            format!(
+                                "{} damage every {}; {}-tile range; {} fire",
+                                w.damage,
+                                ticks(w.cooldown),
+                                readable_range(w.range),
+                                if w.indirect { "indirect" } else { "direct" }
+                            )
+                        },
+                    ),
+                );
+            }
+            if let Some(w) = &t.mining {
+                stat(
+                    &mut stats,
+                    "Mining",
+                    format!("{} matter every {}", w.rate, ticks(w.cooldown)),
+                );
+            }
+            if let Some(w) = &t.construction {
+                stat(
+                    &mut stats,
+                    "Construction",
+                    format!(
+                        "{} matter per work action; {}-tick cooldown",
+                        w.rate, w.cooldown
+                    ),
+                );
+            }
+            if let Some(p) = &t.production {
+                stat(
+                    &mut stats,
+                    "Production",
+                    format!("Spends up to {} matter per tick", p.rate),
+                );
+                stat(
+                    &mut stats,
+                    "Builds",
+                    p.recipes
+                        .iter()
+                        .map(|key| display_name(key))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+            }
+            if let Some(h) = &t.healing {
+                stat(
+                    &mut stats,
+                    "Healing",
+                    format!(
+                        "{} HP per matter; requests {} matter every {} ticks; {}-tile range",
+                        h.hp_per_matter, h.demand, h.cooldown, h.range
+                    ),
+                );
+            }
+            if let Some(h) = &t.self_repair {
+                stat(
+                    &mut stats,
+                    "Self-repair",
+                    format!(
+                        "{} HP per matter; spends up to {} matter per tick",
+                        h.hp_per_matter, h.rate
+                    ),
+                );
+            }
+            if let Some(s) = &t.silo {
+                stat(
+                    &mut stats,
+                    "Auto targeting",
+                    format!("{}-tile range", s.auto_range),
+                );
+                stat(&mut stats, "Manual targeting", "Anywhere on the map");
+                stat(
+                    &mut stats,
+                    "Launch cooldown",
+                    format!("{} ticks", s.launch_cooldown),
+                );
+            }
+            if let Some(m) = &t.missile {
+                stat(
+                    &mut stats,
+                    "Storage",
+                    "Ammunition inside a silo; no separate health",
+                );
+                stat(
+                    &mut stats,
+                    "Effect",
+                    match m.effect {
+                        MissileEffect::Satellite => "Reveals terrain and enemies",
+                        MissileEffect::Cluster => "Area damage, including allies",
+                        MissileEffect::TacNuke => "Destroys units and buildings, including allies",
+                    },
+                );
+                stat(&mut stats, "Effect radius", format!("{} tiles", m.radius));
+                if m.effect == MissileEffect::Cluster {
+                    stat(&mut stats, "Damage", m.damage.to_string());
+                }
+                stat(
+                    &mut stats,
+                    "Flight speed",
+                    format!("{} tiles per tick", m.speed),
+                );
+                stat(
+                    &mut stats,
+                    "Maximum flight",
+                    format!("{} ticks after launch", m.max_flight_ticks),
+                );
+                if m.reveal_ticks > 0 {
+                    stat(
+                        &mut stats,
+                        "Vision at destination",
+                        format!("{} ticks", m.reveal_ticks),
+                    );
+                }
+            } else {
+                stat(
+                    &mut stats,
+                    "Surviving building",
+                    if t.counts_for_survival {
+                        "Yes, when complete"
+                    } else {
+                        "No"
+                    },
+                );
+                stat(
+                    &mut stats,
+                    "Keeps building ability",
+                    if t.provides_build_ability {
+                        "Yes, when complete"
+                    } else {
+                        "No"
+                    },
+                );
+            }
+            cards.push_str(&format!(r#"<article class="stat-card" id="stats-{}" data-unit="{}"><h4>{}{}</h4><dl>{stats}</dl></article>"#, escape(&t.key), escape(&t.key), unit_icon(&icons, &t.key), escape(&display_name(&t.key))));
+        }
+        cards.push_str("</div></section>");
     }
+    let stats = format!(
+        r##"<section aria-labelledby="units"><h2 id="units">Unit stats</h2><p>These values come from this server’s game settings. Costs are in matter; health is in HP. A tick is one step of the simulation. Ranges are measured in map tiles; ≈ marks a rounded value. Work and production can slow down when matter is short.</p><p><strong>Survival:</strong> “Surviving building” means the completed building counts toward staying alive. “Keeps building ability” means the completed unit can preserve your ability to rebuild. The exact loss conditions depend on the selected game mode; see <a href="#survival">scoring and survival</a>.</p>{cards}</section>"##
+    );
+    prose = prose.replace("<!-- UNIT_STATS -->", &stats);
     let hash = content_hash(&content)?;
+    let styles = GUIDE_STYLES;
     Ok(format!(
-        r#"<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal — Game Explained</title>
-<style>body{{font:17px/1.6 system-ui;margin:2rem auto;max-width:1000px;padding:0 1rem;color:#edf4fa;background:#0e141c}}a{{color:#86dcff}}.table-scroll{{overflow:auto}}table{{border-collapse:collapse;font-size:.85rem}}th,td{{border:1px solid #344456;padding:.5rem;text-align:left;vertical-align:top}}th{{background:#182330}}code{{overflow-wrap:anywhere}}h1{{font-size:2.6rem;letter-spacing:-.04em}}h2{{margin-top:2rem}}nav{{display:flex;flex-wrap:wrap;gap:.7rem}}li{{margin:.6rem 0}}details{{margin:2rem 0;padding:1rem;border:1px solid #344456;border-radius:8px}}summary{{cursor:pointer;color:#86dcff}}.unit-roles{{display:grid;grid-template-columns:200px minmax(0,1fr);gap:.6rem 1rem}}dt{{font-weight:700}}dd{{margin:0}}.doc-warning{{border:1px solid #e4b65c;border-left:5px solid #e4b65c;background:#352c19;color:#ffe6ad;padding:1rem 1.2rem;margin:0 0 1.5rem;border-radius:6px;font-size:1.05rem}}.doc-warning strong{{display:block;font-size:1.15rem}}.unit-icon{{width:36px;height:36px;flex:none;color:#4fc3f7;vertical-align:middle}}.unit-label,.unit-roles dt{{display:flex;align-items:center;gap:.7rem}}.unit-label{{white-space:nowrap}}.unit-roles dt .unit-icon{{width:48px;height:48px;padding:6px;background:#131e29;border:1px solid #3c5060;border-radius:8px}}.unit-roles dd{{align-self:center}}.game-symbol{{width:34px;height:34px;vertical-align:middle;margin-right:.5rem;flex:none}}.visual-key{{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem;background:#182330;border-radius:8px}}.visual-key span{{display:flex;align-items:center}}@media(max-width:600px){{.unit-roles{{grid-template-columns:1fr;gap:.3rem}}.unit-roles dd{{margin:0 0 1rem 60px}}h1{{font-size:2rem}}.doc-warning{{padding:.8rem}}}}:target{{scroll-margin-top:1rem}}</style></head>
-<body><aside class="doc-warning" aria-label="Documentation warning"><strong>Chatbot Documentation Warning:</strong> No human has taken the time to document this part yet</aside><a href="/">← Atemporal</a>{prose}<h2 id="units">Unit reference</h2><p>Rates and cooldowns use simulation ticks. Matter is paid continuously. The last column shows active-building / build-ability survival flags for completed entities. On a narrow screen, scroll the table sideways. Approximate ranges are marked ≈.</p>
-<div class="table-scroll"><table><thead><tr><th>Type</th><th>Kind</th><th>Cost</th><th>HP</th><th>Vision</th><th>Movement</th><th>Weapon</th><th>Mining</th><th>Construction</th><th>Production</th><th>Healing</th><th>Missiles</th><th>Survival flags</th></tr></thead><tbody>{rows}</tbody></table></div>
-<footer><p>Content: <code>{hash}</code></p></footer></body></html>
-"#
+        r##"<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal — Game Docs</title><style>{styles}</style></head>
+<body><main><aside class="doc-warning" aria-label="Documentation warning"><strong>Chatbot Docs Warning:</strong> Better than nothing but this part is somewhat reviewed claudelist</aside><a href="/">← Atemporal</a>{prose}
+
+<footer><details><summary>Game content identifier</summary><code>{hash}</code></details></footer></main></body></html>"##
     ))
 }
 fn rules_build(prose: &str) -> String {
-    sha256(format!("atemporal-guide-renderer-v6\n{UNIT_ICONS}\n{prose}").as_bytes())
+    sha256(format!("atemporal-guide-renderer-v7\n{GUIDE_STYLES}\n{UNIT_ICONS}\n{prose}").as_bytes())
 }
 fn artifacts(content: &Content, prose: &str) -> Result<(GuideManifest, BTreeMap<String, Vec<u8>>)> {
     let content = normalize_content(content.clone())?;

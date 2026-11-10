@@ -10,15 +10,16 @@ test('landing loads its real content, keyboard opens guide, and stats match',asy
   const link=page.getByRole('link',{name:'How to play / Unit reference'});
   await page.keyboard.press('Tab');await expect(link).toBeFocused();
   const popup=page.waitForEvent('popup');await page.keyboard.press('Enter');page=await popup;await expect(page).toHaveURL(/\/guide\/$/);
-  await expect(page.getByRole('heading',{name:'Game Explained'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Game Docs'})).toBeVisible();
   const content=await (await request.get(`${server.url}guide/content.json`)).json();
-  const rows=page.locator('.table-scroll tbody tr');await expect(rows).toHaveCount(content.types.length);
+  const cards=page.locator('.stat-card');await expect(cards).toHaveCount(content.types.length);
   for(const type of content.types) {
-    const row=rows.filter({has:page.getByRole('cell',{name:type.key,exact:true})});
-    await expect(row.locator('td').nth(2)).toHaveText(String(type.matter_cost));
-    await expect(row.locator('td').nth(3)).toHaveText(type.kind==='missile'?'— (inventory)':String(type.max_hp));
+    const card=page.locator(`[data-unit="${type.key}"]`);
+    await expect(card.locator('[data-stat="Cost"]')).toHaveText(String(type.matter_cost));
+    if(type.kind==='missile') await expect(card.locator('[data-stat="Storage"]')).toContainText('no separate health');
+    else await expect(card.locator('[data-stat="Health"]')).toHaveText(String(type.max_hp));
   }
-  // Tables may scroll internally; the page itself must fit the desktop viewport.
+  // Every stat card and the page must fit the desktop viewport.
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await review.capture('guide');
   await page.getByRole('link',{name:'← Atemporal'}).click();await expect(page).toHaveURL(/\/$/);

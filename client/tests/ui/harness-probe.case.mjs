@@ -10,7 +10,7 @@ test('probe assertion failure preserves evidence for each identity', async ({ re
     if (name === 'spectator') {
       const closedPage = await context.newPage();
       await closedPage.goto('/guide/');
-      await expect(closedPage.getByRole('heading', { name: 'Game Explained' })).toBeVisible();
+      await expect(closedPage.getByRole('heading', { name: 'Game Docs' })).toBeVisible();
       await closedPage.close();
     }
   }

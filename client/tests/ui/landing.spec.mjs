@@ -42,18 +42,40 @@ test('landing page starts a default bot match with one click and retains the pla
 test('landing navigation, content-backed explainer and retry after creation failure',async({page,review},testInfo)=>{
   const server=await isolatedServer(testInfo,small,content=>{content.types.find(t=>t.key==='miner').max_hp=137;},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url);
-  await page.getByRole('link',{name:'Game Explained',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Game Explained',exact:true})).toBeVisible();
-  await expect(page.locator('.doc-warning')).toHaveText('Chatbot Documentation Warning: No human has taken the time to document this part yet');
+  await page.getByRole('link',{name:'Game Docs',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Game Docs',exact:true})).toBeVisible();
+  await expect(page.locator('.doc-warning')).toHaveText('Chatbot Docs Warning: Better than nothing but this part is somewhat reviewed claudelist');
   expect(await page.locator('.doc-warning').evaluate(el=>el.getBoundingClientRect().top)).toBeLessThan(80);
   await expect(page.locator('.unit-roles .unit-icon')).toHaveCount(14);
-  await expect(page.locator('.table-scroll .unit-icon')).toHaveCount(14);
+  await expect(page.locator('.unit-stats .unit-icon')).toHaveCount(14);
   await expect(page.locator('[data-unit-icon]')).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'Your first turn',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'What commands do',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Meet your units',exact:true})).toBeVisible();
-  await expect(page.locator('tbody tr').filter({has:page.locator('td:first-child',{hasText:/^miner$/})}).locator('td').nth(3)).toHaveText('137');
-  await review.capture('game-explained',page);
+  await expect(page.locator('[data-unit="miner"] [data-stat="Health"]')).toHaveText('137');
+  await expect(page.getByRole('heading',{name:'The five main actions',exact:true})).toBeVisible();
+  await expect(page.locator('.construction-note')).toContainText('not a job in one constructor’s personal queue');
+  expect(await page.locator('.stats-group > h3').allTextContents()).toEqual(['Buildings','Utility','Combat','Missiles']);
+  expect(await page.locator('.unit-roles').evaluateAll(groups=>groups.map(g=>g.getAttribute('aria-label')))).toEqual(['Buildings','Utility','Combat','Missiles']);
+  for(const card of await page.locator('.role-card').all()) {
+    const link=card.getByRole('link');
+    const destination=await link.getAttribute('href');
+    await expect(page.locator(destination)).toHaveCount(1);
+  }
+  await review.capture('game-docs',page);
+  await page.screenshot({path:testInfo.outputPath('game-docs-top-viewport.png')});
+  await page.getByRole('link',{name:'Unit guide',exact:true}).click();
+  await review.capture('game-docs-units',page);
+  await page.screenshot({path:testInfo.outputPath('game-docs-units-viewport.png')});
+  await page.getByRole('link',{name:'Miner stats →',exact:true}).click();
+  await expect(page.locator('#stats-miner')).toBeInViewport();
+  await review.capture('game-docs-miner-stats',page);
+  await page.setViewportSize({width:1366,height:768});
+  await page.locator('#units').scrollIntoViewIfNeeded();
+  await review.capture('game-docs-stats-1366',page);
+  await page.screenshot({path:testInfo.outputPath('game-docs-stats-viewport.png')});
+  await page.locator('#command-groups').scrollIntoViewIfNeeded();
+  await page.screenshot({path:testInfo.outputPath('game-docs-groups-viewport.png')});
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await review.capture('game-explained-narrow',page);

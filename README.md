@@ -25,7 +25,7 @@ This installs the browser dependencies, builds the game, and starts the game coo
 1. Open **http://127.0.0.1:8080/**.
 2. Choose **Play Against Bot** to start a 1v1 immediately. No username or setup screen is required.
 3. For multiplayer or custom settings, choose **View Lobby**, enter a username, and create or join a game. Claim a slot, choose a map, and start when the slots are filled.
-4. Choose **Game Explained** for a quick UI walkthrough, command and unit explanations, and generated unit stats.
+4. Choose **Game Docs** for a quick UI walkthrough, command and unit explanations, and generated unit stats.
 
 The directory at `/lobbies/` lists games with connected players; **Show inactive games** and **Recent replays** expose games awaiting players or review until they expire. **My games** shows where this browser user has claimed a slot. Open different game links in separate tabs to play in parallel. Usernames are remembered without accounts or uniqueness checks; optional lobby passwords are simple access blockers.
 
