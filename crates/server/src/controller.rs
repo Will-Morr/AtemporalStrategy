@@ -70,6 +70,7 @@ pub struct RoundMeasurement {
 }
 
 pub struct Controller {
+    pub last_activity_ms: u64,
     pub instance_id: String,
     pub match_id: String,
     pub content: Content,
@@ -213,6 +214,7 @@ impl Controller {
         };
         let (broadcast, _) = broadcast::channel(256);
         Ok(Self {
+            last_activity_ms: now_ms(),
             instance_id,
             match_id: format!("match-{}", now_ms()),
             content,
@@ -305,6 +307,7 @@ impl Controller {
     }
 
     fn bump_lobby(&mut self) {
+        self.last_activity_ms = now_ms();
         self.lobby.revision += 1;
         self.lobby.can_start = self.phase == Phase::Lobby && self.roster_multiplayer().is_ok();
         self.send(ServerMessage::LobbyUpdated {
@@ -991,6 +994,7 @@ impl Controller {
         mut data: RevisionData,
         timed_state: Option<WorldState>,
     ) -> Result<()> {
+        self.last_activity_ms = now_ms();
         let persist_start = Instant::now();
         let outcome = data.outcome.clone().ok_or("missing outcome")?;
         let round = data.round;
@@ -1459,6 +1463,7 @@ impl Controller {
             archive.write_turn(&turn, &request.request_id)?;
         }
         fail_point("after_turn_written", self.round);
+        self.last_activity_ms = now_ms();
         self.time_totals[usize::from(player)] += duration;
         self.committed.insert(
             player,
@@ -1500,6 +1505,7 @@ impl Controller {
             archive.withdraw_turn(round, player)?;
         }
         self.committed.remove(&player);
+        self.last_activity_ms = now_ms();
         // Retain thinking already spent, but exclude time spent waiting after committing.
         self.ready_at.insert(
             player,
@@ -1866,6 +1872,7 @@ impl Controller {
             cancel.store(true, Ordering::Relaxed);
         }
         self.phase = Phase::Archived;
+        self.last_activity_ms = now_ms();
         let archive = ArchiveRecord {
             request_id,
             revision: self.current,

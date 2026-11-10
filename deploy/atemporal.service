@@ -1,0 +1,19 @@
+[Unit]
+Description=Atemporal Strategy with idle-safe main updates
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atemporal
+WorkingDirectory=/srv/atemporal/repo
+Environment=PATH=/home/atemporal/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /srv/atemporal/repo/scripts/host.py --repo /srv/atemporal/repo --state /srv/atemporal/state --port 8080
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

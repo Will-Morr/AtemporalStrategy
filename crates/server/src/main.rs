@@ -142,6 +142,7 @@ fn run() -> Result<()> {
                 .await
                 .map_err(|e| e.to_string())?;
             println!("atemporal-server listening on http://127.0.0.1:{port}/ (game coordinator)");
+            tokio::spawn(coordinator.clone().maintain());
             axum::serve(listener, coordinator::router(coordinator))
                 .await
                 .map_err(|e| e.to_string())

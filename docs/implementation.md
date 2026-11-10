@@ -4,6 +4,18 @@ Current multi-game extension: [lobbies and bots](lobbies-and-bots.md), implement
 
 > Status: a revisable assistant proposal unless explicitly attributed to the user. See [user specifications](../user_spec/README.md). Imperative wording describes the current candidate design, not a locked requirement.
 
+## Small public server checklist
+
+Execute and verify in this order. Details: [hosting](hosting.md).
+
+1. [x] Review lobby management, worker lifecycle and restart persistence.
+2. [x] Consolidate user requirements and establish this ordered checklist.
+3. [x] Implement a simple automatic `main` updater that waits for idle games.
+4. [x] Hide games without connected human players and add Show inactive games.
+5. [x] Expire games after six hours without activity; deny viewing and stop workers.
+6. [x] Preserve recent completed games as spectator replays until expiry.
+7. [x] Run server and real-browser checks, inspect screenshots, document hosting, commit and push.
+
 ## Execution policy
 
 The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.

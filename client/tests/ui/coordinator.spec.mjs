@@ -35,7 +35,7 @@ test('coordinator identities, passwords, parallel games, filters and same-addres
   const secondPage=await page.context().newPage();await secondPage.goto(server.url);await expect(secondPage.locator('#identity')).not.toBeVisible();
   const second=await create(secondPage,'Sandbox two',{bot:'builder'});await claim(secondPage);await secondPage.getByRole('button',{name:'Map 2',exact:true}).click();
   // Switch games in the same tab; each URL keeps its own token.
-  await page.goto(server.url);await page.locator('#mine').check();await page.locator('#refresh').click();await expect(page.locator('.card')).toHaveCount(2);
+  await page.goto(server.url);await page.locator('#mine').check();await page.locator('#refresh').click();await expect(page.locator('.card')).toHaveCount(1);await page.getByLabel('Show inactive games',{exact:true}).check();await expect(page.locator('.card')).toHaveCount(2);
   await page.locator('#filter').selectOption('active');await expect(page.locator('.card')).toHaveCount(1);await expect(page.locator('.card')).toContainText('Sandbox one');
   await page.locator('#filter').selectOption('open');await expect(page.locator('.card')).toContainText('Sandbox two');
   await page.locator('#filter').selectOption('all');await review.capture('coordinator-directory-two-games-and-user',page);
@@ -95,4 +95,43 @@ test('simple win game type can be selected and started',async({page,review},test
   await review.capture('simple-win-lobby',page);
   await page.getByRole('button',{name:'Start match',exact:true}).click();await revision(page,0);
   expect(await page.evaluate(()=>window.atemporal.config.objective.kind)).toBe('simple_win');
+});
+
+test('idle update waits for live games, hides inactive games and expires all game URLs',async({page,review},testInfo)=>{
+  test.setTimeout(150000);
+  const {writeFile,unlink}=await import('node:fs/promises');
+  const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);review.afterClose(server.stop);
+  await page.goto(server.url);await identify(page,'Hosting test');
+  const url=await create(page,'Small server game');await claim(page);
+  await page.getByRole('button',{name:'Start match',exact:true}).click();await revision(page,0);
+  const listing=await page.context().newPage();await listing.goto(server.url);
+  await expect(listing.locator('.card')).toHaveCount(1);
+  await review.capture('hosting-active-game',listing);
+  const request=`${server.dir}/games/update-request`;
+  await writeFile(request,'');
+  // An update must remain pending past the idle grace while a human is playing.
+  await page.waitForTimeout(33000);
+  expect((await listing.request.get(server.url+'api/directory')).ok()).toBe(true);
+  await page.locator('#commit').click();await revision(page,1);
+  await page.close();
+  await expect(listing.locator('.card')).toHaveCount(0);
+  await listing.getByLabel('Show inactive games',{exact:true}).check();
+  await expect(listing.locator('.card')).toHaveCount(1);
+  await review.capture('hosting-show-inactive',listing);
+  await expect.poll(async()=>{try{return (await listing.request.get(server.url+'api/directory',{timeout:1000})).ok();}catch{return false;}},{timeout:45000}).toBe(false);
+  await unlink(request);await server.start();
+  await listing.reload();await listing.getByLabel('Show inactive games',{exact:true}).check();await expect(listing.locator('.card')).toHaveCount(1);
+  // Persisted connection bits and a restart must not make an abandoned game active.
+  await listing.getByLabel('Show inactive games',{exact:true}).uncheck();await expect(listing.locator('.card')).toHaveCount(0);
+  const id=new URL(url).pathname.split('/')[2];
+  const statusPath=`${server.dir}/games/${id}/status.json`;
+  await expect.poll(async()=>JSON.parse(await readFile(statusPath,'utf8')).slots[0].connected).toBe(false);
+  const status=JSON.parse(await readFile(statusPath,'utf8'));
+  status.last_activity_ms=Date.now()-6*60*60*1000-1000;
+  await writeFile(statusPath,JSON.stringify(status));
+  await expect.poll(async()=>{const d=await(await listing.request.get(server.url+'api/directory')).json();return d.games.length;}).toBe(0);
+  for(const path of [url,`${url}guide/`,`${url}replays/${status.match_id}/`])expect((await listing.request.get(path)).status()).toBe(404);
+  await expect.poll(async()=>JSON.parse(await readFile(`${server.dir}/games/directory.json`,'utf8')).games[id].expired).toBe(true);
+  await server.stop();await server.start();
+  expect((await listing.request.get(url)).status()).toBe(404);
 });

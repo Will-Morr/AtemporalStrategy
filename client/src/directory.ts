@@ -1,6 +1,6 @@
 import type {Setup, LobbySlot} from './contracts.generated';
 type Style='rusher'|'builder'|'raider';
-interface Entry {id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
+interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
 interface Directory {games:Entry[];user:string|null;defaults:Setup}
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 let directory:Directory;
@@ -11,7 +11,7 @@ async function api(path:string,body?:unknown):Promise<any>{const response=await 
 function render():void {
   const filter=$<HTMLSelectElement>('filter').value,mine=$<HTMLInputElement>('mine').checked;
   const list=$('games');list.replaceChildren();
-  const games=[...directory.games].sort((a,b)=>b.created-a.created).filter(g=>(!mine||g.mine)&&(filter==='all'||filter==='open'&&g.status.phase==='lobby'||filter==='active'&&['planning','simulating'].includes(g.status.phase)||filter==='recent'&&g.replays.length));
+  const games=[...directory.games].sort((a,b)=>b.created-a.created).filter(g=>(g.active_players>0||$<HTMLInputElement>('inactive').checked||filter==='recent')&&(!mine||g.mine)&&(filter==='all'||filter==='open'&&g.status.phase==='lobby'||filter==='active'&&['planning','simulating'].includes(g.status.phase)||filter==='recent'&&g.replays.length));
   for(const game of games){
     const card=document.createElement('article');card.className='card';card.dataset.game=game.id;
     const body=document.createElement('div'),badge=document.createElement('span');badge.className='badge';badge.textContent=game.status.phase==='lobby'?'Open lobby':game.status.phase==='archived'?'Archived':game.status.phase==='finished'?'Finished':'Active';
@@ -23,7 +23,7 @@ function render():void {
     if(game.replays.length){const replays=document.createElement('details');replays.className='replays';replays.open=filter==='recent';const summary=document.createElement('summary');summary.textContent=`Recent replays (${game.replays.length})`;replays.append(summary);for(const id of game.replays){const a=document.createElement('a');a.href=`/games/${game.id}/replays/${id}/`;const stamp=Number(id.split('-')[1]);a.textContent=Number.isFinite(stamp)?`Replay · ${new Date(stamp).toLocaleString()}`:`Replay ${id}`;a.title=id;replays.append(a);}card.append(replays);}
     list.append(card);
   }
-  if(!games.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=filter==='all'?'No games yet. Create a lobby to get started.':'No games match these filters.';list.append(empty);}
+  if(!games.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=filter==='all'?'No active games. Create a lobby or show inactive games.':'No games match these filters.';list.append(empty);}
 }
 async function refresh():Promise<void>{try{directory=await api('/api/directory');if(!initialized){const c=directory.defaults.match_defaults;for(const [id,value] of Object.entries({'player-count':c.player_count,'objective':c.objective.kind,'control':c.control_limit,'map-size':c.map_size,'symmetric':c.symmetric,'sides':c.multiplayer.kind})){const select=$<HTMLSelectElement>(id);if(!Array.from(select.options).some(o=>o.value===String(value)))select.add(new Option(`${value} (server default)`,String(value)));select.value=String(value);}initialized=true;}$('profile').textContent=directory.user===null?'Choose a username':`Playing as ${directory.user}`;render();$('error').textContent='';}catch(e){$('error').textContent=(e as Error).message;}}
 function setup():Setup {
@@ -65,6 +65,6 @@ $('create-form').onsubmit=async e=>{
     const result=await api('/api/games',{name:$<HTMLInputElement>('game-name').value,password:$<HTMLInputElement>('password').value,setup:config,bots:{slots:botSlots,playtest_rounds:Number($<HTMLInputElement>('round-budget').value)}});location.href=result.url;
   }catch(e){$('create-error').textContent=(e as Error).message;submit.disabled=false;}
 };
-$('filter').onchange=render;$('mine').onchange=render;$('refresh').onclick=()=>void refresh();
+$('inactive').onchange=render;$('filter').onchange=render;$('mine').onchange=render;$('refresh').onclick=()=>void refresh();
 void refresh().then(()=>{if(directory?.user===null){$<HTMLInputElement>('user-name').value=localStorage.getItem('atemporal-username')??'';$<HTMLDialogElement>('identity').showModal();}else if(directory)continueToGame();});
 setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]'))void refresh();},4000);

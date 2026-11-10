@@ -183,3 +183,7 @@ Coordinator scenarios own and close their workers. To reuse an already-built bin
 ### Simple win game type
 
 The focused `simple win game type can be selected and started` coordinator scenario passed on 2026-10-25. It selects Simple win through the creation form, creates a real human/bot lobby and starts the match with the authoritative `simple_win` configuration. Inspected the full-frame creation and lobby screenshots in `artifacts/ui/2026-10-25T21-47-31.729Z-11280/`; labels, rule summary and controls are readable. The build includes schema generation and TypeScript checks. Exact destruction-tick termination, continued building survival without constructors, unfinished sites and simultaneous losses are covered by Rust simulation tests; the browser scenario checks selection/startup, not a complete combat match. Used two CPU cores, low priority and one browser worker.
+
+### Small-host lifecycle
+
+`coordinator.spec.mjs` also covers Show inactive games, an update held pending during play, the 30-second idle shutdown grace, same-address recovery, and six-hour expiry blocking direct game/guide/replay access across restart. The expiry test ages the persisted activity timestamp. The existing recent-replay scenario verifies spectator review before expiry. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.

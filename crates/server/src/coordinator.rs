@@ -31,6 +31,8 @@ pub struct GameRecord {
     bots: BotConfig,
     created: u64,
     #[serde(default)]
+    expired: bool,
+    #[serde(default)]
     members: BTreeMap<String, Vec<PlayerId>>,
 }
 #[derive(Default, Serialize, Deserialize)]
@@ -59,6 +61,26 @@ pub struct Coordinator {
     defaults: Setup,
     directory: Arc<Mutex<Directory>>,
     workers: Arc<Mutex<BTreeMap<String, Worker>>>,
+    admissions: Arc<Mutex<Admissions>>,
+}
+#[derive(Default)]
+struct Admissions {
+    count: usize,
+    idle_since: u64,
+}
+struct Admission(Arc<Mutex<Admissions>>);
+impl Admission {
+    fn new(c: &Coordinator) -> Self {
+        c.admissions.lock().unwrap().count += 1;
+        Self(c.admissions.clone())
+    }
+}
+impl Drop for Admission {
+    fn drop(&mut self) {
+        let mut state = self.0.lock().unwrap();
+        state.count -= 1;
+        state.idle_since = now_ms();
+    }
 }
 fn error(message: impl ToString) -> Response {
     Json(json!({"error":message.to_string()})).into_response()
@@ -110,6 +132,10 @@ impl Coordinator {
             defaults,
             directory: Arc::new(Mutex::new(directory)),
             workers: Arc::new(Mutex::new(BTreeMap::new())),
+            admissions: Arc::new(Mutex::new(Admissions {
+                count: 0,
+                idle_since: now_ms(),
+            })),
         };
         // Resume open/active games even if no browser has returned yet (bot playtests included).
         let games: Vec<_> = coordinator
@@ -121,14 +147,86 @@ impl Coordinator {
             .cloned()
             .collect();
         for game in games {
-            if !matches!(
-                coordinator.status(&game.id)["phase"].as_str(),
-                Some("finished" | "archived")
-            ) {
+            if !coordinator.expired(&game, now_ms())
+                && !matches!(
+                    coordinator.status(&game.id)["phase"].as_str(),
+                    Some("finished" | "archived")
+                )
+            {
                 coordinator.worker(&game, None)?;
             }
         }
         Ok(coordinator)
+    }
+    fn expired(&self, game: &GameRecord, now: u64) -> bool {
+        game.expired
+            || now.saturating_sub(
+                self.status(&game.id)["last_activity_ms"]
+                    .as_u64()
+                    .unwrap_or(game.created),
+            ) >= 6 * 60 * 60 * 1000
+    }
+    fn active_players(&self, game: &GameRecord, status: &Value) -> usize {
+        // Persisted connection bits alone are stale after a coordinator crash.
+        if !self
+            .workers
+            .lock()
+            .unwrap()
+            .get(&format!("{}:live", game.id))
+            .is_some_and(|w| w.readers > 0)
+        {
+            return 0;
+        }
+        status["slots"].as_array().map_or(0, |slots| {
+            slots
+                .iter()
+                .filter(|s| {
+                    let slot = s["slot"].as_u64().unwrap_or(u64::MAX) as usize;
+                    s["connected"] == true
+                        && s["claimed"] == true
+                        && game.bots.slots.get(slot).is_none_or(Option::is_none)
+                })
+                .count()
+        })
+    }
+    /// Local supervisor handshake. No unauthenticated Internet restart endpoint.
+    pub async fn maintain(self) {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+        let mut changed = false;
+        loop {
+            interval.tick().await;
+            let mut d = self.directory.lock().unwrap();
+            for game in d.games.values_mut() {
+                if !game.expired && self.expired(game, now_ms()) {
+                    game.expired = true;
+                    changed = true;
+                    self.workers
+                        .lock()
+                        .unwrap()
+                        .retain(|key, _| !key.starts_with(&format!("{}:", game.id)));
+                }
+            }
+            if changed {
+                match self.save(&d) {
+                    Ok(()) => changed = false,
+                    Err(e) => eprintln!("directory expiry: {e}"),
+                }
+            }
+            // Hold admission lock until exit: no create/relay can race the idle decision.
+            let admissions = self.admissions.lock().unwrap();
+            if self.root.join("update-request").exists()
+                && admissions.count == 0
+                && now_ms().saturating_sub(admissions.idle_since) >= 30_000
+                && !d
+                    .games
+                    .values()
+                    .any(|g| !g.expired && self.status(&g.id)["phase"] == "simulating")
+            {
+                eprintln!("Update ready; server idle, exiting for supervisor");
+                self.workers.lock().unwrap().clear();
+                std::process::exit(75);
+            }
+        }
     }
     fn save(&self, d: &Directory) -> Result<()> {
         atomic_json(&self.root.join("directory.json"), d)
@@ -139,6 +237,7 @@ impl Coordinator {
             .unwrap()
             .games
             .get(id)
+            .filter(|g| !self.expired(g, now_ms()))
             .cloned()
             .ok_or_else(|| "Game not found".into())
     }
@@ -154,6 +253,9 @@ impl Coordinator {
     fn worker(&self, game: &GameRecord, replay: Option<&str>) -> Result<u16> {
         let key = format!("{}:{}", game.id, replay.unwrap_or("live"));
         let mut workers = self.workers.lock().unwrap();
+        if self.expired(game, now_ms()) {
+            return Err("Game expired".into());
+        }
         if let Some(w) = workers.get_mut(&key)
             && w.child.try_wait().map_err(|e| e.to_string())?.is_none()
         {
@@ -277,7 +379,7 @@ pub fn router(c: Coordinator) -> Router {
 async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
     let d = c.directory.lock().unwrap();
     let user = cookie(&h, "atemporal-user");
-    let games:Vec<_>=d.games.values().map(|g|{
+    let games:Vec<_>=d.games.values().filter(|g| !c.expired(g, now_ms())).map(|g|{
         let status=c.status(&g.id);
         let mut replays=vec![];
         if let Ok(entries)=std::fs::read_dir(c.game_root(&g.id).join("replays")) {
@@ -286,7 +388,7 @@ async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
             }
         }
         replays.sort();replays.reverse();replays.truncate(12);
-        json!({"id":g.id,"name":g.name,"created":g.created,"locked":!g.password.is_empty(),"status":status,"players":g.setup.match_defaults.player_count,"bots":g.bots.slots,"mine":user.as_ref().is_some_and(|u|g.members.get(u).is_some_and(|slots|slots.iter().any(|slot|status["slots"].as_array().is_some_and(|ss|ss.iter().any(|s|s["slot"]==*slot&&s["claimed"]==true))))),"replays":replays})
+        json!({"active_players":c.active_players(g, &status),"id":g.id,"name":g.name,"created":g.created,"locked":!g.password.is_empty(),"status":status,"players":g.setup.match_defaults.player_count,"bots":g.bots.slots,"mine":user.as_ref().is_some_and(|u|g.members.get(u).is_some_and(|slots|slots.iter().any(|slot|status["slots"].as_array().is_some_and(|ss|ss.iter().any(|s|s["slot"]==*slot&&s["claimed"]==true))))),"replays":replays})
     }).collect();
     Json(json!({"games":games,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults})).into_response()
 }
@@ -326,6 +428,7 @@ struct CreateInput {
     bots: BotConfig,
 }
 async fn create(State(c): State<Coordinator>, Json(mut input): Json<CreateInput>) -> Response {
+    let _admission = Admission::new(&c);
     // Match settings are validated by the same loader as standalone YAML, never by UI alone.
     input.setup.match_defaults.replay_directory = "replays".into();
     let serialized = match serde_json::to_string(&input.setup) {
@@ -360,6 +463,7 @@ async fn create(State(c): State<Coordinator>, Json(mut input): Json<CreateInput>
             setup: input.setup,
             bots: input.bots,
             created: now_ms(),
+            expired: false,
             members: BTreeMap::new(),
         };
         d.games.insert(id, game.clone());
@@ -460,6 +564,7 @@ async fn relay(
     h: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
+    let admission = replay.is_none().then(|| Admission::new(&c));
     let game = match c.game(&id) {
         Ok(g) => g,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
@@ -500,6 +605,7 @@ async fn relay(
     };
     let user = cookie(&h, "atemporal-user");
     upgrade.max_message_size(64<<20).on_upgrade(move|mut browser|async move {
+        let _admission = admission;
         if let Some(worker) = c.workers.lock().unwrap().get_mut(&worker_key) && worker.port == port { worker.readers += 1; }
         let (mut tx,mut rx)=remote.split();
         loop {
@@ -604,6 +710,7 @@ mod tests {
             setup,
             bots: BotConfig::default(),
             created: 0,
+            expired: false,
             members: BTreeMap::new(),
         };
         let mut h = HeaderMap::new();
@@ -625,6 +732,62 @@ mod tests {
         assert!(!allowed(&changed, &h));
         changed.password.clear();
         assert!(allowed(&changed, &HeaderMap::new()));
+    }
+    #[test]
+    fn expiry_is_durable_and_uses_activity_not_server_restart_time() {
+        let root = std::env::temp_dir().join(format!(
+            "atemporal-expiry-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let setup =
+            atemporal_content::load_setup(include_str!("../../../config/game.yaml")).unwrap();
+        let c = Coordinator::new(
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            setup.clone(),
+        )
+        .unwrap();
+        let mut game = GameRecord {
+            id: "game-expiry".into(),
+            name: "Expiry".into(),
+            password: String::new(),
+            setup,
+            bots: BotConfig::default(),
+            created: 1000,
+            expired: false,
+            members: BTreeMap::new(),
+        };
+        let six_hours = 6 * 60 * 60 * 1000;
+        assert!(!c.expired(&game, 1000 + six_hours - 1));
+        assert!(c.expired(&game, 1000 + six_hours));
+        std::fs::create_dir_all(c.game_root(&game.id)).unwrap();
+        atomic_json(
+            &c.game_root(&game.id).join("status.json"),
+            &json!({"last_activity_ms":2000,"phase":"finished"}),
+        )
+        .unwrap();
+        assert!(!c.expired(&game, 1000 + six_hours));
+        assert!(c.expired(&game, 2000 + six_hours));
+        game.expired = true;
+        assert!(c.expired(&game, 2000)); // A clock change cannot resurrect a tombstone.
+        assert_eq!(
+            c.active_players(
+                &game,
+                &json!({"slots":[{"slot":0,"claimed":true,"connected":true}]})
+            ),
+            0
+        );
+        let admission = Admission::new(&c);
+        assert_eq!(c.admissions.lock().unwrap().count, 1);
+        drop(admission);
+        let state = c.admissions.lock().unwrap();
+        assert_eq!(state.count, 0);
+        assert!(state.idle_since > 0);
+        std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn replay_identifiers_cannot_escape_the_game_directory() {

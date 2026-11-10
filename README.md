@@ -103,3 +103,5 @@ npm run ui:review --prefix client        # real-browser gameplay scenarios
 - [Remaining work](docs/implementation.md#remaining-review-coverage) — open review items.
 
 To combine the default first-to-five scoreboard with 100 ticks of fixed history per round, launch `./quickstart.sh --config config/hybrid.yaml`.
+
+For a small unattended remote host, see [hosting and automatic updates](docs/hosting.md).

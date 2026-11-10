@@ -434,6 +434,14 @@ pub fn drive(app: ws::App, bots: BotConfig, status: Option<PathBuf>, lobby_file:
     if bots.slots.is_empty() && status.is_none() && lobby_file.is_none() {
         return;
     }
+    // Restore wall-clock activity; restarting must not renew abandoned games.
+    if let Some(path) = &status
+        && let Ok(bytes) = std::fs::read(path)
+        && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes)
+        && let Some(last) = value["last_activity_ms"].as_u64()
+    {
+        app.controller.lock().unwrap().last_activity_ms = last;
+    }
     tokio::spawn(async move {
         let mut saved = String::new();
         loop {
@@ -442,7 +450,7 @@ pub fn drive(app: ws::App, bots: BotConfig, status: Option<PathBuf>, lobby_file:
             }
             {
                 let c = app.controller.lock().unwrap();
-                let value = serde_json::json!({"match_id":c.match_id,"phase":c.phase,"round":c.round,"slots":c.lobby.slots,"lobby_revision":c.lobby.revision,"objective":c.config.objective});
+                let value = serde_json::json!({"last_activity_ms":c.last_activity_ms,"match_id":c.match_id,"phase":c.phase,"round":c.round,"slots":c.lobby.slots,"lobby_revision":c.lobby.revision,"objective":c.config.objective});
                 let text = value.to_string();
                 if text != saved {
                     if let Some(path) = &status

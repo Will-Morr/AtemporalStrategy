@@ -12,6 +12,18 @@ Joining a lobby defaults to spectator. Before starting, clicking an unclaimed sl
 
 The user suggested splitting a started game into a separate process and routing its traffic directly to that process. This is a preferred direction to investigate, not a locked process lifecycle or routing contract.
 
+## Small public server and game lifetime
+
+Host on a small remote computer on the live Internet, expecting about four simultaneous players. Keep deployment simple; a large scalable update architecture is unnecessary.
+
+Automatically update and restart when `main` changes, but do not restart while games are actively being played.
+
+Hide games with no active player from the default lobby list. Provide a “Show inactive games” checkbox. After six hours with no new moves or other game activity, archive the game and make it no longer viewable. Recently completed games must remain available for spectator review before expiry.
+
+Backward compatibility with older game data is not required. A quick migration script is acceptable if old game data is useful for reference.
+
+Track these requests in an ordered TODO list and update it as implementation proceeds.
+
 ## Lightweight users
 
 On the first visit, let players enter a username without validation. Provide a basic user identity so the coordinator can track who is playing which games. Pass this username into game lobbies without a duplicate username input. No authentication or unique-name requirement was requested; browser persistence and identity mechanics are implementation choices.
