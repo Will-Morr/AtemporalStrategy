@@ -45,7 +45,7 @@ test('landing navigation, content-backed explainer and retry after creation fail
   await page.goto(server.url);
   await page.getByRole('link',{name:'Game Docs',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Game Docs',exact:true})).toBeVisible();
-  await expect(page.locator('.doc-warning')).toHaveText('Chatbot Docs Warning: Better than nothing but this part is somewhat reviewed claudelist');
+  await expect(page.locator('.doc-warning')).toHaveText('Chatbot Docs Warning: Better than nothing but my apologies for the Claudelish');
   expect(await page.locator('.doc-warning').evaluate(el=>el.getBoundingClientRect().top)).toBeLessThan(80);
   await expect(page.locator('.unit-roles .unit-icon')).toHaveCount(14);
   await expect(page.locator('.unit-stats .unit-icon')).toHaveCount(14);

@@ -34,7 +34,7 @@ The documentation page should use the same dark blue color palette as the landin
 
 The latest [landing-page requirements](lobbies_and_bots.md#landing-page-and-quick-play) put a title, description and three main actions at the public home page. View Lobby leads to the game directory; setup controls remain inside each game lobby.
 
-At the top of the info page, clearly display: **“Chatbot Docs Warning: Better than nothing but this part is somewhat reviewed claudelist”**. Add attractive iconography matching the actual units and game elements.
+At the top of the info page, clearly display: **“Chatbot Docs Warning: Better than nothing but my apologies for the Claudelish”**. Add attractive iconography matching the actual units and game elements.
 
 Provide a concise, readable documentation page explaining how to play, how the game works, all game mechanics, and readable unit stats. The user's preferred implementation is a static site generated at compile time. Unit stats should reference the same source of truth as the game process to prevent drift.
 

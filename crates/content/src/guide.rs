@@ -273,13 +273,13 @@ pub fn render_guide(content: &Content, prose: &str) -> Result<String> {
     Ok(format!(
         r##"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atemporal — Game Docs</title><style>{styles}</style></head>
-<body><main><aside class="doc-warning" aria-label="Documentation warning"><strong>Chatbot Docs Warning:</strong> Better than nothing but this part is somewhat reviewed claudelist</aside><a href="/">← Atemporal</a>{prose}
+<body><main><aside class="doc-warning" aria-label="Documentation warning"><strong>Chatbot Docs Warning:</strong> Better than nothing but my apologies for the Claudelish</aside><a href="/">← Atemporal</a>{prose}
 
 <footer><details><summary>Game content identifier</summary><code>{hash}</code></details></footer></main></body></html>"##
     ))
 }
 fn rules_build(prose: &str) -> String {
-    sha256(format!("atemporal-guide-renderer-v7\n{GUIDE_STYLES}\n{UNIT_ICONS}\n{prose}").as_bytes())
+    sha256(format!("atemporal-guide-renderer-v8\n{GUIDE_STYLES}\n{UNIT_ICONS}\n{prose}").as_bytes())
 }
 fn artifacts(content: &Content, prose: &str) -> Result<(GuideManifest, BTreeMap<String, Vec<u8>>)> {
     let content = normalize_content(content.clone())?;
