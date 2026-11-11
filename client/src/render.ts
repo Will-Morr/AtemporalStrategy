@@ -264,8 +264,14 @@ export class Renderer {
     if (d && this.game.mode.kind === 'place') {
       for (const tile of this.game.placementTiles(this.tileAt(d.x0,d.y0),this.tileAt(d.x1,d.y1))) { const [x,y]=this.screen(tile.x,tile.y); ctx.strokeStyle=this.game.validPlacement(tile,false)?'#ffca28':'#ff5252';ctx.strokeRect(x+1,y+1,s-2,s-2); }
     }
-    if (d) {
-      ctx.strokeStyle = this.game.mode.kind === 'area' ? '#ffca28' : '#ffffff';
+    if (d && this.game.mode.kind === 'area') {
+      // Show exactly the tiles the order will cover.
+      const a = this.tileAt(d.x0, d.y0), b = this.tileAt(d.x1, d.y1);
+      const [x0, y0] = this.screen(Math.min(a.x, b.x), Math.min(a.y, b.y)), [x1, y1] = this.screen(Math.max(a.x, b.x) + 1, Math.max(a.y, b.y) + 1);
+      ctx.strokeStyle = '#ffca28';
+      ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    } else if (d) {
+      ctx.strokeStyle = '#ffffff';
       ctx.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0));
     }
     this.drawMinimap(views);
