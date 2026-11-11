@@ -441,6 +441,9 @@ struct CreateInput {
     setup: Setup,
     #[serde(default)]
     bots: BotConfig,
+    /// Append " v{n}", counting earlier games with this name (expired ones included).
+    #[serde(default)]
+    numbered: bool,
 }
 async fn create(
     State(c): State<Coordinator>,
@@ -489,6 +492,15 @@ async fn create(
             id: id.clone(),
             name: if input.name.is_empty() {
                 "New game".into()
+            } else if input.numbered {
+                let prefix = format!("{} v", input.name);
+                let n = d
+                    .games
+                    .values()
+                    .filter(|g| g.name.starts_with(&prefix))
+                    .count()
+                    + 1;
+                format!("{prefix}{n}")
             } else {
                 input.name
             },
@@ -927,6 +939,7 @@ mod tests {
                 password: String::new(),
                 setup: attack,
                 bots: BotConfig::default(),
+                numbered: false,
             }),
         )
         .await;
