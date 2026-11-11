@@ -51,7 +51,7 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 1. [x] Inspect saved losses and verify completed factories prevent elimination.
 2. [x] Put final-tick explanations beneath the result heading with a jump to final state.
 3. [x] Keep building placement active when Shift is held.
-4. [x] Show full vision to all players in recorded timelines.
+4. [x] Keep player fog during live timelines; spectators and finished-match replays get full vision.
 5. [x] Verify browser interactions and screenshots; publish fixes and reviewed Game Docs.
 
 ## Bot follow-up

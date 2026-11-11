@@ -133,7 +133,7 @@ export class Game {
   get spectator(): boolean {
     return this.session.slot === null;
   }
-  get fullVision(): boolean { return this.spectator || this.rev() !== null; }
+  get fullVision(): boolean { return this.spectator || this.finished !== null; }
   color(owner: number): string {
     const team = this.profiles[owner]?.profile?.team_id;
     if (team) { const first = this.profiles.find(s => s.profile?.team_id === team); if (first?.profile) return first.profile.color; }
