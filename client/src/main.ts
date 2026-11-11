@@ -3,6 +3,8 @@ import { runLobby, type Session } from './lobby';
 import { Game } from './game';
 import { tabToken, rememberPlayer, slotStorageKey } from './session';
 
+if (matchMedia('(pointer: coarse)').matches && !sessionStorage.getItem('atemporal-mobile-warned')) { sessionStorage.setItem('atemporal-mobile-warned', '1'); alert('Heads up: this is really not optimized for mobile, it might work a little but no promises'); }
+
 const status = document.getElementById('status') as HTMLParagraphElement;
 const net = new Net();
 let game: Game | null = null;
