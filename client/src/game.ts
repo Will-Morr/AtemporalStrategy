@@ -1301,7 +1301,9 @@ export class Game {
       const reasons=transition?.reasons.map(r=>r==='no_build_ability'?'no completed constructors or factories remained':'no completed survival buildings remained').join('; ');
       explanation.textContent=eliminated ? `At the final tick (${o.terminal_state_tick}), ${reasons || 'your side was eliminated'}. Buildings visible at earlier ticks do not change that final result.` : `Final result at tick ${o.terminal_state_tick}. ${o.kind==='stalemate'?'Both sides still survived.':o.kind==='draw'?'No players survived.':'Survivors: '+o.survivors.map(p=>this.name(p)).join(', ')+'.'}`;
       const end=document.createElement('button');end.textContent='View final state';end.onclick=()=>this.seek(o.terminal_state_tick);
-      banner.replaceChildren(title,explanation,end);
+      const details=document.createElement('details');details.open=banner.querySelector('details')?.open??false;
+      const summary=document.createElement('summary');summary.textContent='Explain result';details.append(summary,explanation);
+      banner.replaceChildren(title,details,end);
       const lines = [`<b>Revision ${rev.revision}</b>: ${o.kind} (${o.stop_reason.replace('_', ' ')} at tick ${o.terminal_state_tick}, last progress ${o.last_progress_tick})`];
       lines.push(`survivors: ${o.survivors.map(p => this.name(p)).join(', ') || 'none'}`);
       if (rev.score) lines.push(rev.score.entries.map(e => `${e.side_id.kind === 'player' ? this.name(e.side_id.player_id) : e.side_id.team_id}: +${e.raw_delta} → ${e.raw_total} (adjusted ${e.adjusted_total.toFixed(2)})`).join(' · '));

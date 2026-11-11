@@ -14,7 +14,8 @@ test('repeat buildings with Shift and keep live fog while inspecting final timel
  await tile(a,spots[1]);expect(await a.evaluate(()=>window.atemporal.mode.kind)).toBe('none');
  expect(await a.evaluate(()=>window.atemporal.draft.commands.filter(d=>d.command.kind==='place_blueprints').length)).toBe(2);
  await expect(a.locator('#outcome-banner strong')).toContainText('TIMELINE 0');
- await expect(a.locator('#outcome-banner > div')).toContainText('Final result at tick');
+ await expect(a.locator('#outcome-banner details div')).toBeHidden();await review.capture('result-explanation-collapsed',a);await a.locator('#outcome-banner summary').click();
+ await expect(a.locator('#outcome-banner details div')).toContainText('Final result at tick');
  await a.getByRole('button',{name:'View final state',exact:true}).click();
  await expect.poll(()=>a.evaluate(()=>window.atemporal.playhead)).toBe(await a.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick));
  await review.capture('fogged-result-and-explanation',a);
