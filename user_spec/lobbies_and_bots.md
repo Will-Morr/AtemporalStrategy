@@ -49,3 +49,7 @@ Sophisticated planning and strong play are unnecessary. The suggested approach i
 ## Execution constraints
 
 Proceed independently through implementation and verification without asking for further input. While the device is busy, keep builds and tests low priority and resource usage limited; use at most two CPU cores and run heavy checks sequentially. This temporarily supersedes the earlier six-core test allowance.
+
+## Network and host safety
+
+Review network-facing code for unintended code execution and similar host compromise, and fix and push concrete issues found. The user is not asking for anti-cheat protections; compromise of the trusted GitHub/repository update path is an accepted attack boundary. Keep the review and fixes appropriate to the small-server design.
