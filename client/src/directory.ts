@@ -1,6 +1,6 @@
 import type {Setup, LobbySlot} from './contracts.generated';
 type Style='standard';
-interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
+interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
 interface Directory {games:Entry[];user:string|null;defaults:Setup}
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 let directory:Directory;
@@ -16,7 +16,7 @@ function render():void {
     const card=document.createElement('article');card.className='card';card.dataset.game=game.id;
     const body=document.createElement('div'),badge=document.createElement('span');badge.className='badge';badge.textContent=game.status.phase==='lobby'?'Open lobby':game.status.phase==='archived'?'Archived':game.status.phase==='finished'?'Finished':'Active';
     const title=document.createElement('h3');title.textContent=game.name;body.append(badge,title);
-    const info=document.createElement('p');info.textContent=`${game.players} players · ${(game.status.objective?.kind==='simple_win'?'Simple win':game.status.objective?.kind)??'Preparing'}${game.status.round?` · Round ${game.status.round}`:''}${game.locked?' · Password required':''}${game.mine?' · Your game':''}`;
+    const info=document.createElement('p');info.textContent=`${game.players} players · ${(game.status.objective?.kind==='simple_win'?'Simple win':game.status.objective?.kind)??'Preparing'}${game.status.round?` · Round ${game.status.round}`:''}${game.status.round&&game.status.last_activity_ms?` · Last turn ${new Date(game.status.last_activity_ms).toLocaleString()}`:''}${game.locked?' · Password required':''}${game.mine?' · Your game':''}`;
     const roster=document.createElement('p');roster.className='players';roster.textContent=game.status.slots?.map(s=>s.profile?.username??`Slot ${s.slot}: open`).join(' · ')??'Preparing lobby…';body.append(info,roster);
     const link=document.createElement('a');link.className='button';link.href=`/games/${game.id}/`;link.textContent=game.status.phase==='lobby'?'Enter lobby':['finished','archived'].includes(game.status.phase)?'View game':'Watch / rejoin';
     card.append(body,link);
