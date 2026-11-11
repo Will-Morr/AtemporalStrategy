@@ -20,6 +20,8 @@ test('landing page starts a default bot match with one click and retains the pla
   await review.capture('landing-narrow',page);
   await page.setViewportSize({width:1920,height:1080});
   await page.getByRole('button',{name:'Play Against Bot',exact:true}).click();
+  await expect(page.locator('#name-dialog')).toBeVisible();await review.capture('quick-play-name',page);
+  await page.getByLabel('Username',{exact:true}).fill('Quick player');await page.getByRole('button',{name:'Play',exact:true}).click();
   await expect(page).toHaveURL(/\/games\/game-[^/]+\/$/);
   await revision(page,0);
   expect(await page.evaluate(()=>window.atemporal.player)).toBe(0);
@@ -28,7 +30,7 @@ test('landing page starts a default bot match with one click and retains the pla
   expect(directory.games).toHaveLength(1);
   expect(directory.games[0].bots).toEqual([null,directory.default_bot]);
   expect(directory.default_bot).toBe('standard');
-  expect(directory.user).toBe('Player');
+  expect(directory.user).toBe('Quick player');
   await page.getByRole('button',{name:'All units',exact:true}).click();
   await expect(page.locator('#selection .unit-icon')).toHaveCount(3);
   await page.locator('#commit').click();await revision(page,1);
@@ -103,7 +105,8 @@ test('landing navigation, content-backed explainer and retry after creation fail
 test('end-of-game feedback is private, persistent and linked to the exact match',async({page,review},testInfo)=>{
   const {readFile,readdir}=await import('node:fs/promises');
   const server=await isolatedServer(testInfo,c=>{small(c);c.match_defaults.objective.rules.victory_rule.points=1;},()=>{},['--coordinator']);review.afterClose(server.stop);
-  await page.goto(server.url);await page.getByRole('button',{name:'Play Against Bot',exact:true}).click();await revision(page,0);
+  await page.goto(server.url);await page.getByRole('button',{name:'Play Against Bot',exact:true}).click();
+  await page.getByLabel('Username',{exact:true}).fill('Feedback player');await page.getByRole('button',{name:'Play',exact:true}).click();await revision(page,0);
   for(let round=1;round<=6&&!await page.evaluate(()=>!!window.atemporal.finished);round++){await page.locator('#commit').click();await revision(page,round);}
   await expect(page.getByRole('dialog',{name:'Game complete'})).toBeVisible();
   await expect(page.locator('#outcome-banner strong')).toContainText('LOSS');
@@ -120,7 +123,7 @@ test('end-of-game feedback is private, persistent and linked to the exact match'
   const files=await readdir(folder);expect(files).toHaveLength(1);
   const record=JSON.parse(await readFile(`${folder}/${files[0]}`,'utf8'));
   expect(record.message).toBe(message);expect(record.game_id).toBe(id);expect(record.match_id).toBe(match);
-  expect(record.username).toBe('Player');expect(record.log_path).toBe(`${id}/replays/${match}`);
+  expect(record.username).toBe('Feedback player');expect(record.log_path).toBe(`${id}/replays/${match}`);
   const endpoint=`${server.url}api/games/${id}/feedback`;
   const body={match_id:match,submission_id:record.submission_id,message,revision:1};
   expect((await page.request.post(endpoint,{data:body})).ok()).toBe(true);

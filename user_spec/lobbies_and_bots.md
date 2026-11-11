@@ -30,7 +30,7 @@ The public home page shows **Atemporal**, the subtitle **An RTS from the perspec
 
 Place large navigation buttons at the bottom, with **Play Against Bot** first. One click creates a new lobby with the player and the default best available AI, then starts immediately without setup friction. **View Lobby** opens the game directory. **Game Docs** opens a quick explanation of the UI, command types and unit roles, including unit stats.
 
-For this quick-play path, skip the previous first-visit username prompt and manual map/start steps. Keep normal multiplayer lobby setup available through View Lobby.
+For this quick-play path, skip manual map/start steps. Quick play now asks first-time players to pick a username before starting (superseding the earlier decision to skip the prompt). Keep normal multiplayer lobby setup available through View Lobby.
 
 ## End-of-game feedback
 
@@ -38,7 +38,7 @@ Add a Give feedback button to the game-end page. Players can write a message dir
 
 ## Lightweight users
 
-On the first visit to the game directory, let players enter a username without validation. Quick play bypasses this prompt. Provide a basic user identity so the coordinator can track who is playing which games. Pass this username into game lobbies without a duplicate username input. No authentication or unique-name requirement was requested; browser persistence and identity mechanics are implementation choices.
+On the first visit to the game directory, let players enter a username without validation. Quick play asks for a username too. Provide a basic user identity so the coordinator can track who is playing which games. Pass this username into game lobbies without a duplicate username input. No authentication or unique-name requirement was requested; browser persistence and identity mechanics are implementation choices.
 
 ## Minimal opponents and automated playtesting
 

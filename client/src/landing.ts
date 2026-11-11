@@ -13,6 +13,12 @@ async function api(path:string,body?:unknown):Promise<any>{
   if(!response.ok)throw new Error(`Server request failed (${response.status}).`);
   const value=await response.json();if(value.error)throw new Error(value.error);return value;
 }
+async function askName():Promise<string|null>{
+  const dialog=document.getElementById('name-dialog') as HTMLDialogElement,input=document.getElementById('name-input') as HTMLInputElement;
+  input.value=localStorage.getItem('atemporal-username')??'';dialog.returnValue='';dialog.showModal();
+  await new Promise(r=>dialog.addEventListener('close',r,{once:true}));
+  return dialog.returnValue==='ok'?input.value.trim():null;
+}
 play.onclick=async()=>{
   if(play.disabled)return;
   play.disabled=true;resume.hidden=true;status.textContent='Preparing your game…';
@@ -20,8 +26,14 @@ play.onclick=async()=>{
   let net:Net|null=null;
   try {
     const directory=await api('/api/directory');
-    const username:string=directory.user??localStorage.getItem('atemporal-username')??'Player';
-    if(directory.user===null)await api('/api/identity',{username});
+    // Earlier quick-play visitors were silently named "Player"; let them choose too.
+    let username:string|null=directory.user==='Player'?null:directory.user;
+    if(username===null){
+      status.textContent='';username=await askName();
+      if(!username){status.textContent='';play.disabled=false;return;}
+      await api('/api/identity',{username});localStorage.setItem('atemporal-username',username);
+      status.textContent='Preparing your game…';
+    }
     if(url&&!directory.games.some((g:{id:string})=>url===`/games/${g.id}/`))url=null;
     if(!url){
       const setup:Setup=structuredClone(directory.defaults);
