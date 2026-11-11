@@ -39,7 +39,7 @@ play.onclick=async()=>{
       const setup:Setup=structuredClone(directory.defaults);
       setup.match_defaults.player_count=2;setup.match_defaults.multiplayer={kind:'ffa'};
       setup.match_defaults.transport='authoritative';setup.available_teams=[];
-      const result=await api('/api/games',{name:'You vs Bot',setup,bots:{slots:[null,directory.default_bot],playtest_rounds:20}});
+      const result=await api('/api/games',{name:`${username} vs Bot`,setup,bots:{slots:[null,directory.default_bot],playtest_rounds:20}});
       url=result.url;sessionStorage.setItem(pendingKey,url!);
     }
     const path=url!;
