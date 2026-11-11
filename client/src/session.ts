@@ -19,3 +19,13 @@ export function rememberPlayer(match: string, slot: number, token: string, name:
 }
 export function choosePlayer(token: string): void { sessionStorage.setItem(slotStorageKey, token); location.href = location.pathname; }
 export const guideUrl = `${gameScope ?? ''}/guide/`;
+// Stable per-machine hash so the server's visit log can count unique users across cleared cookies.
+export function setFingerprint(): void {
+  const c = document.createElement('canvas'), g = c.getContext('2d');
+  if (g) { g.textBaseline = 'top'; g.font = '14px Arial'; g.fillStyle = '#f60'; g.fillRect(2, 2, 60, 20); g.fillStyle = '#069'; g.fillText('Atemporal ✓', 4, 4); }
+  const gl = document.createElement('canvas').getContext('webgl'), info = gl?.getExtension('WEBGL_debug_renderer_info');
+  const parts = [c.toDataURL(), info ? gl!.getParameter(info.UNMASKED_RENDERER_WEBGL) : '', screen.width, screen.height, screen.colorDepth, Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.languages.join(), navigator.platform, navigator.hardwareConcurrency, navigator.maxTouchPoints].join('|');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < parts.length; i++) h = Math.imul(h ^ parts.charCodeAt(i), 0x01000193);
+  document.cookie = `atemporal-fp=${(h >>> 0).toString(16)}; Path=/; SameSite=Lax; Max-Age=31536000`;
+}

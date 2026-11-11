@@ -1,4 +1,6 @@
 import type {Setup, LobbySlot} from './contracts.generated';
+import {setFingerprint} from './session';
+setFingerprint();
 type Style='standard';
 interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
 interface Directory {games:Entry[];user:string|null;defaults:Setup}

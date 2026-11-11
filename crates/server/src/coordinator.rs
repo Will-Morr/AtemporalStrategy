@@ -241,6 +241,19 @@ impl Coordinator {
             .cloned()
             .ok_or_else(|| "Game not found".into())
     }
+    /// Appends who did what to visits.jsonl for counting unique users; best effort.
+    fn log_visit(&self, h: &HeaderMap, event: &str, detail: &str) {
+        use std::io::Write;
+        let get = |k: &str| h.get(k).and_then(|v| v.to_str().ok()).unwrap_or("");
+        let line = json!({"ms":now_ms(),"event":event,"detail":detail,"ip":get("x-forwarded-for"),"ua":get("user-agent"),"lang":get("accept-language"),"user":cookie(h,"atemporal-user"),"fp":cookie(h,"atemporal-fp")});
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.root.join("visits.jsonl"));
+        if let Ok(mut file) = file {
+            let _ = writeln!(file, "{line}");
+        }
+    }
     fn game_root(&self, id: &str) -> PathBuf {
         self.root.join(id)
     }
@@ -412,6 +425,7 @@ async fn identity_update(
         .filter(|s| d.users.contains_key(s))
         .unwrap_or_else(|| format!("user-{}-{}", now_ms(), d.users.len()));
     d.users.insert(id.clone(), input.username.clone());
+    c.log_visit(&h, "identity", &id);
     if let Err(e) = c.save(&d) {
         return error(e);
     }
@@ -433,7 +447,11 @@ struct CreateInput {
     #[serde(default)]
     bots: BotConfig,
 }
-async fn create(State(c): State<Coordinator>, Json(mut input): Json<CreateInput>) -> Response {
+async fn create(
+    State(c): State<Coordinator>,
+    h: HeaderMap,
+    Json(mut input): Json<CreateInput>,
+) -> Response {
     let _admission = Admission::new(&c);
     // A browser may tune game rules, but cannot allocate more simulation threads than
     // the host's trusted startup configuration. Large values otherwise spawn one OS
@@ -486,6 +504,7 @@ async fn create(State(c): State<Coordinator>, Json(mut input): Json<CreateInput>
             expired: false,
             members: BTreeMap::new(),
         };
+        c.log_visit(&h, "create", &id);
         d.games.insert(id, game.clone());
         if let Err(e) = c.save(&d) {
             return error(e);
@@ -669,6 +688,7 @@ async fn relay(
     }
     let readonly = replay.is_some();
     let worker_key = format!("{}:{}", id, replay.as_deref().unwrap_or("live"));
+    c.log_visit(&h, if readonly { "replay" } else { "game" }, &worker_key);
     if let Some(r) = &replay {
         let status = c.status(&id);
         if !valid_id(r)
@@ -910,6 +930,7 @@ mod tests {
         attack.match_defaults.replay_directory = "/tmp/attacker-controlled".into();
         let response = create(
             State(c.clone()),
+            HeaderMap::new(),
             Json(CreateInput {
                 name: "oversized public thread request".into(),
                 password: String::new(),

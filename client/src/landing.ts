@@ -1,5 +1,8 @@
 import {Net} from './net';
 import type {Setup} from './contracts.generated';
+import {setFingerprint} from './session';
+
+setFingerprint();
 
 const play=document.getElementById('play') as HTMLButtonElement;
 const status=document.getElementById('play-status')!;
