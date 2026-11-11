@@ -445,10 +445,8 @@ test('slice timed history, guide and server restart', async ({ review }, testInf
     await guide.screenshot({path:testInfo.outputPath('guide-inspection-desktop-viewport.png')});
     // Keep the existing tabs open at the same address while replacing the actual server.
     await stop(); await start();
-    await expect(a.locator('#connection')).toContainText('Server restarted',{timeout:15000});
-    await review.capture('stale-server-instance',a);
-    await a.getByRole('button',{name:'Reload current server'}).click();
-    await expect(a.locator('#status')).toContainText('Claim a slot');
+    // Open tabs reload themselves onto the new server instance.
+    await expect(a.locator('#status')).toContainText('Claim a slot',{timeout:15000});
     await review.capture('fresh-lobby-after-server-restart',a);
     for (const page of [a,b,guide]) await page.goto('about:blank');
   } finally { if (child.exitCode === null) await stop(); }

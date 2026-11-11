@@ -66,7 +66,6 @@ pub struct Coordinator {
 #[derive(Default)]
 struct Admissions {
     count: usize,
-    idle_since: u64,
 }
 struct Admission(Arc<Mutex<Admissions>>);
 impl Admission {
@@ -77,9 +76,7 @@ impl Admission {
 }
 impl Drop for Admission {
     fn drop(&mut self) {
-        let mut state = self.0.lock().unwrap();
-        state.count -= 1;
-        state.idle_since = now_ms();
+        self.0.lock().unwrap().count -= 1;
     }
 }
 fn error(message: impl ToString) -> Response {
@@ -132,10 +129,7 @@ impl Coordinator {
             defaults,
             directory: Arc::new(Mutex::new(directory)),
             workers: Arc::new(Mutex::new(BTreeMap::new())),
-            admissions: Arc::new(Mutex::new(Admissions {
-                count: 0,
-                idle_since: now_ms(),
-            })),
+            admissions: Arc::new(Mutex::new(Admissions { count: 0 })),
         };
         // Resume open/active games even if no browser has returned yet (bot playtests included).
         let games: Vec<_> = coordinator
@@ -212,11 +206,12 @@ impl Coordinator {
                     Err(e) => eprintln!("directory expiry: {e}"),
                 }
             }
-            // Hold admission lock until exit: no create/relay can race the idle decision.
+            // Hold admission lock until exit: no creation can race the idle decision.
             let admissions = self.admissions.lock().unwrap();
+            // Connected players don't block updates: turns are on disk and browsers
+            // reload with their uncommitted drafts. Only creations/feedback and running rounds wait.
             if self.root.join("update-request").exists()
                 && admissions.count == 0
-                && now_ms().saturating_sub(admissions.idle_since) >= 30_000
                 && !d
                     .games
                     .values()
@@ -678,7 +673,6 @@ async fn relay(
     h: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    let admission = replay.is_none().then(|| Admission::new(&c));
     let game = match c.game(&id) {
         Ok(g) => g,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
@@ -720,7 +714,6 @@ async fn relay(
     };
     let user = cookie(&h, "atemporal-user");
     upgrade.max_message_size(64<<20).on_upgrade(move|mut browser|async move {
-        let _admission = admission;
         if let Some(worker) = c.workers.lock().unwrap().get_mut(&worker_key) && worker.port == port { worker.readers += 1; }
         let (mut tx,mut rx)=remote.split();
         loop {
@@ -901,9 +894,7 @@ mod tests {
         let admission = Admission::new(&c);
         assert_eq!(c.admissions.lock().unwrap().count, 1);
         drop(admission);
-        let state = c.admissions.lock().unwrap();
-        assert_eq!(state.count, 0);
-        assert!(state.idle_since > 0);
+        assert_eq!(c.admissions.lock().unwrap().count, 0);
         std::fs::remove_dir_all(root).unwrap();
     }
     #[tokio::test]

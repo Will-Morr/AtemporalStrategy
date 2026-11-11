@@ -186,7 +186,7 @@ The focused `simple win game type can be selected and started` coordinator scena
 
 ### Small-host lifecycle
 
-`coordinator.spec.mjs` also covers Show inactive games, an update held pending during play, the 30-second idle shutdown grace, same-address recovery, and six-hour expiry blocking direct game/guide/replay access across restart. The expiry test ages the persisted activity timestamp. The existing recent-replay scenario verifies spectator review before expiry. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.
+`coordinator.spec.mjs` also covers Show inactive games, an update restarting the server despite a live player (whose tab reloads onto the new server), same-address recovery, and six-hour expiry blocking direct game/guide/replay access across restart. The expiry test ages the persisted activity timestamp. The existing recent-replay scenario verifies spectator review before expiry. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.
 
 ### Home page and quick play
 

@@ -97,7 +97,7 @@ test('simple win game type can be selected and started',async({page,review},test
   expect(await page.evaluate(()=>window.atemporal.config.objective.kind)).toBe('simple_win');
 });
 
-test('idle update waits for live games, hides inactive games and expires all game URLs',async({page,review},testInfo)=>{
+test('updates restart despite live players, hide inactive games and expire all game URLs',async({page,review},testInfo)=>{
   test.setTimeout(150000);
   const {writeFile,unlink}=await import('node:fs/promises');
   const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);review.afterClose(server.stop);
@@ -109,17 +109,16 @@ test('idle update waits for live games, hides inactive games and expires all gam
   await review.capture('hosting-active-game',listing);
   const request=`${server.dir}/games/update-request`;
   await writeFile(request,'');
-  // An update must remain pending past the idle grace while a human is playing.
-  await page.waitForTimeout(33000);
-  expect((await listing.request.get(server.url+'api/directory')).ok()).toBe(true);
+  // A connected player must not hold an update back; the tab reloads onto the new server.
+  await expect.poll(async()=>{try{return (await listing.request.get(server.url+'api/directory',{timeout:1000})).ok();}catch{return false;}},{timeout:15000}).toBe(false);
+  await unlink(request);await server.start();
+  await revision(page,0);
   await page.locator('#commit').click();await revision(page,1);
   await page.close();
-  await expect(listing.locator('.card')).toHaveCount(0);
+  await listing.reload();await expect(listing.locator('.card')).toHaveCount(0);
   await listing.getByLabel('Show inactive games',{exact:true}).check();
   await expect(listing.locator('.card')).toHaveCount(1);
   await review.capture('hosting-show-inactive',listing);
-  await expect.poll(async()=>{try{return (await listing.request.get(server.url+'api/directory',{timeout:1000})).ok();}catch{return false;}},{timeout:45000}).toBe(false);
-  await unlink(request);await server.start();
   await listing.reload();await listing.getByLabel('Show inactive games',{exact:true}).check();await expect(listing.locator('.card')).toHaveCount(1);
   // Persisted connection bits and a restart must not make an abandoned game active.
   await listing.getByLabel('Show inactive games',{exact:true}).uncheck();await expect(listing.locator('.card')).toHaveCount(0);

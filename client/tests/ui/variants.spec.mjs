@@ -62,8 +62,8 @@ for(const variant of [
   for(const p of [...ps,spectator])await p.context().setOffline(true);
   await server.stop();await server.start(['--resume',match]);
   for(const p of [...ps,spectator])await p.context().setOffline(false);
-  await expect(a.locator('#connection')).toContainText('Server restarted',{timeout:15000});await review.capture('archive-resumed-reload-prompt',a);
-  for(const p of [...ps,spectator]){await p.reload();if(p===spectator)await p.getByRole('button',{name:'Spectate',exact:true}).click();await revision(p,2);}
+  // Tabs reload themselves onto the resumed server.
+  for(const p of [...ps,spectator]){if(p===spectator)await p.getByRole('button',{name:'Spectate',exact:true}).click({timeout:15000});await revision(p,2);}
   await seek(a,tick+1);
   expect(await a.evaluate(()=>({round:window.atemporal.round,score:window.atemporal.rev().score,timed:window.atemporal.editableFrom,groups:window.atemporal.exact.state.control_groups}))).toEqual(before);
   await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.rounds.size)).toBe(3);

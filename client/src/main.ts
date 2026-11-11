@@ -18,7 +18,8 @@ const showConnection = (message: string) => {
   const reload = document.createElement('button'); reload.textContent = 'Reload current server'; reload.onclick = () => location.reload(); connection.append(reload);
   connection.hidden = false;
 };
-net.onInstanceChange = () => { stale = true; showConnection('Server restarted. Reload to obtain its current match and guide. '); };
+// Updates restart the server; reloading picks up the new release and restores the saved draft.
+net.onInstanceChange = () => { stale = true; showConnection('Server updated. Reloading… '); location.reload(); };
 net.onClose = () => {
   game?.updatePanels();
   if (stale || reconnecting) return;

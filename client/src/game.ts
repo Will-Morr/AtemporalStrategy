@@ -110,6 +110,9 @@ export class Game {
   recalledGroup: number | null = null;
   mode: Mode = { kind: 'none' };
   draft: Draft = { tick: null, commands: [], undo: [], redo: [], policy: 'keep', selected: null };
+  // Uncommitted orders survive a reload (e.g. a server update restart) in this tab.
+  draftRestored = false;
+  get draftKey(): string { return `atemporal-draft:${location.pathname}:${this.net.matchId}:${this.player}`; }
   drag: { x0: number; y0: number; x1: number; y1: number } | null = null;
   hover: Tile | null = null;
   profiles: LobbyState['slots'] = [];
@@ -157,6 +160,11 @@ export class Game {
       this.availableThrough = m.available_through;
       this.committed = m.committed_players;
       this.progress = null;
+      if (!this.draftRestored && this.player !== null) {
+        const saved = JSON.parse(sessionStorage.getItem(this.draftKey) ?? 'null');
+        if (saved?.round === m.round && !this.draft.commands.length) this.draft = saved.draft;
+        this.draftRestored = true;
+      }
       this.updatePanels();
       if (this.player !== null && this.exact) this.net.send({ kind: 'planning_ready', round: m.round, revision: m.revision });
     });
@@ -1277,6 +1285,10 @@ export class Game {
   }
 
   updatePanels(): void {
+    if (this.draftRestored) {
+      if (this.draft.commands.length) sessionStorage.setItem(this.draftKey, JSON.stringify({round: this.round, draft: this.draft}));
+      else sessionStorage.removeItem(this.draftKey);
+    }
     updateRematch(this);
     this.updateTop();
     this.experience?.update();
