@@ -800,3 +800,40 @@ pub fn drive_job(app: App, mut rx: mpsc::Receiver<WorkerMessage>) {
         }
     });
 }
+
+#[cfg(test)]
+mod file_boundary_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn static_files_cannot_escape_the_configured_asset_root() {
+        let root = std::env::temp_dir().join(format!(
+            "atemporal-static-security-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("public")).unwrap();
+        std::fs::write(root.join("private.txt"), "outside asset root").unwrap();
+        std::fs::write(root.join("public/index.html"), "public page").unwrap();
+        let assets = root.join("public");
+        assert_eq!(serve(&assets, "index.html").await.status(), StatusCode::OK);
+        for path in [
+            "../private.txt",
+            "nested/../../private.txt",
+            "/private.txt",
+            "//private.txt",
+            "",
+            "nested//index.html",
+        ] {
+            assert_eq!(
+                serve(&assets, path).await.status(),
+                StatusCode::NOT_FOUND,
+                "{path}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

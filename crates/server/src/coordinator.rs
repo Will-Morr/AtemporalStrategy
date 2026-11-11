@@ -251,6 +251,11 @@ impl Coordinator {
             .unwrap_or(json!({"phase":"lobby","round":0}))
     }
     fn worker(&self, game: &GameRecord, replay: Option<&str>) -> Result<u16> {
+        if game.setup.match_defaults.simulation_threads
+            > self.defaults.match_defaults.simulation_threads
+        {
+            return Err("Game exceeds this host's simulation thread budget".into());
+        }
         let key = format!("{}:{}", game.id, replay.unwrap_or("live"));
         let mut workers = self.workers.lock().unwrap();
         if self.expired(game, now_ms()) {
@@ -430,6 +435,20 @@ struct CreateInput {
 }
 async fn create(State(c): State<Coordinator>, Json(mut input): Json<CreateInput>) -> Response {
     let _admission = Admission::new(&c);
+    // A browser may tune game rules, but cannot allocate more simulation threads than
+    // the host's trusted startup configuration. Large values otherwise spawn one OS
+    // thread per entity once parallel intent processing begins.
+    if input.setup.match_defaults.simulation_threads > c.defaults.match_defaults.simulation_threads
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":format!(
+                "This host allows at most {} simulation threads per game.",
+                c.defaults.match_defaults.simulation_threads
+            )})),
+        )
+            .into_response();
+    }
     // Match settings are validated by the same loader as standalone YAML, never by UI alone.
     input.setup.match_defaults.replay_directory = "replays".into();
     let serialized = match serde_json::to_string(&input.setup) {
@@ -865,6 +884,63 @@ mod tests {
         let state = c.admissions.lock().unwrap();
         assert_eq!(state.count, 0);
         assert!(state.idle_since > 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[tokio::test]
+    async fn public_creation_rejects_host_thread_amplification_before_spawning() {
+        let root = std::env::temp_dir().join(format!(
+            "atemporal-security-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let setup =
+            atemporal_content::load_setup(include_str!("../../../config/game.yaml")).unwrap();
+        let budget = setup.match_defaults.simulation_threads;
+        let c = Coordinator::new(
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            setup.clone(),
+        )
+        .unwrap();
+        let mut attack = setup;
+        attack.match_defaults.simulation_threads = u16::MAX;
+        attack.match_defaults.replay_directory = "/tmp/attacker-controlled".into();
+        let response = create(
+            State(c.clone()),
+            Json(CreateInput {
+                name: "oversized public thread request".into(),
+                password: String::new(),
+                setup: attack,
+                bots: BotConfig::default(),
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains(&format!("at most {budget}")));
+        assert!(c.directory.lock().unwrap().games.is_empty());
+        assert!(c.workers.lock().unwrap().is_empty());
+        let mut legacy = GameRecord {
+            id: "game-legacy".into(),
+            name: "old unbounded setup".into(),
+            password: String::new(),
+            setup: c.defaults.clone(),
+            bots: BotConfig::default(),
+            created: now_ms(),
+            expired: false,
+            members: BTreeMap::new(),
+        };
+        legacy.setup.match_defaults.simulation_threads = u16::MAX;
+        assert!(
+            c.worker(&legacy, None)
+                .unwrap_err()
+                .contains("thread budget")
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
