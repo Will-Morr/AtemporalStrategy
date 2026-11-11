@@ -8,34 +8,20 @@ use std::{path::PathBuf, time::Duration};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Style {
-    Rusher,
-    Builder,
-    Raider,
+    #[serde(alias = "rusher", alias = "builder", alias = "raider")]
+    Standard,
 }
-/// Default quick-play opponent; keep selection centralized as bot policies improve.
-pub const DEFAULT_STYLE: Style = Style::Rusher;
-
+/// One policy for quick play and selectable practice opponents.
+pub const DEFAULT_STYLE: Style = Style::Standard;
 impl Style {
     fn name(self) -> &'static str {
-        match self {
-            Self::Rusher => "Rusher",
-            Self::Builder => "Builder",
-            Self::Raider => "Raider",
-        }
+        "Standard"
     }
     fn interval(self) -> Tick {
-        match self {
-            Self::Rusher => 50,
-            Self::Builder => 150,
-            Self::Raider => 100,
-        }
+        150
     }
     fn unit(self) -> &'static str {
-        match self {
-            Self::Rusher => "grunt",
-            Self::Builder => "tank",
-            Self::Raider => "grinder",
-        }
+        "grunt"
     }
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -131,7 +117,7 @@ fn distance(a: Tile, b: Tile) -> u32 {
     (x * x + y * y) as u32
 }
 /// Terrain/ore are public map data. Hidden enemy entities, orders, banks and blueprints never
-/// enter a policy. The same allied radial vision model is used by the browser.
+/// enter a policy. Replay display can reveal more; the bot still uses allied unit vision.
 pub fn visible_state(
     state: &WorldState,
     player: PlayerId,
@@ -191,6 +177,19 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
         .max(c.editable_from)
         .min(c.available_through())
         .min(c.config.max_tick - 1);
+    if let Some(outcome) = &data.outcome
+        && outcome.eliminated.contains(&player)
+        && let Some(loss) = outcome
+            .survival_transitions
+            .iter()
+            .rev()
+            .find(|t| t.player_id == player && t.status == SurvivalStatus::Eliminated)
+    {
+        let rescue = loss.resolved_tick.saturating_sub(200).max(c.editable_from);
+        if rescue < wanted {
+            return rescue.min(c.available_through());
+        }
+    }
     // Prefer the first published checkpoint with a mobile army to redirect near the desired tick.
     data.checkpoints
         .range(wanted..c.config.max_tick)
@@ -218,10 +217,15 @@ pub fn plan(
     let mut commands = vec![];
     let mut push = |command| {
         let local_id = format!("bot-{}", commands.len());
+        let future_orders = if matches!(command, Command::AssignOrder { .. }) {
+            FutureOrderPolicy::DropAll
+        } else {
+            FutureOrderPolicy::Keep
+        };
         commands.push(DraftCommand {
             local_id: local_id.clone(),
             command,
-            future_orders: FutureOrderPolicy::Keep,
+            future_orders,
         });
         local_id
     };
@@ -233,7 +237,11 @@ pub fn plan(
     let def = |e: &EntityState| content.types.iter().find(|t| t.key == e.type_key);
     let Some(home) = own
         .iter()
-        .find(|e| def(e).is_some_and(|t| t.construction.is_some()))
+        .find(|e| e.type_key == "factory")
+        .or_else(|| {
+            own.iter()
+                .find(|e| def(e).is_some_and(|t| t.construction.is_some()))
+        })
         .or_else(|| own.first())
         .map(|e| e.tile)
     else {
@@ -254,7 +262,7 @@ pub fn plan(
         .iter()
         .filter(|e| {
             def(e).is_some_and(|t| t.mining.is_some() && t.construction.is_none())
-                && matches!(e.action, Order::Idle {})
+                && !matches!(e.action, Order::Mine { .. })
         })
         .map(|e| e.id.clone())
         .collect();
@@ -272,15 +280,9 @@ pub fn plan(
         .min_by_key(|e| distance(e.tile, home))
         .map(|e| e.tile)
         .unwrap_or_else(|| {
-            let desired = match style {
-                Style::Raider if state.tick < 300 => Tile {
-                    x: state.terrain.width - 1 - home.x,
-                    y: state.terrain.height / 2,
-                },
-                _ => Tile {
-                    x: state.terrain.width - 1 - home.x,
-                    y: state.terrain.height - 1 - home.y,
-                },
+            let desired = Tile {
+                x: state.terrain.width - 1 - home.x,
+                y: state.terrain.height - 1 - home.y,
             };
             (0..state.terrain.height)
                 .flat_map(|y| (0..state.terrain.width).map(move |x| Tile { x, y }))
@@ -304,55 +306,103 @@ pub fn plan(
                 .or_else(|| p.recipes.first())
         })
         .cloned();
-    let has_factory = state
-        .entities
-        .iter()
-        .any(|e| e.owner == player && e.type_key == "factory")
-        || state
-            .blueprints
+    let count = |key: &str| {
+        state
+            .entities
             .iter()
-            .any(|b| b.owner == player && b.type_key == "factory");
+            .filter(|e| e.owner == player && e.type_key == key)
+            .count()
+            + state
+                .blueprints
+                .iter()
+                .filter(|b| b.owner == player && b.type_key == key && b.site_id.is_none())
+                .count()
+    };
+    let factory_count = count("factory");
+    let bank = state
+        .players
+        .iter()
+        .find(|p| p.player_id == player)
+        .map_or(0., |p| p.bank);
+    let threatened = state.entities.iter().any(|e| {
+        !allied(config, player, e.owner)
+            && def(e).is_some_and(|t| t.weapon.is_some())
+            && distance(e.tile, home) <= 144
+    });
+    let structure = if factory_count == 0 {
+        Some("factory")
+    } else if threatened && count("turret") < 2 {
+        Some("turret")
+    } else if factory_count < 2 && state.tick >= 300 && (bank >= 200. || count("miner") >= 3) {
+        Some("factory")
+    } else {
+        None
+    };
     let constructors: Vec<_> = own
         .iter()
         .filter(|e| def(e).is_some_and(|t| t.construction.is_some()))
         .collect();
-    if !has_factory && !constructors.is_empty() && recipe.is_some() {
+    if let Some(structure) = structure.filter(|_| !constructors.is_empty() && recipe.is_some()) {
         let site = (0..state.terrain.height)
             .flat_map(|y| (0..state.terrain.width.saturating_sub(1)).map(move |x| Tile { x, y }))
             .filter(|t| {
                 let i = usize::from(t.y) * usize::from(state.terrain.width) + usize::from(t.x);
-                distance(*t, home) <= 36
+                distance(*t, home) <= 64
                     && state.terrain.cells[i] == TerrainCell::Floor
                     && state.terrain.cells[i + 1] == TerrainCell::Floor
                     && state.ore[i] == 0.0
                     && !state.entities.iter().any(|e| e.tile == *t)
                     && !state.blueprints.iter().any(|b| b.tile == *t)
+                    && !state
+                        .entities
+                        .iter()
+                        .any(|e| e.production.as_ref().is_some_and(|p| p.output_tile == *t))
+                    && !state
+                        .entities
+                        .iter()
+                        .any(|e| e.tile == (Tile { x: t.x + 1, y: t.y }))
+                    && !state
+                        .blueprints
+                        .iter()
+                        .any(|b| b.tile == (Tile { x: t.x + 1, y: t.y }))
             })
             .min_by_key(|t| (distance(*t, home), t.y, t.x));
         if let Some(tile) = site {
             let placement = push(Command::PlaceBlueprints {
-                type_key: "factory".into(),
+                type_key: structure.into(),
                 tiles: vec![tile],
                 priority: Priority::High,
-                output_directions: Some(vec![CardinalDirection::E]),
+                output_directions: (structure == "factory").then(|| vec![CardinalDirection::E]),
             });
             // The following reference is resolved by the ordinary draft machinery.
-            push(Command::ConfigureBlueprints {
-                blueprint_ids: vec![DraftItemRef::Draft {
-                    local_id: placement,
-                    item_index: 0,
-                }],
-                settings: BlueprintSettings {
-                    queue: vec![recipe.clone().unwrap()],
-                    queue_loop_flags: vec![true],
-                    order: Order::AttackMove {
-                        destination: target,
+            if structure == "factory" {
+                let mut queue = vec![];
+                if factory_count == 0 && content.types.iter().any(|t| t.key == "miner") {
+                    queue.extend(["miner".into(), "miner".into()]);
+                }
+                queue.push(recipe.clone().unwrap());
+                let flags = (0..queue.len()).map(|i| i + 1 == queue.len()).collect();
+                push(Command::ConfigureBlueprints {
+                    blueprint_ids: vec![DraftItemRef::Draft {
+                        local_id: placement,
+                        item_index: 0,
+                    }],
+                    settings: BlueprintSettings {
+                        queue,
+                        queue_loop_flags: flags,
+                        order: if factory_count == 0 {
+                            Order::Mine { area: area.clone() }
+                        } else {
+                            Order::AttackMove {
+                                destination: target,
+                            }
+                        },
+                        priority: Priority::High,
+                        loop_enabled: true,
+                        silo_plan: None,
                     },
-                    priority: Priority::High,
-                    loop_enabled: true,
-                    silo_plan: None,
-                },
-            });
+                });
+            }
         }
     }
     let mut builders: Vec<_> = constructors
@@ -364,11 +414,63 @@ pub fn plan(
     if !builders.is_empty() {
         push(Command::AssignOrder {
             entities: builders,
-            order: Order::Construct { area },
+            order: Order::Construct { area: area.clone() },
         });
+    }
+    let queued = |key: &str| {
+        own.iter()
+            .filter_map(|e| e.production.as_ref())
+            .map(|p| {
+                usize::from(p.active_item.as_ref().is_some_and(|i| i.type_key == key))
+                    + p.pending_items.iter().filter(|i| i.type_key == key).count()
+            })
+            .sum::<usize>()
+    };
+    let mut utility = vec![];
+    for (key, desired) in [("constructor", 1), ("miner", 3)] {
+        if content.types.iter().any(|t| t.key == key) {
+            for _ in count(key) + queued(key)..desired {
+                utility.push(key.to_string());
+            }
+        }
     }
     for factory in own.iter().filter(|e| e.type_key == "factory") {
         if let Some(p) = &factory.production {
+            let feeding_economy = !utility.is_empty()
+                || p.active_item
+                    .as_ref()
+                    .is_some_and(|i| i.type_key == "miner" || i.type_key == "constructor")
+                || p.pending_items
+                    .iter()
+                    .any(|i| i.type_key == "miner" || i.type_key == "constructor");
+            let newborn_order = if feeding_economy {
+                Order::Mine { area: area.clone() }
+            } else {
+                Order::AttackMove {
+                    destination: target,
+                }
+            };
+            let added_utility = !utility.is_empty();
+            if added_utility {
+                if p.loop_enabled {
+                    push(Command::SetQueueLoop {
+                        factories: vec![factory.id.clone()],
+                        enabled: false,
+                    });
+                }
+                push(Command::EditProduction {
+                    factories: vec![factory.id.clone()],
+                    edit: ProductionEdit::Append {
+                        items: std::mem::take(&mut utility),
+                    },
+                });
+            }
+            if !p.loop_enabled || added_utility {
+                push(Command::SetQueueLoop {
+                    factories: vec![factory.id.clone()],
+                    enabled: true,
+                });
+            }
             if p.active_item.is_none()
                 && p.pending_items.is_empty()
                 && let Some(recipe) = &recipe
@@ -380,22 +482,10 @@ pub fn plan(
                     },
                 });
             }
-            if !p.loop_enabled {
-                push(Command::SetQueueLoop {
-                    factories: vec![factory.id.clone()],
-                    enabled: true,
-                });
-            }
-            if p.stored_order
-                != (Order::AttackMove {
-                    destination: target,
-                })
-            {
+            if p.stored_order != newborn_order {
                 push(Command::SetStoredOrder {
                     factories: vec![factory.id.clone()],
-                    order: Order::AttackMove {
-                        destination: target,
-                    },
+                    order: newborn_order,
                 });
             }
         }
@@ -581,7 +671,8 @@ mod tests {
     #[test]
     fn openings_are_deterministic_valid_normal_commands() {
         let (c, state) = setup();
-        for style in [Style::Rusher, Style::Builder, Style::Raider] {
+        {
+            let style = DEFAULT_STYLE;
             let view = visible_state(&state, 1, &c.config, &c.content);
             let draft = plan(&view, 1, style, &c.config, &c.content, 0);
             assert_eq!(draft, plan(&view, 1, style, &c.config, &c.content, 0));
@@ -598,6 +689,9 @@ mod tests {
                     .iter()
                     .any(|d| matches!(d.command, Command::PlaceBlueprints { .. }))
             );
+            for command in &draft.commands {
+                draft::validate_policy(command, Some(100)).unwrap();
+            }
             let commands = draft::resolve_local_references(&draft, 1, 1).unwrap();
             c.validate_against_state(1, &commands, &state).unwrap();
             let mut config = c.config.clone();
@@ -621,7 +715,8 @@ mod tests {
             };
         }
         let after = visible_state(&changed, 1, &c.config, &c.content);
-        for style in [Style::Rusher, Style::Builder, Style::Raider] {
+        {
+            let style = DEFAULT_STYLE;
             assert_eq!(
                 plan(&before, 1, style, &c.config, &c.content, 0),
                 plan(&after, 1, style, &c.config, &c.content, 0)
@@ -649,10 +744,167 @@ mod tests {
         );
     }
     #[test]
+    fn standard_bot_keeps_developing_across_eight_real_rounds() {
+        use crate::controller::tests::{controller, run_round};
+        let mut c = controller(false, |s| {
+            s.match_defaults.max_tick = 1200;
+            s.match_defaults.stop_when_decided = false;
+            s.match_defaults.simulation_threads = 1;
+            s.match_defaults.objective = Objective::Scoreboard {
+                rules: ScoreboardRules {
+                    victory_rule: VictoryRule::FixedTarget { points: 100. },
+                    ..ScoreboardRules::default()
+                },
+            };
+        });
+        let human = c
+            .claim_slot(0, "Human".into(), "#4fc3f7".into(), None)
+            .unwrap();
+        let bots = BotConfig {
+            slots: vec![None, Some(DEFAULT_STYLE)],
+            playtest_rounds: 20,
+        };
+        bots.install(&mut c).unwrap();
+        c.start_match(&human, c.lobby.revision).unwrap();
+        let rx = c.start_job(0, vec![], vec![]).unwrap();
+        run_round(&mut c, rx);
+        let mut later_actions = 0;
+        for round in 1..=8 {
+            let tick = intervention(&c, 1, DEFAULT_STYLE);
+            let state =
+                atemporal_sim::reconstruct(&c.exact_request(c.current, tick).unwrap(), tick)
+                    .unwrap();
+            let view = visible_state(&state, 1, &c.config, &c.content);
+            let bot_draft = plan(&view, 1, DEFAULT_STYLE, &c.config, &c.content, c.current);
+            if round > 2 && !bot_draft.commands.is_empty() {
+                later_actions += 1;
+            }
+            for (player, token, draft) in [
+                (1, c.bot_token(1).unwrap(), bot_draft),
+                (
+                    0,
+                    human.clone(),
+                    TurnDraft {
+                        based_on_revision: c.current,
+                        tick: c.editable_from,
+                        commands: vec![],
+                    },
+                ),
+            ] {
+                let request = CommitRequest {
+                    request_id: format!("test-{round}-{player}"),
+                    slot_token: token,
+                    draft,
+                };
+                c.precheck_commit(player, &request).unwrap();
+                let commands =
+                    draft::resolve_local_references(&request.draft, c.round, player).unwrap();
+                let exact = atemporal_sim::reconstruct(
+                    &c.exact_request(c.current, request.draft.tick).unwrap(),
+                    request.draft.tick,
+                )
+                .unwrap();
+                c.validate_against_state(player, &commands, &exact).unwrap();
+                if let Some(rx) = c.accept_commit(player, &request, commands).unwrap().1 {
+                    run_round(&mut c, rx);
+                }
+            }
+        }
+        assert!(later_actions >= 4);
+        let data = &c.revisions[&c.current];
+        let max_count = |key: &str| {
+            data.checkpoints
+                .values()
+                .map(|s| {
+                    s.entities
+                        .iter()
+                        .filter(|e| {
+                            e.owner == 1 && e.type_key == key && e.lifecycle == Lifecycle::Complete
+                        })
+                        .count()
+                })
+                .max()
+                .unwrap()
+        };
+        assert!(max_count("miner") >= 3, "bot must grow its economy");
+        assert!(max_count("factory") >= 2, "bot must expand production");
+        assert!(max_count("grunt") >= 3, "bot must keep producing an army");
+        let state = data
+            .checkpoints
+            .values()
+            .find(|s| {
+                s.tick >= 500
+                    && s.entities.iter().any(|e| {
+                        e.owner == 1
+                            && e.type_key == "factory"
+                            && e.lifecycle == Lifecycle::Complete
+                    })
+            })
+            .unwrap()
+            .clone();
+        let mut threatened = state.clone();
+        let home = threatened
+            .entities
+            .iter()
+            .find(|e| e.owner == 1 && e.type_key == "factory")
+            .unwrap()
+            .tile;
+        let enemy_tile = (0..threatened.terrain.height)
+            .flat_map(|y| (0..threatened.terrain.width).map(move |x| Tile { x, y }))
+            .find(|t| {
+                distance(*t, home) <= 16
+                    && threatened.terrain.cells[usize::from(t.y)
+                        * usize::from(threatened.terrain.width)
+                        + usize::from(t.x)]
+                        == TerrainCell::Floor
+                    && !threatened.entities.iter().any(|e| e.tile == *t)
+            })
+            .unwrap();
+        let mut enemy = c.revisions[&0].checkpoints[&0]
+            .entities
+            .iter()
+            .find(|e| e.owner == 0)
+            .unwrap()
+            .clone();
+        threatened.entities.retain(|e| e.owner != 0);
+        enemy.tile = enemy_tile;
+        enemy.type_key = "grunt".into();
+        enemy.lifecycle = Lifecycle::Complete;
+        threatened.entities.push(enemy);
+        let view = visible_state(&threatened, 1, &c.config, &c.content);
+        let defense = plan(&view, 1, DEFAULT_STYLE, &c.config, &c.content, c.current);
+        assert!(defense.commands.iter().any(
+            |d| matches!(&d.command,Command::PlaceBlueprints{type_key,..} if type_key=="turret")
+        ));
+        assert!(defense.commands.iter().any(|d| matches!(&d.command,Command::AssignOrder{order:Order::AttackMove{destination},..} if *destination==enemy_tile)));
+        let commands = draft::resolve_local_references(&defense, c.round, 1).unwrap();
+        c.validate_against_state(1, &commands, &threatened).unwrap();
+        let mut depleted = state.clone();
+        depleted
+            .entities
+            .retain(|e| e.owner != 1 || (e.type_key != "miner" && e.type_key != "constructor"));
+        let view = visible_state(&depleted, 1, &c.config, &c.content);
+        let recovery = plan(&view, 1, DEFAULT_STYLE, &c.config, &c.content, c.current);
+        assert!(recovery.commands.iter().any(|d| matches!(&d.command,Command::EditProduction{edit:ProductionEdit::Append{items},..} if items.contains(&"constructor".to_string()) && items.contains(&"miner".to_string()))));
+        let commands = draft::resolve_local_references(&recovery, c.round, 1).unwrap();
+        c.validate_against_state(1, &commands, &depleted).unwrap();
+        // Own published elimination must trigger a rewind before the loss, not a turn after death.
+        let data = c.revisions.get_mut(&c.current).unwrap();
+        let outcome = data.outcome.as_mut().unwrap();
+        outcome.eliminated = vec![1];
+        outcome.survival_transitions.push(SurvivalTransition {
+            player_id: 1,
+            resolved_tick: 400,
+            status: SurvivalStatus::Eliminated,
+            reasons: vec![Reason::NoBuildAbility],
+        });
+        assert!(intervention(&c, 1, DEFAULT_STYLE) <= 200);
+    }
+    #[test]
     fn bot_only_budget_and_human_host_are_explicit() {
         assert!(
             BotConfig {
-                slots: vec![Some(Style::Rusher), None],
+                slots: vec![Some(Style::Standard), None],
                 playtest_rounds: 20
             }
             .validate(2)
@@ -660,7 +912,7 @@ mod tests {
         );
         assert!(
             BotConfig {
-                slots: vec![None, Some(Style::Builder)],
+                slots: vec![None, Some(Style::Standard)],
                 playtest_rounds: 20
             }
             .validate(2)
@@ -668,7 +920,7 @@ mod tests {
         );
         assert!(
             BotConfig {
-                slots: vec![Some(Style::Rusher); 2],
+                slots: vec![Some(Style::Standard); 2],
                 playtest_rounds: 0
             }
             .validate(2)

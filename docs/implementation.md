@@ -54,6 +54,12 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 4. [x] Show full vision to all players in recorded timelines.
 5. [x] Verify browser interactions and screenshots; publish fixes and reviewed Game Docs.
 
+## Bot follow-up
+
+1. [x] Inspect saved bot turns and the opening/intervention policy.
+2. [x] Improve ongoing economy, production expansion and defense; recover before a lost base.
+3. [x] Verify several actual rounds and targeted regressions; push and update idle preview.
+
 ## Execution policy
 
 The vertical slice is implemented and Gate 2 is met: the real engine, a server running it on a dedicated thread, and a browser client play the opening, commit simultaneous turns, seek any tick and rerun history from checkpoints; see [development](development.md), [stabilized contracts](contracts-v2.md) and [Gate 2 measurements](gate2-measurements.md). Simulation, controller and browser breadth are implemented; final browser and integration verification close the checklist below. Mocks remain limited to targeted fault injection and protocol unit fixtures. All engineering defaults remain revisable when implementation provides evidence.

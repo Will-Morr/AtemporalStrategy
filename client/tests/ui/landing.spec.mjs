@@ -27,6 +27,7 @@ test('landing page starts a default bot match with one click and retains the pla
   const directory=await(await page.request.get(server.url+'api/directory')).json();
   expect(directory.games).toHaveLength(1);
   expect(directory.games[0].bots).toEqual([null,directory.default_bot]);
+  expect(directory.default_bot).toBe('standard');
   expect(directory.user).toBe('Player');
   await page.getByRole('button',{name:'All units',exact:true}).click();
   await expect(page.locator('#selection .unit-icon')).toHaveCount(3);
@@ -103,7 +104,7 @@ test('end-of-game feedback is private, persistent and linked to the exact match'
   const {readFile,readdir}=await import('node:fs/promises');
   const server=await isolatedServer(testInfo,c=>{small(c);c.match_defaults.objective.rules.victory_rule.points=1;},()=>{},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url);await page.getByRole('button',{name:'Play Against Bot',exact:true}).click();await revision(page,0);
-  await page.locator('#commit').click();await revision(page,1);
+  for(let round=1;round<=6&&!await page.evaluate(()=>!!window.atemporal.finished);round++){await page.locator('#commit').click();await revision(page,round);}
   await expect(page.getByRole('dialog',{name:'Game complete'})).toBeVisible();
   await expect(page.locator('#outcome-banner strong')).toContainText('LOSS');
   await expect(page.locator('#outcome-banner > div')).toContainText('At the final tick');
