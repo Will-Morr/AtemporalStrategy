@@ -57,3 +57,7 @@ Proceed independently through implementation and verification without asking for
 ## Network and host safety
 
 Review network-facing code for unintended code execution and similar host compromise, and fix and push concrete issues found. The user is not asking for anti-cheat protections; compromise of the trusted GitHub/repository update path is an accepted attack boundary. Keep the review and fixes appropriate to the small-server design.
+
+## Test-server opening shortcut
+
+Provide a test-server flag that adds a homescreen button labeled **DEBUG_TEST**. It runs a bot-versus-bot opening to turn 2 and then lets the player take over, making UI changes quick to review without manually replaying the start. Ordinary servers must not show or enable this shortcut.

@@ -7,7 +7,8 @@ setFingerprint();
 const play=document.getElementById('play') as HTMLButtonElement;
 const status=document.getElementById('play-status')!;
 const resume=document.getElementById('resume') as HTMLAnchorElement;
-const pendingKey='atemporal-quick-play';
+const debugButton=document.getElementById('debug-test') as HTMLButtonElement;
+void api('/api/directory').then(d=>{debugButton.hidden=!d.debug_test;}).catch(()=>{});
 async function api(path:string,body?:unknown):Promise<any>{
   const response=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!response.ok)throw new Error(`Server request failed (${response.status}).`);
@@ -19,18 +20,20 @@ async function askName():Promise<string|null>{
   await new Promise(r=>dialog.addEventListener('close',r,{once:true}));
   return dialog.returnValue==='ok'?input.value.trim():null;
 }
-play.onclick=async()=>{
+async function startGame(debug=false):Promise<void>{
+  const pendingKey=debug?'atemporal-debug-test':'atemporal-quick-play';
   if(play.disabled)return;
-  play.disabled=true;resume.hidden=true;status.textContent='Preparing your game…';
+  play.disabled=true;debugButton.disabled=true;resume.hidden=true;status.textContent='Preparing your game…';
   let url=sessionStorage.getItem(pendingKey);
   let net:Net|null=null;
   try {
     const directory=await api('/api/directory');
+    if(debug&&!directory.debug_test)throw new Error('DEBUG_TEST requires a test server.');
     // Earlier quick-play visitors were silently named "Player"; let them choose too.
     let username:string|null=directory.user==='Player'?null:directory.user;
     if(username===null){
-      status.textContent='';username=await askName();
-      if(!username){status.textContent='';play.disabled=false;return;}
+      status.textContent='';username=debug?'Tester':await askName();
+      if(!username){status.textContent='';play.disabled=false;debugButton.disabled=false;return;}
       await api('/api/identity',{username});localStorage.setItem('atemporal-username',username);
       status.textContent='Preparing your game…';
     }
@@ -39,7 +42,7 @@ play.onclick=async()=>{
       const setup:Setup=structuredClone(directory.defaults);
       setup.match_defaults.player_count=2;setup.match_defaults.multiplayer={kind:'ffa'};
       setup.match_defaults.transport='authoritative';setup.available_teams=[];
-      const result=await api('/api/games',{name:`${username} vs Bot`,numbered:true,setup,bots:{slots:[null,directory.default_bot],playtest_rounds:20}});
+      const result=await api('/api/games',{name:debug?`${username} DEBUG_TEST`:`${username} vs Bot`,numbered:true,debug_test:debug,setup,bots:{slots:[null,directory.default_bot],playtest_rounds:20}});
       url=result.url;sessionStorage.setItem(pendingKey,url!);
     }
     const path=url!;
@@ -63,10 +66,19 @@ play.onclick=async()=>{
       const started=await net.request({kind:'hello',protocol_version:2,last_revision:null,slot_token:token},'welcome');
       if(started.phase==='lobby')throw new Error(rejected??'Could not start the game. Try again or open your game.');
     }
+    if(debug){
+      status.textContent='DEBUG_TEST: bots are playing the opening turn…';
+      const ready=await net.request({kind:'hello',protocol_version:2,last_revision:null,slot_token:token},'planning_opened',m=>m.round>=2,180000);
+      // Open where the normal bot would make its next intervention, not at the empty opening.
+      const tick=Math.max(ready.editable_from,Math.min(150,ready.available_through));
+      sessionStorage.setItem(`atemporal-entry-tick:${path}`,String(tick));
+    }
     sessionStorage.removeItem(pendingKey);
     location.assign(path);
   }catch(error){
-    status.textContent=(error as Error).message;play.disabled=false;
+    status.textContent=(error as Error).message;play.disabled=false;debugButton.disabled=false;
     if(url){resume.href=url;resume.hidden=false;}
   }finally{net?.disconnect();}
-};
+}
+play.onclick=()=>void startGame();
+debugButton.onclick=()=>void startGame(true);

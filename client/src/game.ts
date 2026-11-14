@@ -299,6 +299,10 @@ export class Game {
     if (previous < 0 || wasFull) this.view = { t0:0,t1:Math.max(1,m.outcome.terminal_state_tick) };
     else this.panTimeline(0);
     $('toast').classList.remove('active');
+    if(previous<0){
+      const key=`atemporal-entry-tick:${location.pathname}`,entry=sessionStorage.getItem(key);
+      if(entry!==null){const tick=Number(entry);if(Number.isFinite(tick)&&tick>=0)this.playhead=tick;sessionStorage.removeItem(key);}
+    }
     this.playhead = Math.min(this.playhead, m.outcome.terminal_state_tick);
     this.exact = this.exact && this.exact.revision === m.revision ? this.exact : null;
     this.requestExact();

@@ -22,3 +22,9 @@ Current rules-8 build is on port 8080 with fresh test data. The temporary server
 ## Dotted routes
 
 - [x] Render route previews as dots, inspect the browser output, push to `dev`, and replace the test server on port 8080.
+
+## DEBUG_TEST opening shortcut
+
+- [x] Add an opt-in test-server flag, homescreen button and bot opening with human takeover at turn 2.
+- [x] Verify the disabled flag, bot opening, handoff, refresh/restart and continued human play; inspect screenshots.
+- [x] Push to `dev` and replace the local server on port 8080 with test mode enabled.

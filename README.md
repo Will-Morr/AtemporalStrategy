@@ -37,6 +37,8 @@ Stop the server with **Ctrl+C**. To use another port:
 ./quickstart.sh --port 8090
 ```
 
+For a fast local review, run `./quickstart.sh --test-server`. The home page adds **DEBUG_TEST**: both sides use the standard bot for the opening turn, then you take over at turn 2 with the replay opened at tick 150. The opponent remains a bot. This shortcut is disabled on normal servers.
+
 ## Your first turn
 
 You start with a miner, a constructor, and a turret. At tick 0:
