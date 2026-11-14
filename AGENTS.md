@@ -8,3 +8,4 @@
 - Main planning documents state the current plan without reviewer identifiers or response history; keep any historical review record separate.
 - For browser UI changes, use the agent-neutral workflow in `docs/browser-testing.md`: run relevant real-browser scenarios, inspect screenshots/traces, and record actual verification limits. Do not treat DOM checks alone as visual review.
 - Merge and push all ready changes to `dev`. Update `main` only when the user explicitly approves that update. This supersedes older integration instructions naming `main`.
+- Keep the local test server on port 8080 current with ready changes. Restart/replace it even if the user is playing; these sessions are disposable tests. Reset incompatible test games as needed rather than preserving an old server on 8080 or moving the updated build to another port. No further confirmation is needed.

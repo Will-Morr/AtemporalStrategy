@@ -84,3 +84,7 @@ Hybrid launch: `./quickstart.sh --config config/hybrid.yaml` uses the default fi
 ## Delivery branches
 
 Merge and push ready changes to `dev`. Updating `main` requires explicit user approval; older handoff instructions to integrate directly into `main` are superseded.
+
+## Local test preview
+
+Keep the latest ready build on port 8080. Active local games are disposable test sessions: restart the server and reset incompatible game data when updating, without an additional approval gate. Use a fresh directory under `artifacts/local-preview/` when a rules change prevents loading prior tests. The active PID is in `/tmp/atemporal-dev-server.pid`, its log is `/tmp/atemporal-dev-server.log`, and `/tmp/atemporal-dev-server-data` records the current data directory. Do not leave an outdated build on 8080 and relocate the update to another port.

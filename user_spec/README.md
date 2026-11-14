@@ -57,3 +57,7 @@ The user requested resolving the playtest UI notes, completing the browser and i
 ## Current delivery policy
 
 All changes should be merged and pushed to `dev` when ready. Update `main` only with explicit user approval. This supersedes earlier instructions in this index and historical implementation records to integrate into `main`.
+
+## Local test server updates
+
+The user plays the local game only to test. Replace the server on its existing port (8080) whenever ready changes are available, even during an active game. Incompatible test games may be reset. Do not preserve an old build by moving the latest version to a different port, and do not ask for confirmation before these updates.
