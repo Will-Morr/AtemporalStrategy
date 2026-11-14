@@ -355,3 +355,13 @@ Eight real-server Chromium scenarios passed in `artifacts/ui/2026-11-11T00-03-34
 Final `scripts/check.sh` passed with pinned Rust 1.97.1, including workspace tests, Clippy, simulation without default features, TypeScript/build, JavaScript checks and generated-file drift. The new eight-round test also verifies replacement miner/constructor production after losses. The live preview restarted through its idle gate and `/api/directory` reports `standard` as the default. Verification used two cores, low priority and one browser worker.
 
 Updated the warning body to the user's exact “Better than nothing but my apologies for the Claudelish”. Refreshed the renderer cache key, fixture and browser assertion. Verified the exact rendered text and inspected `/tmp/atemporal-claudelish-warning.png` from the live WireGuard guide at 1366×768. Copy-only change; broader gameplay tests were not rerun.
+
+## Order path previews — 2026-11-14
+
+Implemented selection/aiming route overlays with tank/walker comparison, actual-rule emphasis, factory queue filtering/output origins, red target corners and a persisted straight-line setting. Inspected full-frame utility aiming, mixed-factory and laptop Settings screenshots from `artifacts/ui/2026-11-14T20-27-26.930Z-9228/`; paths, corner markers, queue controls and the checkbox are readable. An initial browser run exposed a test Shift-click mistake and a hidden Settings group; both were corrected, and the route legend moved clear of the result badge after screenshot review. The successful browser scenario covers real attack and construction orders and preference persistence.
+
+Planning overlays share the simulation's static-route rules, but do not predict dynamic traffic, combat, mining reservations or construction tie precedence. Full high-population rendering performance, Firefox/WebKit and peripheral transport have not been measured for this addition.
+
+`scripts/check.sh` passed (host checks, Rust tests, Clippy, browser build, client tests and generated-file drift), capped to two cores and two Rust threads. The expanded browser run in `artifacts/ui/2026-11-14T20-30-25.500Z-12655/` passed path previews (including mining), grouped factory editing and global placement/action compatibility. Inspected the mining frame. The remaining regression encountered a stale guide-heading assertion (`Unit reference` versus the current `Unit stats`); the expectation was updated to the current heading.
+
+The corrected order-feedback/compact-layout regression passed in `artifacts/ui/2026-11-14T20-31-19.619Z-13126/`. All four focused scenarios have passing results; the complete browser suite was not rerun.

@@ -1,3 +1,4 @@
+import {OrderPreviews} from './order-preview';
 import {drawMissileOverlays} from './missile-render';
 import type { CardinalDirection, Tile } from './contracts.generated';
 import { idKey, type EntityView, type Game } from './game';
@@ -9,6 +10,8 @@ const OFFSET: Record<CardinalDirection, [number, number]> = { n: [0, -1], e: [1,
 
 /** Canvas map, minimap and timeline. Grayscale terrain; entities, ore and orders in color. */
 export class Renderer {
+  pathPreviews = localStorage.getItem('atemporal-path-previews') !== 'false';
+  readonly orderPreviews = new OrderPreviews();
   camera = { x: 24, y: 24, scale: 18 };
   keys = { w: false, a: false, s: false, d: false };
   dragPan: { x: number; y: number } | null = null;
@@ -229,21 +232,13 @@ export class Renderer {
       ctx.strokeRect(px - 1, py - 1, s + 2, s + 2);
       ctx.lineWidth = 1;
       const a = this.game.effectiveOrder(v);
-      if (a?.kind === 'attack_move') {
-        const [dx, dy] = this.screen(a.destination.x + 0.5, a.destination.y + 0.5);
-        ctx.strokeStyle = '#ef5350';
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(px + s / 2, py + s / 2);
-        ctx.lineTo(dx, dy);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else if (a?.kind === 'mine' || a?.kind === 'construct') {
+      if (a?.kind === 'mine' || a?.kind === 'construct') {
         const [rx, ry] = this.screen(a.area.min.x, a.area.min.y);
         ctx.strokeStyle = a.kind === 'mine' ? '#4dd0e1' : '#ffca28';
         ctx.strokeRect(rx, ry, (a.area.max.x - a.area.min.x + 1) * s, (a.area.max.y - a.area.min.y + 1) * s);
       }
     }
+    this.orderPreviews.draw(this.game,this,ctx,views);
     drawMissileOverlays(this.game,this,ctx);
     // Placement preview with output arrow.
     if (this.game.mode.kind === 'place' && this.game.hover) {

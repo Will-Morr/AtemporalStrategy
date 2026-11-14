@@ -195,3 +195,7 @@ The focused `simple win game type can be selected and started` coordinator scena
 The info-page checks also verify the exact chatbot warning at the top, 14 shared unit-role and stats icons, expanded static SVG markup, and no horizontal page overflow at 390px. The quick-play scenario selects all starting units to exercise the same icons in game controls. See the [shared-icon verification record](integration-verification.md#info-page-warning-and-shared-icons--2026-11-10).
 
 The Game Docs review also checks grouped role/stat cards, links from named units to their generated stats, the current warning, five main actions and positional construction explanation. Stats are checked against the real server’s content (including a changed miner health value). Inspect the top, construction, group-control and stat-card viewport captures as well as the full-page screenshots.
+
+## Order path previews
+
+`path-preview.spec.mjs` uses real mouse/keyboard orders to compare routes for selected miners and constructors, aiming and saved orders, persisted straight-line settings, rotated factory outputs, tank-only/mixed draft queues, and economic work areas. `scripts/check-path-preview.mjs` checks route lengths for both movement rules, shared field caching, blocked targets, work adjacency, unreachable regions and forbidden diagonal corner cutting. The preview intentionally excludes hidden obstacles and future traffic/combat decisions; those are not execution guarantees.

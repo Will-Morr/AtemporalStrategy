@@ -119,3 +119,11 @@ The remaining fixed-height workspace still wastes too much space, including for 
 Hold Shift while placing a building to keep that building selected for repeated placement, including wall lines. Players keep fog of war throughout active gameplay, including when inspecting timelines; spectators and finished-match replays have full vision. This supersedes the earlier correction that gave all players full vision in recorded timelines. Put the timeline result explanation beneath its main label, state that it describes the final tick, and offer a jump to that state instead of generic “replay available” text. A completed living factory prevents elimination; an earlier replay frame must not be presented as the final state.
 
 Remove assistant-written promotional subtitles/taglines from page headers and dialogs. Keep the user-authored landing subtitle and prose; use functional headings and instructions elsewhere.
+
+## Order path previews
+
+Preview pathfinding while aiming attack orders and when units with orders are selected. Show tank and walker paths for every commanded unit, including miners and constructors. Factories show the movement types of their active/queued production, including both when the queue contains both types. Provide a Settings checkbox to switch back to ordinary straight order lines. Clearly mark the targeted tile, for example with red corner outlines.
+
+## Artillery silhouette
+
+Give artillery a distinct visual design: its current appearance is too similar to the tank. Complete and deliver the path previews first, then perform this design pass.

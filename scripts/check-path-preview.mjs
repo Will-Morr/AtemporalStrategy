@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {build} from '../client/node_modules/esbuild/lib/main.js';
+const output=await build({entryPoints:[new URL('../client/src/path-preview.ts',import.meta.url).pathname],bundle:true,write:false,format:'esm'});
+const {PreviewFields}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+const terrain={width:5,height:5,cells:Array(25).fill('floor')};
+let f=new PreviewFields(terrain,new Set());
+assert.equal(f.route({x:0,y:0},{x:4,y:4},'four').length,9);
+assert.equal(f.route({x:0,y:0},{x:4,y:4},'eight').length,5);
+assert.strictEqual(f.field({x:4,y:4},'eight'),f.field({x:4,y:4},'eight'));
+f=new PreviewFields(terrain,new Set([1,5]));
+assert.deepEqual(f.route({x:0,y:0},{x:4,y:4},'eight'),[],'Cannot cut blocked corners');
+f=new PreviewFields(terrain,new Set([12]));
+const blocked=f.route({x:0,y:0},{x:2,y:2},'four');assert.equal(blocked.length,4);assert.notDeepEqual(blocked.at(-1),{x:2,y:2});
+const work=f.route({x:0,y:0},{x:2,y:2},'eight',true);assert.deepEqual(work.at(-1),{x:1,y:1});
+f=new PreviewFields({...terrain,cells:terrain.cells.map((v,i)=>i%5===2?'wall':v)},new Set());assert.deepEqual(f.route({x:0,y:0},{x:4,y:4},'four'),[]);
+console.log('Path previews: movement rules, caching, blocked goals, work adjacency, corner cutting and unreachable regions passed.');
