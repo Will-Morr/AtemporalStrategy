@@ -47,7 +47,7 @@ export class Experience {
     const pathLabel=document.createElement('label'),pathToggle=document.createElement('input');pathToggle.type='checkbox';pathToggle.checked=g.renderer.pathPreviews;
     pathToggle.onchange=()=>{g.renderer.pathPreviews=pathToggle.checked;localStorage.setItem('atemporal-path-previews',String(pathToggle.checked));};
     pathLabel.append(pathToggle,' Show path previews');settings.append(pathLabel);
-    const pathHelp=document.createElement('small');pathHelp.textContent='Uncheck for straight order lines. Cyan: treads · gold dashed: walker. Routes use each unit’s movement type. Routes may change with traffic or combat.';settings.append(pathHelp);toolbar.append(settings);
+    const pathHelp=document.createElement('small');pathHelp.textContent='Uncheck for straight order lines. Cyan: treads · gold: walker. Routes use each unit’s movement type. Routes may change with traffic or combat.';settings.append(pathHelp);toolbar.append(settings);
     const advanced=document.createElement('div');const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);toolbar.querySelector('.planning')!.append(advanced);
     planning.append(button('Rebase draft here', () => {
       if (g.current !== g.latest || g.playhead < g.editableFrom) { g.toast('Choose an editable live tick.'); return; }

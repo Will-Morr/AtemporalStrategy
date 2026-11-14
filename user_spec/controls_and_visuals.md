@@ -122,7 +122,7 @@ Remove assistant-written promotional subtitles/taglines from page headers and di
 
 ## Order path previews
 
-Preview pathfinding while aiming attack orders and when units with orders are selected. Show tank and walker paths for every commanded unit, including miners and constructors. Factories show the movement types of their active/queued production, including both when the queue contains both types. Provide a Settings checkbox to switch back to ordinary straight order lines. Clearly mark the targeted tile with red corner outlines confined to the tile’s inside edges. Markers must become smaller when zoomed out. Miner previews must follow the unit’s actual target tile, not simply the nearest ore.
+Draw routing paths as dotted lines. Preview pathfinding while aiming attack orders and when units with orders are selected. Show tank and walker paths for every commanded unit, including miners and constructors. Factories show the movement types of their active/queued production, including both when the queue contains both types. Provide a Settings checkbox to switch back to ordinary straight order lines. Clearly mark the targeted tile with red corner outlines confined to the tile’s inside edges. Markers must become smaller when zoomed out. Miner previews must follow the unit’s actual target tile, not simply the nearest ore.
 
 ## Artillery silhouette
 

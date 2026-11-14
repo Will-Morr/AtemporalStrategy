@@ -59,13 +59,13 @@ export class OrderPreviews {
       }
     }
     ctx.save();
-    // Wide tank strokes remain visible beneath coincident dashed walker strokes.
+    // Offset walker dots so both colors remain visible on shared factory routes.
     for(const route of [...this.routes].sort((a,b)=>a.rule===b.rule?0:a.rule==='four'?-1:1)){
-      const points=route.points;ctx.strokeStyle=r.pathPreviews?(route.rule==='four'?'#57d5ff':'#ffdb73'):'#ef5350';ctx.lineWidth=r.pathPreviews?(route.actual?3:1.5):1.5;ctx.globalAlpha=route.actual?1:.65;ctx.setLineDash(r.pathPreviews?(route.rule==='eight'?[5,4]:[]):[4,4]);ctx.beginPath();
+      const points=route.points;ctx.strokeStyle=r.pathPreviews?(route.rule==='four'?'#57d5ff':'#ffdb73'):'#ef5350';ctx.lineWidth=r.pathPreviews?(route.actual?3:1.5):1.5;ctx.globalAlpha=route.actual?1:.65;ctx.lineCap='round';ctx.setLineDash([0,7]);ctx.lineDashOffset=route.rule==='eight'?3.5:0;ctx.beginPath();
       points.forEach((p,i)=>{const [x,y]=r.screen(p.x+.5,p.y+.5);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();
       if(!points.length){const [x,y]=r.screen(route.from.x+.5,route.from.y+.5);ctx.setLineDash([]);ctx.strokeStyle='#ff6262';ctx.beginPath();ctx.moveTo(x-4,y-4);ctx.lineTo(x+4,y+4);ctx.moveTo(x+4,y-4);ctx.lineTo(x-4,y+4);ctx.stroke();}
     }
-    ctx.globalAlpha=1;ctx.setLineDash([]);
+    ctx.globalAlpha=1;ctx.setLineDash([]);ctx.lineDashOffset=0;
     if(aiming)targets.set('hover',g.hover!);
     for(const t of targets.values()){
       const [tx,ty]=r.screen(t.x,t.y),c=targetCorners(r.camera.scale),x=tx+c.inset,y=ty+c.inset,s=c.span,k=c.arm;
@@ -73,7 +73,7 @@ export class OrderPreviews {
       ctx.beginPath();for(const [dx,dy,sx,sy] of [[0,0,1,1],[s,0,-1,1],[0,s,1,-1],[s,s,-1,-1]]){ctx.moveTo(x+dx+sx*k,y+dy);ctx.lineTo(x+dx,y+dy);ctx.lineTo(x+dx,y+dy+sy*k);}
       ctx.strokeStyle='#230d16';ctx.lineWidth=c.backing;ctx.stroke();ctx.strokeStyle='#ff6262';ctx.lineWidth=c.stroke;ctx.stroke();
     }
-    if(this.routes.length&&r.pathPreviews){ctx.font='12px system-ui';const label='Treads ━ cyan · Walker ┄ gold · × no route';const y=document.getElementById('top')!.offsetHeight+22;ctx.fillStyle='#101d2aeb';ctx.fillRect((innerWidth-290)/2,y-15,290,24);ctx.fillStyle='#e5f3ff';ctx.fillText(label,(innerWidth-290)/2+8,y+1);}
+    if(this.routes.length&&r.pathPreviews){ctx.font='12px system-ui';const label='Treads ··· cyan · Walker ··· gold · × no route';const y=document.getElementById('top')!.offsetHeight+22;ctx.fillStyle='#101d2aeb';ctx.fillRect((innerWidth-290)/2,y-15,290,24);ctx.fillStyle='#e5f3ff';ctx.fillText(label,(innerWidth-290)/2+8,y+1);}
     ctx.restore();
   }
 }
