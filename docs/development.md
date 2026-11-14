@@ -88,3 +88,11 @@ Merge and push ready changes to `dev`. Updating `main` requires explicit user ap
 ## Local test preview
 
 Keep the latest ready build on port 8080. Active local games are disposable test sessions: restart the server and reset incompatible game data when updating, without an additional approval gate. Use a fresh directory under `artifacts/local-preview/` when a rules change prevents loading prior tests. The active PID is in `/tmp/atemporal-dev-server.pid`, its log is `/tmp/atemporal-dev-server.log`, and `/tmp/atemporal-dev-server-data` records the current data directory. Do not leave an outdated build on 8080 and relocate the update to another port.
+
+## DEBUG_TEST shortcut
+
+Launch the coordinator with `--test-server` to expose **DEBUG_TEST** on the home page. This is off by default, and the server rejects debug-game creation without the flag. Debug games use the host defaults with two FFA players, authoritative transport and the standard five-win scoreboard so the opening can reach turn 2. Slot 0 belongs to the browser user from creation; a temporary standard bot submits its first turn, alongside the normal opponent bot. At the start of planning turn 2, slot 0 becomes exclusively human-controlled. The opponent continues normally. No extra takeover token or public takeover endpoint is introduced.
+
+The homescreen waits for the published turn-2 planning state, then opens the game at tick 150 (clamped to the available/editable interval), where the bot normally makes its next intervention. First-time debug users get the name Tester to keep this path one-click. Normal Play Against Bot retains its name prompt and ordinary opening. Debug and normal quick play use separate pending-game keys so retries reconnect to the right match. The per-game debug marker is persisted; restarting with `--test-server` finishes an incomplete bot opening but never lets the temporary bot consume turn 2 or later turns. The worker-only `--debug-test-opening` option is supplied by the coordinator for these games.
+
+Enable `--test-server` on the local port-8080 development preview after updates. Public/normal servers omit the flag.

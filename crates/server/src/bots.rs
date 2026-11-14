@@ -523,7 +523,13 @@ pub fn plan(
 
 /// Also writes coordinator status and open-lobby recovery records. No world state is written to
 /// the directory. Bots sleep between rounds and share the worker's existing simulation thread.
-pub fn drive(app: ws::App, bots: BotConfig, status: Option<PathBuf>, lobby_file: Option<PathBuf>) {
+pub fn drive(
+    app: ws::App,
+    bots: BotConfig,
+    status: Option<PathBuf>,
+    lobby_file: Option<PathBuf>,
+    debug_opening: bool,
+) {
     if bots.slots.is_empty() && status.is_none() && lobby_file.is_none() {
         return;
     }
@@ -538,7 +544,7 @@ pub fn drive(app: ws::App, bots: BotConfig, status: Option<PathBuf>, lobby_file:
     tokio::spawn(async move {
         let mut saved = String::new();
         loop {
-            if let Err(e) = step(&app, &bots).await {
+            if let Err(e) = step(&app, &bots, debug_opening).await {
                 eprintln!("bot: {e}");
             }
             {
@@ -564,7 +570,7 @@ pub fn drive(app: ws::App, bots: BotConfig, status: Option<PathBuf>, lobby_file:
         }
     });
 }
-async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
+async fn step(app: &ws::App, bots: &BotConfig, debug_opening: bool) -> Result<()> {
     if !bots.slots.is_empty() && bots.slots.iter().all(Option::is_some) {
         let pending = {
             let mut c = app.controller.lock().unwrap();
@@ -587,14 +593,19 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
         }
     }
     for (slot, style) in bots.slots.iter().enumerate() {
-        let Some(style) = style else { continue };
+        // Slot 0 is owned by the eventual human from the outset. Its temporary bot
+        // uses the normal token/commit path for round 1 only, including after resume.
+        let opening = debug_opening && slot == 0 && app.controller.lock().unwrap().round == 1;
+        let Some(style) = (*style).or_else(|| opening.then_some(DEFAULT_STYLE)) else {
+            continue;
+        };
         let player = slot as u8;
         let pending = {
             let c = app.controller.lock().unwrap();
             if !c.bot_pending(player) {
                 None
             } else {
-                let tick = intervention(&c, player, *style);
+                let tick = intervention(&c, player, style);
                 Some((
                     c.current,
                     tick,
@@ -613,11 +624,11 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
         };
         let job = {
             let mut c = app.controller.lock().unwrap();
-            if c.current != revision || !c.bot_pending(player) {
+            if c.current != revision || !c.bot_pending(player) || (opening && c.round != 1) {
                 continue;
             }
             let view = visible_state(&state, player, &c.config, &c.content);
-            let draft = plan(&view, player, *style, &c.config, &c.content, revision);
+            let draft = plan(&view, player, style, &c.config, &c.content, revision);
             let mut request = CommitRequest {
                 request_id: format!("bot-{player}-{}", c.round),
                 slot_token: c.bot_token(player).ok_or("bot slot lost")?,

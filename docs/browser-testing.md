@@ -203,3 +203,7 @@ The Game Docs review also checks grouped role/stat cards, links from named units
 ## Artillery visual review
 
 `artillery.spec.mjs` constructs a factory, produces artillery and a tank through real orders, seeks a paused tick, and captures their battlefield appearance at 18/26/40 pixels per tile and 1366×768. It also captures queue icons and the generated guide, including a viewport screenshot of the unit cards. Recenter after changing camera scale so screenshots actually include both units.
+
+## DEBUG_TEST handoff
+
+`debug-test.spec.mjs` checks that normal coordinators hide the button and reject debug creation, while `--test-server` enables a one-click bot opening. It verifies both players' real opening commands, human ownership and an editable developed state at turn 2, refresh/restart persistence, and continued human-versus-bot play. Capture and inspect the homescreen button and turn-2 handoff frames.

@@ -24,11 +24,19 @@ fn run() -> Result<()> {
     while let Some(key) = args.next() {
         if key == "--help" {
             println!(
-                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--seed N] [--memory-budget-mb N] [--results-budget-mb N] [--coordinator-dir DIR] [--single-match] [--inputs-only] [--resume MATCH_ID | --verify MATCH_ID]"
+                "atemporal-server [--port N] [--config YAML] [--content YAML] [--client DIR] [--prose HTML] [--replays DIR] [--guide-dir DIR] [--seed N] [--memory-budget-mb N] [--results-budget-mb N] [--coordinator-dir DIR] [--single-match] [--inputs-only] [--test-server] [--resume MATCH_ID | --verify MATCH_ID]"
             );
             return Ok(());
         }
-        if ["--inputs-only", "--single-match", "--managed"].contains(&key.as_str()) {
+        if [
+            "--inputs-only",
+            "--single-match",
+            "--managed",
+            "--test-server",
+            "--debug-test-opening",
+        ]
+        .contains(&key.as_str())
+        {
             options.insert(key, "true".into());
             continue;
         }
@@ -131,6 +139,7 @@ fn run() -> Result<()> {
             PathBuf::from(option("--content", "config/content.yaml")),
             PathBuf::from(option("--prose", "client/guide/introduction.html")),
             setup,
+            options.contains_key("--test-server"),
         )?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
@@ -240,7 +249,7 @@ fn run() -> Result<()> {
         if let Some(rx) = pending? {
             ws::drive_job(app.clone(), rx);
         }
-        bots::drive(app.clone(), bots, status_file, lobby_file);
+        bots::drive(app.clone(), bots, status_file, lobby_file, options.contains_key("--debug-test-opening"));
         axum::serve(listener, ws::router(app)).await.map_err(|e| e.to_string())
     })
 }

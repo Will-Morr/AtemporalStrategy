@@ -385,3 +385,11 @@ High-population browser performance, the full browser suite and peripheral brows
 ## Dotted routing overlays — 2026-11-14
 
 Routing overlays now use round dots for both movement types and straight-line mode. Walker dots are offset from tread dots so shared factory routes retain both colors. Updated the legend and Settings copy. Client build/typechecking and the real-server path-preview scenario passed in `artifacts/ui/2026-11-14T21-12-39.777Z-56670/`; inspected the full-frame mixed-factory screenshot. No simulation changes; the full repository/browser suites were not rerun for this styling change.
+
+## DEBUG_TEST opening shortcut — 2026-11-14
+
+Added the opt-in `--test-server` coordinator flag and homescreen DEBUG_TEST button. Both sides submit real bot opening commands, then slot 0 remains exclusively human-controlled from planning turn 2 onward. The browser opens at tick 150 (clamped to the editable/available interval) for an immediately developed scene. Normal servers hide the button and reject debug-game creation.
+
+The two real-server scenarios in `artifacts/ui/2026-11-14T21-23-59.748Z-59713/` passed: disabled flag/creation rejection, first-visit one-click startup, both opening command sets, an editable factory/army state, refresh and same-port coordinator restart, and the human committing the next turn while the opponent continues. Inspected full-frame homescreen and turn-2 handoff screenshots. Release server build and client typechecking/build passed. The complete browser suite, alternate browser engines and interrupted mid-opening recovery were not exercised.
+
+`scripts/check.sh` passed, including workspace tests, strict Clippy, no-default-feature simulation tests, client build/tests and generated-file drift. Normal quick-play/refresh and landing navigation/creation-retry regressions both passed in `artifacts/ui/2026-11-14T21-28-25.413Z-64762/`. Heavy checks ran sequentially on two cores at low priority, with one browser worker. Port 8080 was replaced with the release server and `--test-server`; both LAN and Tailscale addresses returned HTTP 200, and the directory reported the shortcut enabled.

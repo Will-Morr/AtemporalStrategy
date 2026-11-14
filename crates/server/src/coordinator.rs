@@ -29,6 +29,8 @@ pub struct GameRecord {
     password: String,
     setup: Setup,
     bots: BotConfig,
+    #[serde(default)]
+    debug_test: bool,
     created: u64,
     #[serde(default)]
     expired: bool,
@@ -59,6 +61,7 @@ pub struct Coordinator {
     content: PathBuf,
     prose: PathBuf,
     defaults: Setup,
+    test_server: bool,
     directory: Arc<Mutex<Directory>>,
     workers: Arc<Mutex<BTreeMap<String, Worker>>>,
     admissions: Arc<Mutex<Admissions>>,
@@ -111,6 +114,7 @@ impl Coordinator {
         content: PathBuf,
         prose: PathBuf,
         defaults: Setup,
+        test_server: bool,
     ) -> Result<Self> {
         std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
         let path = root.join("directory.json");
@@ -127,6 +131,7 @@ impl Coordinator {
             content,
             prose,
             defaults,
+            test_server,
             directory: Arc::new(Mutex::new(directory)),
             workers: Arc::new(Mutex::new(BTreeMap::new())),
             admissions: Arc::new(Mutex::new(Admissions { count: 0 })),
@@ -345,6 +350,9 @@ impl Coordinator {
         if let Some(r) = latest {
             command.args(["--resume", &r]);
         }
+        if replay.is_none() && self.test_server && game.debug_test {
+            command.arg("--debug-test-opening");
+        }
         if replay.is_none() {
             command
                 .arg("--bots")
@@ -404,7 +412,7 @@ async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
         replays.sort();replays.reverse();replays.truncate(12);
         json!({"active_players":c.active_players(g, &status),"id":g.id,"name":g.name,"created":g.created,"locked":!g.password.is_empty(),"status":status,"players":g.setup.match_defaults.player_count,"bots":g.bots.slots,"mine":user.as_ref().is_some_and(|u|g.members.get(u).is_some_and(|slots|slots.iter().any(|slot|status["slots"].as_array().is_some_and(|ss|ss.iter().any(|s|s["slot"]==*slot&&s["claimed"]==true))))),"replays":replays})
     }).collect();
-    Json(json!({"games":games,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults,"default_bot":crate::bots::DEFAULT_STYLE})).into_response()
+    Json(json!({"games":games,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults,"default_bot":crate::bots::DEFAULT_STYLE,"debug_test":c.test_server})).into_response()
 }
 #[derive(Deserialize)]
 struct IdentityInput {
@@ -444,6 +452,8 @@ struct CreateInput {
     /// Append " v{n}", counting earlier games with this name (expired ones included).
     #[serde(default)]
     numbered: bool,
+    #[serde(default)]
+    debug_test: bool,
 }
 async fn create(
     State(c): State<Coordinator>,
@@ -451,6 +461,27 @@ async fn create(
     Json(mut input): Json<CreateInput>,
 ) -> Response {
     let _admission = Admission::new(&c);
+    if input.debug_test {
+        if !c.test_server {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"error":"DEBUG_TEST requires --test-server."})),
+            )
+                .into_response();
+        }
+        input.setup = c.defaults.clone();
+        input.setup.match_defaults.player_count = 2;
+        input.setup.match_defaults.multiplayer = Multiplayer::Ffa {};
+        input.setup.match_defaults.transport = Transport::Authoritative;
+        input.setup.match_defaults.objective = Objective::Scoreboard {
+            rules: ScoreboardRules::default(),
+        };
+        input.setup.available_teams.clear();
+        input.bots = BotConfig {
+            slots: vec![None, Some(crate::bots::DEFAULT_STYLE)],
+            playtest_rounds: 20,
+        };
+    }
     // A browser may tune game rules, but cannot allocate more simulation threads than
     // the host's trusted startup configuration. Large values otherwise spawn one OS
     // thread per entity once parallel intent processing begins.
@@ -507,6 +538,7 @@ async fn create(
             password: input.password,
             setup: input.setup,
             bots: input.bots,
+            debug_test: input.debug_test,
             created: now_ms(),
             expired: false,
             members: BTreeMap::new(),
@@ -831,6 +863,7 @@ mod tests {
             password: "casual".into(),
             setup,
             bots: BotConfig::default(),
+            debug_test: false,
             created: 0,
             expired: false,
             members: BTreeMap::new(),
@@ -871,6 +904,7 @@ mod tests {
             root.clone(),
             root.clone(),
             setup.clone(),
+            false,
         )
         .unwrap();
         let mut game = GameRecord {
@@ -879,6 +913,7 @@ mod tests {
             password: String::new(),
             setup,
             bots: BotConfig::default(),
+            debug_test: false,
             created: 1000,
             expired: false,
             members: BTreeMap::new(),
@@ -926,6 +961,7 @@ mod tests {
             root.clone(),
             root.clone(),
             setup.clone(),
+            false,
         )
         .unwrap();
         let mut attack = setup;
@@ -939,6 +975,7 @@ mod tests {
                 password: String::new(),
                 setup: attack,
                 bots: BotConfig::default(),
+                debug_test: false,
                 numbered: false,
             }),
         )
@@ -956,6 +993,7 @@ mod tests {
             password: String::new(),
             setup: c.defaults.clone(),
             bots: BotConfig::default(),
+            debug_test: false,
             created: now_ms(),
             expired: false,
             members: BTreeMap::new(),
