@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {build} from '../client/node_modules/esbuild/lib/main.js';
 const output=await build({entryPoints:[new URL('../client/src/path-preview.ts',import.meta.url).pathname],bundle:true,write:false,format:'esm'});
-const {PreviewFields}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+const {PreviewFields,miningTargets,targetCorners}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
 const terrain={width:5,height:5,cells:Array(25).fill('floor')};
 let f=new PreviewFields(terrain,new Set());
 assert.equal(f.route({x:0,y:0},{x:4,y:4},'four').length,9);
@@ -14,3 +14,20 @@ const blocked=f.route({x:0,y:0},{x:2,y:2},'four');assert.equal(blocked.length,4)
 const work=f.route({x:0,y:0},{x:2,y:2},'eight',true);assert.deepEqual(work.at(-1),{x:1,y:1});
 f=new PreviewFields({...terrain,cells:terrain.cells.map((v,i)=>i%5===2?'wall':v)},new Set());assert.deepEqual(f.route({x:0,y:0},{x:4,y:4},'four'),[]);
 console.log('Path previews: movement rules, caching, blocked goals, work adjacency, corner cutting and unreachable regions passed.');
+
+f=new PreviewFields(terrain,new Set());
+assert.deepEqual(f.route({x:0,y:0},{x:2,y:2},'four'),[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:2,y:1},{x:2,y:2}]);
+assert.deepEqual(f.route({x:0,y:0},{x:2,y:2},'four',false,'e')[1],{x:0,y:1});
+const area={min:{x:0,y:0},max:{x:4,y:4}},ore=new Set([1,4]);
+const miners=[{key:'a',from:{x:0,y:0},area,rule:'four',retained:{x:4,y:0}},{key:'b',from:{x:0,y:1},area,rule:'four'}];
+let targets=miningTargets(f,miners,i=>ore.has(i)?10:0);
+assert.deepEqual(targets.get('a'),{x:4,y:0},'Keep actual target even with closer ore');
+assert.deepEqual(targets.get('b'),{x:1,y:0},'Other miner takes unclaimed ore');
+targets=miningTargets(f,[{...miners[0],retained:null},miners[1]],i=>ore.has(i)?10:0);
+assert.deepEqual(targets.get('a'),{x:1,y:0},'New draft clears old reservation');
+assert.deepEqual(targets.get('b'),{x:4,y:0},'Draft allocations spread across ore');
+targets=miningTargets(f,miners,i=>i===1?10:0);
+assert.deepEqual(targets.get('a'),{x:1,y:0},'Exhausted target is replaced');assert.equal(targets.has('b'),false);
+for(const scale of [1,2,6,18,26,64]){const c=targetCorners(scale);assert.ok(c.inset-c.backing/2>=0);assert.ok(c.inset+c.span+c.backing/2<=scale);assert.ok(c.arm<c.span/2);}
+assert.ok(targetCorners(6).backing<targetCorners(26).backing);
+console.log('Alternating tread steps, retained mining targets, claims, draft replacement and inset/scaled markers passed.');
