@@ -365,3 +365,9 @@ Planning overlays share the simulation's static-route rules, but do not predict 
 `scripts/check.sh` passed (host checks, Rust tests, Clippy, browser build, client tests and generated-file drift), capped to two cores and two Rust threads. The expanded browser run in `artifacts/ui/2026-11-14T20-30-25.500Z-12655/` passed path previews (including mining), grouped factory editing and global placement/action compatibility. Inspected the mining frame. The remaining regression encountered a stale guide-heading assertion (`Unit reference` versus the current `Unit stats`); the expectation was updated to the current heading.
 
 The corrected order-feedback/compact-layout regression passed in `artifacts/ui/2026-11-14T20-31-19.619Z-13126/`. All four focused scenarios have passing results; the complete browser suite was not rerun.
+
+## Artillery silhouette — 2026-11-14
+
+Artillery now has a long barrel/wide muzzle, angular carriage, short wheels and splayed supports, with matching authored SVG icons throughout production, selection and Game Docs. The renderer retains player coloring and movement facing. Regenerated guide fixtures after updating the icon.
+
+Client build/typechecking, release server build and content/guide tests (`cargo test -p atemporal-content --features guide`) passed. The real-server artillery scenario passed in `artifacts/ui/2026-11-14T20-33-57.442Z-14291/` and again with improved camera centering in `artifacts/ui/2026-11-14T20-34-46.956Z-14780/`. Inspected full rendered frames at 18/26/40 pixels per tile, the laptop viewport, queue icons and the guide's unit-card viewport. The first 40-pixel capture put the units offscreen; the corrected capture recenters before review. No combat balance or simulation behavior was changed. The full repository check passed before this visual-only pass; the full browser suite and every facing/color combination were not rerun.

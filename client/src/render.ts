@@ -299,9 +299,18 @@ export class Renderer {
       else if(v.type_key==='factory'){box(-.25,-.23,.15,.3);box(.1,-.23,.15,.3);ctx.fillStyle='#071019';box(-.19,.17,.38,.23);}
       else {ctx.fillStyle='#ffffff55';box(-.36,-.04,.72,.08);}
     } else if(v.type_key==='scout') {triangle(.29,.4);ctx.fillStyle='#d7efff';triangle(.1,.2);}
-    else if(v.type_key==='tank' || v.type_key==='artillery') {
+    else if(v.type_key==='tank') {
       box(-.39,-.32,.18,.69);box(.21,-.32,.18,.69);box(-.24,-.29,.48,.6);
-      ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,v.type_key==='artillery'?-.49:-.39,.12,.43);
+      ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,-.39,.12,.43);
+    } else if(v.type_key==='artillery') {
+      // Splayed trails, short wheels and an angular gun carriage: a field gun silhouette.
+      const polygon=(points:[number,number][])=>{ctx.beginPath();points.forEach(([x,y],i)=>{if(i)ctx.lineTo(x*s,y*s);else ctx.moveTo(x*s,y*s);});ctx.closePath();ctx.fill();ctx.stroke();};
+      polygon([[-.1,.05],[-.38,.38],[-.22,.43],[.04,.15]]);
+      polygon([[.1,.05],[.38,.38],[.22,.43],[-.04,.15]]);
+      box(-.38,-.08,.15,.25);box(.23,-.08,.15,.25);
+      polygon([[0,-.22],[.23,-.04],[.18,.22],[-.18,.22],[-.23,-.04]]);
+      ctx.fillStyle='#d7efff';box(-.075,-.46,.15,.53);box(-.16,-.48,.32,.12);
+      ctx.fillStyle='#071019';ctx.fillRect(-.11*s,-.47*s,.22*s,.045*s);
     } else if(v.type_key==='constructor') {box(-.28,-.25,.56,.55);ctx.fillStyle='#ffe28a';box(-.36,-.42,.12,.35);box(.24,-.42,.12,.35);box(-.17,-.09,.34,.12);box(-.06,-.2,.12,.34);}
     else if(v.type_key==='miner') {box(-.34,-.26,.15,.56);box(.19,-.26,.15,.56);box(-.24,-.25,.48,.52);box(-.32,-.36,.64,.13);ctx.fillStyle='#e1d9b5';box(-.13,-.15,.26,.09);}
     else if(v.type_key==='grinder') {box(-.26,-.12,.52,.5);ctx.fillStyle='#ffb69b';circle(-.2,-.24,.2);circle(.2,-.24,.2);}

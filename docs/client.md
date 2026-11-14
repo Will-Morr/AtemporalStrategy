@@ -186,3 +186,7 @@ Settings → Show path previews is on by default and persists in browser storage
 ## Delivery
 
 Ready changes merge and push to `dev`. Update `main` only with explicit user approval.
+
+## Artillery appearance
+
+Artillery uses a field-gun silhouette: an angular owner-colored carriage, short wheels, splayed rear supports and a long pale barrel with a wide muzzle. Tanks retain their broad tracks and circular turret. The artillery icon in selection, production and generated Game Docs uses the same shape language; facing still follows movement.
