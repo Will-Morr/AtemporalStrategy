@@ -7,3 +7,4 @@
 - Keep `docs/` consistent with user decisions and label unresolved interpretations plainly.
 - Main planning documents state the current plan without reviewer identifiers or response history; keep any historical review record separate.
 - For browser UI changes, use the agent-neutral workflow in `docs/browser-testing.md`: run relevant real-browser scenarios, inspect screenshots/traces, and record actual verification limits. Do not treat DOM checks alone as visual review.
+- Merge and push all ready changes to `dev`. Update `main` only when the user explicitly approves that update. This supersedes older integration instructions naming `main`.

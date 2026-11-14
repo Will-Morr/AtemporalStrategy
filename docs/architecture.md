@@ -147,3 +147,9 @@ Proposed default max_tick is 20,000. Size total accessible ore per starting allo
 ## Missile inventories and delayed effects
 
 Silo recipes store missiles rather than producing map entities. After allocation, inventory completion and canonical launching run before simultaneous combat/impact resolution. Flights and temporary satellite coverage are world state, not presentation-only events; checkpoint and compact replay samples preserve them. Automatic targets use existing allied vision plus satellite coverage, while manual flight range is unlimited. In-flight effects delay early termination. See [missile architecture and defaults](missiles.md).
+
+### Client order path previews
+
+Selection and attack targeting show cached destination BFS routes using the simulation's four/eight-neighbor order, unit-cost distances, blocked-goal adjacency and no-corner-cutting rule. Mobile units compare both rules, emphasizing their actual movement type; factory routes start at their output and include only active/pending production movement types, including draft blueprint queues and inherited group orders. A persisted Settings checkbox restores straight lines. Red corners identify target tiles; a red cross at the source indicates no route.
+
+These are terrain/known-structure planning previews, not a prediction of future combat, moving occupancy, ore reservations or construction precedence. Hidden enemy structures do not leak into the overlay. Economic orders preview nearby reachable work in the assigned area; empty work areas have no fabricated route. Derived field caches are bounded and invalidate with visible structure topology. No simulation state or protocol changes are required.

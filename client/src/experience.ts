@@ -42,6 +42,12 @@ export class Experience {
       });b.dataset.key=key;column.append(b);}
       toolbar.append(column);
     }
+    const settings=document.createElement('details');settings.className='action-group settings';
+    const settingsTitle=document.createElement('summary');settingsTitle.textContent='Settings';settings.append(settingsTitle);
+    const pathLabel=document.createElement('label'),pathToggle=document.createElement('input');pathToggle.type='checkbox';pathToggle.checked=g.renderer.pathPreviews;
+    pathToggle.onchange=()=>{g.renderer.pathPreviews=pathToggle.checked;localStorage.setItem('atemporal-path-previews',String(pathToggle.checked));};
+    pathLabel.append(pathToggle,' Show path previews');settings.append(pathLabel);
+    const pathHelp=document.createElement('small');pathHelp.textContent='Uncheck for straight order lines. Cyan: tank · gold dashed: walker. Bold: unit’s movement type. Routes may change with traffic or combat.';settings.append(pathHelp);toolbar.append(settings);
     const advanced=document.createElement('div');const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);toolbar.querySelector('.planning')!.append(advanced);
     planning.append(button('Rebase draft here', () => {
       if (g.current !== g.latest || g.playhead < g.editableFrom) { g.toast('Choose an editable live tick.'); return; }
@@ -265,7 +271,7 @@ export class Experience {
     const allowed:Record<string,boolean>={q:false,r:g.mode.kind==='place'&&!!g.types.get(g.mode.type_key)?.production&&!g.types.get(g.mode.type_key)?.silo,'clear-group':g.player!==null};
     for(const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#actions [data-key]'))) b.hidden=!g.actionAvailable(b.dataset.key!) || allowed[b.dataset.key!]===false || ((g.spectator || !!g.finished || g.current!==g.latest) && !['v','?'].includes(b.dataset.key!));
     const produce=document.querySelector<HTMLButtonElement>('#actions [data-key="q"]');if(produce)produce.textContent=views.some(v=>g.types.get(v.type_key)?.silo)&&!factory?'Q Build missiles':'Q Build units';
-    for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden)&&!col.querySelector('select');
+    for(const col of Array.from(document.querySelectorAll<HTMLElement>('.action-group'))) col.hidden=!Array.from(col.querySelectorAll('button')).some(b=>!b.hidden)&&!col.querySelector('select,input');
     const options=$('mode-options');options.replaceChildren();
     const choices=g.mode.kind==='build'?g.structures():g.mode.kind==='recipe'?g.producible():g.mode.kind==='priority'?['High','Medium','Low','Off']:g.mode.kind==='membership'||g.mode.kind==='binding'?Array.from({length:10},(_,n)=>String(n)):[];
     choices.forEach((label,index)=>{const digit=g.mode.kind==='membership'||g.mode.kind==='binding'?index:index+1;const cost=g.types.get(label)?.matter_cost;options.append(button(`${digit} · ${label}${cost===undefined?'':` · ${cost} matter`}`,event=>g.digit(digit,event.shiftKey)));});

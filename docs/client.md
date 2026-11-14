@@ -178,3 +178,11 @@ Missing-order feedback checks the viewed tick's projected state, prioritizes sel
 Order warnings appear only when the current draft contains commands and the viewed tick equals its intervention tick. Empty drafts and browsing other replay ticks show no “Needs orders” warning.
 
 Mixed factory production does not produce capability-mismatch warnings for newborn orders; mining/constructing orders may intentionally apply to only part of the queue. The Switch / rejoin player control accepts pointer input and returns to saved-player selection.
+
+## Order previews
+
+Settings → Show path previews is on by default and persists in browser storage. Uncheck it for straight order lines. Cyan solid routes compare tank movement; gold dashed routes compare walker movement, with a heavier stroke for the selected unit's actual type. Factories preview only active/pending queue movement types from their output tile, including draft queues. Red tile corners mark destinations and a red source cross means no route. Mining/construction previews use reachable work within the assigned area. These overlays account for known static obstacles; future traffic, combat and work reservations can change execution.
+
+## Delivery
+
+Ready changes merge and push to `dev`. Update `main` only with explicit user approval.

@@ -1,0 +1,69 @@
+import type {Neighbors, Order, Tile} from './contracts.generated';
+import {factoryPlan} from './factory';
+import {idKey, type EntityView, type Game} from './game';
+import type {Renderer} from './render';
+import {PreviewFields} from './path-preview';
+
+export interface OrderRoute {entity: string; rule: Neighbors; actual: boolean; from: Tile; goal: Tile; points: Tile[]}
+export class OrderPreviews {
+  routes: OrderRoute[]=[];
+  private fields: PreviewFields | null=null;
+  private topology='';
+  draw(g:Game,r:Renderer,ctx:CanvasRenderingContext2D,views:EntityView[]):void {
+    this.routes=[];if(!g.terrain)return;
+    const blocked=new Set(views.filter(v=>!v.blueprint&&g.types.get(v.type_key)?.kind==='structure').map(v=>Math.floor(v.y)*g.terrain!.width+Math.floor(v.x)));
+    const topology=[...blocked].sort((a,b)=>a-b).join(',');
+    if(this.fields?.terrain!==g.terrain||topology!==this.topology){this.fields=new PreviewFields(g.terrain,blocked);this.topology=topology;}
+    const fields=this.fields!;
+    const aiming=(g.mode.kind==='attack'||g.mode.kind==='stored-target')&&!!g.hover;
+    const targets=new Map<string,Tile>();
+    for(const v of views){
+      if(!g.selection.has(idKey(v.id)))continue;
+      const def=g.types.get(v.type_key),factory=!!def?.production&&!def.silo;
+      if(!factory&&!def?.movement)continue;
+      const plan=factory?factoryPlan(g,v):null;
+      const order:Order|undefined=aiming&&g.ownSelectable(v)?{kind:'attack_move',destination:g.hover!}:plan?.order??g.effectiveOrder(v);
+      if(!order||!['attack_move','mine','construct'].includes(order.kind))continue;
+      let from={x:Math.floor(v.x),y:Math.floor(v.y)};
+      if(factory){const offsets={n:[0,-1],e:[1,0],s:[0,1],w:[-1,0]};const [dx,dy]=offsets[v.outputDirection??v.exact?.production?.output_direction??'e'];from=v.exact?.production?.output_tile??{x:from.x+dx,y:from.y+dy};}
+      const types=plan?[...(plan.active?[plan.active.type_key]:[]),...plan.pending.map(i=>i.type)]:[v.type_key];
+      const eligible=types.map(t=>g.types.get(t)).filter(t=>t?.movement&&(order.kind==='attack_move'||(order.kind==='mine'?t.mining:t.construction)));
+      const actual=new Set(eligible.map(t=>t!.movement!.neighbors));
+      // Compare both movement rules for mobile units; factories show only queued types.
+      const rules:Neighbors[]=factory?[...actual]:actual.size?['four','eight']:[];
+      for(const rule of rules){
+        let goal:Tile|undefined,adjacent=false;
+        if(order.kind==='attack_move')goal=order.destination;
+        else if(order.kind==='mine'||order.kind==='construct'){
+          const inside=(t:Tile)=>t.x>=order.area.min.x&&t.y>=order.area.min.y&&t.x<=order.area.max.x&&t.y<=order.area.max.y;
+          const source=fields.field(from,rule);
+          const candidates:Tile[]=order.kind==='mine'?g.initialOre.flatMap((_,i)=>{const t={x:i%g.terrain!.width,y:Math.floor(i/g.terrain!.width)};return inside(t)&&g.oreAt(i)>0&&fields.open(t)?[t]:[];}):views.filter(b=>b.owner===v.owner&&(b.blueprint||b.lifecycle==='site')&&inside(b)).map(b=>({x:b.x,y:b.y}));
+          adjacent=order.kind==='construct';
+          let best=Infinity;
+          for(const t of candidates){let d=source[fields.index(t)];if(adjacent){d=Infinity;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const p={x:t.x+dx,y:t.y+dy};if(fields.open(p)&&source[fields.index(p)]>=0)d=Math.min(d,source[fields.index(p)]);}}
+            if(d>=0&&(d<best||(d===best&&goal&&(t.x<goal.x||(t.x===goal.x&&t.y<goal.y))))){goal=t;best=d;}}
+        }
+        if(!goal)continue;
+        targets.set(`${goal.x},${goal.y}`,goal);
+        const points=r.pathPreviews?fields.route(from,goal,rule,adjacent):[from,goal];
+        this.routes.push({entity:idKey(v.id),rule,actual:actual.has(rule),from,goal,points});
+      }
+    }
+    ctx.save();
+    // Wide tank strokes remain visible beneath coincident dashed walker strokes.
+    for(const route of [...this.routes].sort((a,b)=>a.rule===b.rule?0:a.rule==='four'?-1:1)){
+      const points=route.points;ctx.strokeStyle=r.pathPreviews?(route.rule==='four'?'#57d5ff':'#ffdb73'):'#ef5350';ctx.lineWidth=r.pathPreviews?(route.actual?3:1.5):1.5;ctx.globalAlpha=route.actual?1:.65;ctx.setLineDash(r.pathPreviews?(route.rule==='eight'?[5,4]:[]):[4,4]);ctx.beginPath();
+      points.forEach((p,i)=>{const [x,y]=r.screen(p.x+.5,p.y+.5);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();
+      if(!points.length){const [x,y]=r.screen(route.from.x+.5,route.from.y+.5);ctx.setLineDash([]);ctx.strokeStyle='#ff6262';ctx.beginPath();ctx.moveTo(x-4,y-4);ctx.lineTo(x+4,y+4);ctx.moveTo(x+4,y-4);ctx.lineTo(x-4,y+4);ctx.stroke();}
+    }
+    ctx.globalAlpha=1;ctx.setLineDash([]);
+    if(aiming)targets.set('hover',g.hover!);
+    for(const t of targets.values()){
+      const [x,y]=r.screen(t.x,t.y),s=r.camera.scale,k=Math.max(3,s*.28);
+      ctx.beginPath();for(const [dx,dy,sx,sy] of [[0,0,1,1],[s,0,-1,1],[0,s,1,-1],[s,s,-1,-1]]){ctx.moveTo(x+dx+sx*k,y+dy);ctx.lineTo(x+dx,y+dy);ctx.lineTo(x+dx,y+dy+sy*k);}
+      ctx.strokeStyle='#230d16';ctx.lineWidth=5;ctx.stroke();ctx.strokeStyle='#ff6262';ctx.lineWidth=2.5;ctx.stroke();
+    }
+    if(this.routes.length&&r.pathPreviews){ctx.font='12px system-ui';const label='Tank ━ cyan · Walker ┄ gold · × no route';const y=document.getElementById('top')!.offsetHeight+22;ctx.fillStyle='#101d2aeb';ctx.fillRect((innerWidth-290)/2,y-15,290,24);ctx.fillStyle='#e5f3ff';ctx.fillText(label,(innerWidth-290)/2+8,y+1);}
+    ctx.restore();
+  }
+}

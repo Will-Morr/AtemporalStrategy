@@ -45,6 +45,7 @@ export interface EntityView {
   engaged: number | null;
   blueprint?: DraftItemRef;
   settings?: BlueprintSettings;
+  outputDirection?: import('./contracts.generated').CardinalDirection;
   silo?: import('./contracts.generated').SiloState | null;
   exact?: WorldState['entities'][number];
 }
@@ -437,13 +438,13 @@ export class Game {
     const views = all.filter(e => this.fullVision || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
     if (this.exact?.revision === this.current && this.exact.tick === Math.floor(this.playhead)) {
       for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.fullVision)) {
-        views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
+        views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},outputDirection:b.output_direction??undefined,settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
       }
     }
     if (this.current === this.latest && this.draft.tick === Math.floor(this.playhead)) {
       this.draft.commands.forEach((d,index) => {
         const c = d.command;
-        if (c.kind === 'place_blueprints') c.tiles.forEach((tile,item_index) => views.push({index:-1,id:{birth_command:{command:{round:this.round,player:this.player!,index},target_index:0},item_index,occurrence:0},owner:this.player!,type_key:c.type_key,x:tile.x,y:tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'draft',local_id:d.local_id,item_index},settings:{queue:[],order:{kind:'idle'},priority:c.priority,loop_enabled:false}}));
+        if (c.kind === 'place_blueprints') c.tiles.forEach((tile,item_index) => views.push({index:-1,id:{birth_command:{command:{round:this.round,player:this.player!,index},target_index:0},item_index,occurrence:0},owner:this.player!,type_key:c.type_key,x:tile.x,y:tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'draft',local_id:d.local_id,item_index},outputDirection:c.output_directions?.[item_index]??undefined,settings:{queue:[],order:{kind:'idle'},priority:c.priority,loop_enabled:false}}));
         if (c.kind === 'cancel_blueprints') for (let i = views.length - 1; i >= 0; i--) if (c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(views[i].blueprint ?? (views[i].exact?.blueprint_id ? {kind:'persistent',id:views[i].exact!.blueprint_id} : null)))) views.splice(i, 1);
         if (c.kind === 'configure_blueprints') for (const v of views) if (v.blueprint && c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(v.blueprint))) v.settings = c.settings;
       });

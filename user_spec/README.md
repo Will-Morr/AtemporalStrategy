@@ -53,3 +53,7 @@ The final UI handoff must include manual review of full rendered game frames. Co
 ## Final UI and peripheral integration
 
 The user requested resolving the playtest UI notes, completing the browser and integration checklists in a new worktree/branch, and manually inspecting full rendered game frames before handoff. The separately implemented input-only peripheral was non-blocking for UI work. The latest instruction is to rebase the UI implementation onto `agent/peripheral`, resolve conflicts, run tests, update the TODO list with actual remaining work, and push the integrated result to `main` when ready.
+
+## Current delivery policy
+
+All changes should be merged and pushed to `dev` when ready. Update `main` only with explicit user approval. This supersedes earlier instructions in this index and historical implementation records to integrate into `main`.
