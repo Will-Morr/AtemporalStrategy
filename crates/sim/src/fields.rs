@@ -121,7 +121,8 @@ impl Sim {
     }
 
     /// Next legal step strictly descending the field. Equal distances prefer a free cell, then a
-    /// displaceable ally, then fixed neighbor order; occupants stay soft obstacles for the pass.
+    /// displaceable ally, then alternating axes for treads, then fixed neighbor order.
+    /// Occupants stay soft obstacles for the pass.
     pub(crate) fn descend(
         &self,
         field: &[u16],
@@ -134,17 +135,24 @@ impl Sim {
             return None;
         }
         let count = if neighbors == Neighbors::Eight { 8 } else { 4 };
-        let mut best: Option<(u16, Occupancy, Tile, Direction)> = None;
+        let horizontal = matches!(
+            self.state.entities[mover].last_move_direction,
+            Direction::E | Direction::W
+        );
+        let repeats_axis = |dx: i32| neighbors == Neighbors::Four && (dx != 0) == horizontal;
+        let mut best: Option<(u16, Occupancy, bool, Tile, Direction)> = None;
         for (dx, dy, dir) in &DIRS[..count] {
             if let Some(n) = self.step_legal(from, *dx, *dy, neighbors) {
                 let d = field[self.idx(n)];
                 let occupancy = self.occupancy(n, mover);
-                if d < here && best.is_none_or(|b| (d, occupancy) < (b.0, b.1)) {
-                    best = Some((d, occupancy, n, *dir));
+                if d < here
+                    && best.is_none_or(|b| (d, occupancy, repeats_axis(*dx)) < (b.0, b.1, b.2))
+                {
+                    best = Some((d, occupancy, repeats_axis(*dx), n, *dir));
                 }
             }
         }
-        best.map(|b| (b.2, b.3, b.1))
+        best.map(|b| (b.3, b.4, b.1))
     }
 
     /// How `to` blocks `mover` this tick: free, an ally that may yield, or a hard occupant.

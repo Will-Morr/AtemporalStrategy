@@ -198,7 +198,7 @@ The Game Docs review also checks grouped role/stat cards, links from named units
 
 ## Order path previews
 
-`path-preview.spec.mjs` uses real mouse/keyboard orders to compare routes for selected miners and constructors, aiming and saved orders, persisted straight-line settings, rotated factory outputs, tank-only/mixed draft queues, and economic work areas. `scripts/check-path-preview.mjs` checks route lengths for both movement rules, shared field caching, blocked targets, work adjacency, unreachable regions and forbidden diagonal corner cutting. The preview intentionally excludes hidden obstacles and future traffic/combat decisions; those are not execution guarantees.
+`path-preview.spec.mjs` uses real mouse/keyboard orders to show actual movement routes for selected miners and constructors, aiming and saved orders, persisted straight-line settings, rotated factory outputs, tank-only/mixed draft queues, and economic work areas. `scripts/check-path-preview.mjs` checks route lengths for both movement rules, shared field caching, blocked targets, work adjacency, unreachable regions and forbidden diagonal corner cutting, retained mining reservations, distinct claims, alternating tread steps and inset target-marker geometry. Mining scenarios compare rendered goals with authoritative retained destinations. Tread previews show no walker alternatives. The preview intentionally excludes hidden obstacles and future traffic/combat decisions; those are not execution guarantees.
 
 ## Artillery visual review
 

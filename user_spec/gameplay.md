@@ -118,3 +118,7 @@ Missile costs are now fixed by the user: silo 300 matter, Satellite 50, Cluster 
 Generate five map candidates before a game and let the controlling player pick one. Show the options and current choice to all players. When a game ends, show a small menu for starting a new game from within the UI.
 
 Factory outputs must push blocking units aside when ready to spawn, rather than waiting indefinitely for their orders to move them.
+
+## Tread movement
+
+Tanks and artillery use orthogonal tread movement, never diagonal steps. Tread pathfinding should alternate horizontal and vertical steps where possible instead of completing one axis first, following a more intuitive staircase toward the destination.

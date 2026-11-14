@@ -33,7 +33,7 @@ fn vehicles_walk_orthogonally_and_are_displaced_orthogonally() {
     assert_eq!(
         entity(&states[1], &miner).tile,
         tile(2, 1),
-        "fixed neighbor order: east first"
+        "initial north facing prefers a horizontal step"
     );
     assert_eq!(
         entity(&states[10], &miner).tile,
@@ -303,4 +303,43 @@ fn unreachable_goal_waits_without_progress() {
     assert_eq!(run.result.outcome.stop_reason, StopReason::Inactivity);
     assert_eq!(run.result.outcome.terminal_state_tick, w.config.stall_ticks);
     assert_eq!(entity(&run.result.final_state, &miner).tile, tile(1, 1));
+}
+
+#[test]
+fn tread_vehicles_alternate_axes_without_diagonal_steps() {
+    for kind in ["tank", "artillery", "miner"] {
+        for (dx, dy) in [(1i32, 1i32), (1, -1), (-1, 1), (-1, -1)] {
+            let mut w = World::new(&["......."; 7]);
+            let goal = tile((3 + 2 * dx) as u16, (3 + 2 * dy) as u16);
+            let id = w.spawn_with(0, kind, 3, 3, attack_move(goal.x, goal.y));
+            assert_eq!(
+                w.content
+                    .types
+                    .iter()
+                    .find(|t| t.key == kind)
+                    .unwrap()
+                    .movement
+                    .as_ref()
+                    .unwrap()
+                    .neighbors,
+                Neighbors::Four
+            );
+            let states = trace(&w);
+            assert_motion_invariants(&w, &states);
+            let mut path: Vec<Tile> = states.iter().map(|s| entity(s, &id).tile).collect();
+            path.dedup();
+            assert_eq!(
+                path,
+                vec![
+                    tile(3, 3),
+                    tile((3 + dx) as u16, 3),
+                    tile((3 + dx) as u16, (3 + dy) as u16),
+                    tile(goal.x, (3 + dy) as u16),
+                    goal
+                ],
+                "{kind} {dx},{dy}"
+            );
+            assert_checkpoint_equivalence(&w, &w.run());
+        }
+    }
 }

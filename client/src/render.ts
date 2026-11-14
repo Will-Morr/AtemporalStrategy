@@ -303,11 +303,10 @@ export class Renderer {
       box(-.39,-.32,.18,.69);box(.21,-.32,.18,.69);box(-.24,-.29,.48,.6);
       ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,-.39,.12,.43);
     } else if(v.type_key==='artillery') {
-      // Splayed trails, short wheels and an angular gun carriage: a field gun silhouette.
+      // Long exposed cannon on a narrow tracked carriage.
       const polygon=(points:[number,number][])=>{ctx.beginPath();points.forEach(([x,y],i)=>{if(i)ctx.lineTo(x*s,y*s);else ctx.moveTo(x*s,y*s);});ctx.closePath();ctx.fill();ctx.stroke();};
-      polygon([[-.1,.05],[-.38,.38],[-.22,.43],[.04,.15]]);
-      polygon([[.1,.05],[.38,.38],[.22,.43],[-.04,.15]]);
-      box(-.38,-.08,.15,.25);box(.23,-.08,.15,.25);
+      box(-.38,-.12,.16,.53);box(.22,-.12,.16,.53);
+      ctx.beginPath();for(const y of [.02,.16,.3]){ctx.moveTo(-.38*s,y*s);ctx.lineTo(-.22*s,y*s);ctx.moveTo(.22*s,y*s);ctx.lineTo(.38*s,y*s);}ctx.stroke();
       polygon([[0,-.22],[.23,-.04],[.18,.22],[-.18,.22],[-.23,-.04]]);
       ctx.fillStyle='#d7efff';box(-.075,-.46,.15,.53);box(-.16,-.48,.32,.12);
       ctx.fillStyle='#071019';ctx.fillRect(-.11*s,-.47*s,.22*s,.045*s);

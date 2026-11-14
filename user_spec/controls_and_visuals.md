@@ -122,8 +122,8 @@ Remove assistant-written promotional subtitles/taglines from page headers and di
 
 ## Order path previews
 
-Preview pathfinding while aiming attack orders and when units with orders are selected. Show tank and walker paths for every commanded unit, including miners and constructors. Factories show the movement types of their active/queued production, including both when the queue contains both types. Provide a Settings checkbox to switch back to ordinary straight order lines. Clearly mark the targeted tile, for example with red corner outlines.
+Preview pathfinding while aiming attack orders and when units with orders are selected. Show tank and walker paths for every commanded unit, including miners and constructors. Factories show the movement types of their active/queued production, including both when the queue contains both types. Provide a Settings checkbox to switch back to ordinary straight order lines. Clearly mark the targeted tile with red corner outlines confined to the tile’s inside edges. Markers must become smaller when zoomed out. Miner previews must follow the unit’s actual target tile, not simply the nearest ore.
 
 ## Artillery silhouette
 
-Give artillery a distinct visual design: its current appearance is too similar to the tank. Complete and deliver the path previews first, then perform this design pass.
+Keep artillery’s distinct long gun/turret from the design pass, but make its body side pieces look like tank treads. Both artillery and tanks are tread vehicles and must not move diagonally.

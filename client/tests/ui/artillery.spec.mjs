@@ -13,6 +13,15 @@ test('artillery silhouette and icons remain distinct from tanks at game zoom',as
   await tile(a,units.find(e=>e.type_key==='artillery'));
   for(const scale of [26,18,40]){await a.evaluate(scale=>{const g=window.atemporal,r=g.renderer,v=g.selectedViews()[0];r.camera.scale=scale;r.centerOn(v.x,v.y);},scale);await review.capture(`artillery-versus-tank-zoom-${scale}`,a);}
   await a.setViewportSize({width:1366,height:768});await a.evaluate(()=>{const g=window.atemporal,r=g.renderer,v=g.selectedViews()[0];r.camera.scale=26;r.centerOn(v.x,v.y);});await review.capture('artillery-laptop',a);
+  await a.setViewportSize({width:1920,height:1080});
+  for(const unit of units){
+    await tile(a,unit);await a.keyboard.press('f');
+    const goal=await a.evaluate(v=>({x:v.x+3,y:v.y+3}),unit);await tile(a,goal);
+    await expect.poll(()=>a.evaluate(()=>window.atemporal.renderer.orderPreviews.routes.map(r=>r.rule))).toEqual(['four']);
+    const points=await a.evaluate(()=>window.atemporal.renderer.orderPreviews.routes[0].points);expect(points.length).toBeGreaterThan(2);
+    expect(points.slice(1).every((p,i)=>Math.abs(p.x-points[i].x)+Math.abs(p.y-points[i].y)===1)).toBe(true);
+    for(const scale of [26,8,2]){await a.evaluate(scale=>{const g=window.atemporal,r=g.renderer,v=g.selectedViews()[0];r.camera.scale=scale;r.centerOn(v.x,v.y);},scale);await review.capture(`${unit.type_key}-orthogonal-path-and-inset-target-${scale}`,a);}
+  }
   // Review the authored SVG in the generated guide as well as battlefield canvas rendering.
   const guide=await (await review.newContext('guide')).newPage();await guide.goto(`${server.url}guide/`);await guide.locator('.role-card').filter({hasText:'Artillery'}).scrollIntoViewIfNeeded();await review.capture('artillery-guide-icon',guide);await guide.screenshot({path:testInfo.outputPath('artillery-guide-viewport.png'),animations:'disabled'});
 });

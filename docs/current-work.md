@@ -8,3 +8,13 @@
 Execute these tasks sequentially. Ready changes go to `dev`; updating `main` requires explicit user approval.
 
 Local preview: http://192.168.1.138:8080/ (Tailscale: http://100.68.14.13:8080/). Server log: `/tmp/atemporal-dev-server.log`; PID file: `/tmp/atemporal-dev-server.pid`.
+
+## Path and tread refinements
+
+- [x] Inset and scale target corners; retain mining destinations and respect claims.
+- [x] Preserve artillery's gun and replace its side supports with segmented treads.
+- [x] Alternate axes for equally good tread steps in simulation and previews; keep tanks/artillery orthogonal.
+- [x] Run movement/claim regressions and browser scenarios; inspect screenshots.
+- [x] Merge and push to `dev`, and refresh the local preview.
+
+Current rules-8 preview: http://192.168.1.138:8081/ (Tailscale: http://100.68.14.13:8081/). Log `/tmp/atemporal-dev-rules8.log`, PID file `/tmp/atemporal-dev-rules8.pid`. Port 8080 remains running for the connected rules-7 match. Use 8081 for new tests of alternating tread movement.

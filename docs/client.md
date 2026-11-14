@@ -181,7 +181,7 @@ Mixed factory production does not produce capability-mismatch warnings for newbo
 
 ## Order previews
 
-Settings → Show path previews is on by default and persists in browser storage. Uncheck it for straight order lines. Cyan solid routes compare tank movement; gold dashed routes compare walker movement, with a heavier stroke for the selected unit's actual type. Factories preview only active/pending queue movement types from their output tile, including draft queues. Red tile corners mark destinations and a red source cross means no route. Mining/construction previews use reachable work within the assigned area. These overlays account for known static obstacles; future traffic, combat and work reservations can change execution.
+Settings → Show path previews is on by default and persists in browser storage. Uncheck it for straight order lines. Cyan solid routes show tread movement; gold dashed routes show walker movement. Each unit shows only its actual movement type. Tread routes alternate axes when equal shortest steps are available. Factories preview only active/pending queue movement types from their output tile, including draft queues. Red tile corners scale with zoom and stay inside destination tiles and a red source cross means no route. Mining previews retain the authoritative target and respect known ore claims, resetting after a new draft assignment. Construction previews use reachable work within the assigned area. These overlays account for known static obstacles; future traffic, combat and work reservations can change execution.
 
 ## Delivery
 
@@ -189,4 +189,4 @@ Ready changes merge and push to `dev`. Update `main` only with explicit user app
 
 ## Artillery appearance
 
-Artillery uses a field-gun silhouette: an angular owner-colored carriage, short wheels, splayed rear supports and a long pale barrel with a wide muzzle. Tanks retain their broad tracks and circular turret. The artillery icon in selection, production and generated Game Docs uses the same shape language; facing still follows movement.
+Artillery uses a tracked-gun silhouette: an angular owner-colored carriage, segmented treads and a long pale barrel with a wide muzzle. Tanks retain their broad tracks and circular turret. The artillery icon in selection, production and generated Game Docs uses the same shape language; facing still follows movement.
