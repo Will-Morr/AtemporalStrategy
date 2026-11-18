@@ -79,4 +79,8 @@ ATEMPORAL_UI_PERIPHERAL=1 npm run ui:review --prefix client -- --grep 'playtest 
 
 These scenarios run in desktop and narrow Chromium. The mismatch case deliberately corrupts the local reference hash and asserts a visible persistent error plus disabled commits; healthy play verifies ghost settings and immediate newborn orders against the locally reproduced state. The full normal browser suite continues to cover controller-hosted multiplayer and recovery.
 
-Hybrid launch: `./quickstart.sh --config config/hybrid.yaml` uses the default first-to-five scoreboard and locks 100 additional ticks per round. Hybrid preserves scoreboard eligibility rather than applying timed-mode permanent elimination; reaching the history cap without a winner ends as unfinished. While a round is still waiting, Uncommit durably removes that player’s partial input and restores their draft; published round inputs remain immutable.
+Hybrid launch: `./quickstart.sh --config config/hybrid.yaml` uses the default first-to-three scoreboard and locks 100 additional ticks per round. Hybrid preserves scoreboard eligibility rather than applying timed-mode permanent elimination; reaching the history cap without a winner ends as unfinished. While a round is still waiting, Uncommit durably removes that player’s partial input and restores their draft; published round inputs remain immutable.
+
+### Publishing patch notes
+
+For a major release, add a dated entry to the patch notes section in `client/guide/introduction.html`. Both the home page and Game info link to its stable `#patch-notes` anchor. Collect smaller changes for the next major entry. Individual commits do not need a release note.

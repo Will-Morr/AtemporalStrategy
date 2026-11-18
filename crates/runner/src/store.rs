@@ -47,6 +47,7 @@ pub struct Store {
 /// Shared between the controller link, the local browser sockets and the sim thread.
 pub struct Peripheral {
     pub store: Mutex<Option<Store>>,
+    pub practice_source: Mutex<Option<(String, LobbyState, Phase)>>,
     pub changed: watch::Sender<u64>,
     pub sim: SimThread,
     /// Locally generated broadcasts (catch-up progress) for every local browser socket.
@@ -66,7 +67,12 @@ impl Store {
         initial: WorldState,
         memory_budget: u64,
     ) -> Result<Self> {
-        let local = fingerprint(&config, &content)?;
+        let mut local = fingerprint(&config, &content)?;
+        if remote.sim_build == "atemporal-sim 0.1.0 rules 7"
+            && atemporal_server::controller::supports_build(&remote.sim_build, &local.sim_build)
+        {
+            local.sim_build.clone_from(&remote.sim_build);
+        }
         if local != remote {
             return Err(format!(
                 "incompatible fingerprint: controller {remote:?} but this peripheral is {local:?}"
@@ -593,6 +599,7 @@ impl Peripheral {
         let (local, _) = broadcast::channel(64);
         Arc::new(Self {
             store: Mutex::new(None),
+            practice_source: Mutex::new(None),
             changed,
             sim: SimThread::spawn(),
             local,

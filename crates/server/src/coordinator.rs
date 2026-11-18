@@ -382,6 +382,14 @@ pub fn router(c: Coordinator) -> Router {
         .route("/games/{id}/guide/", get(game_guide))
         .route("/games/{id}/guide/{*path}", get(game_guide_file))
         .route("/games/{id}/ws", get(game_ws))
+        .route(
+            "/games/{id}/ws/practice/{source}/{rev}/{player}",
+            get(game_practice_ws),
+        )
+        .route(
+            "/games/{id}/replays/{replay}/ws/practice/{source}/{rev}/{player}",
+            get(replay_practice_ws),
+        )
         .route("/games/{id}/", get(game_page))
         .route("/games/{id}/replays/{replay}/ws", get(replay_ws))
         .route("/games/{id}/replays/{replay}/", get(replay_page))
@@ -668,7 +676,7 @@ async fn game_ws(
     h: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    relay(c, id, None, h, upgrade).await
+    relay(c, id, None, None, h, upgrade).await
 }
 async fn replay_ws(
     State(c): State<Coordinator>,
@@ -676,12 +684,29 @@ async fn replay_ws(
     h: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    relay(c, id, Some(replay), h, upgrade).await
+    relay(c, id, Some(replay), None, h, upgrade).await
+}
+async fn game_practice_ws(
+    State(c): State<Coordinator>,
+    Path((id, source, rev, player)): Path<(String, String, Revision, PlayerId)>,
+    h: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    relay(c, id, None, Some((source, rev, player)), h, upgrade).await
+}
+async fn replay_practice_ws(
+    State(c): State<Coordinator>,
+    Path((id, replay, source, rev, player)): Path<(String, String, String, Revision, PlayerId)>,
+    h: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    relay(c, id, Some(replay), Some((source, rev, player)), h, upgrade).await
 }
 async fn relay(
     c: Coordinator,
     id: String,
     replay: Option<String>,
+    practice: Option<(String, Revision, PlayerId)>,
     h: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
@@ -693,6 +718,13 @@ async fn relay(
         return StatusCode::FORBIDDEN.into_response();
     }
     let readonly = replay.is_some();
+    let practice_route = match &practice {
+        Some((source, rev, player)) if valid_id(source) => {
+            format!("/ws/practice/{source}/{rev}/{player}")
+        }
+        Some(_) => return StatusCode::BAD_REQUEST.into_response(),
+        None => "/ws".to_owned(),
+    };
     let worker_key = format!("{}:{}", id, replay.as_deref().unwrap_or("live"));
     c.log_visit(&h, if readonly { "replay" } else { "game" }, &worker_key);
     if let Some(r) = &replay {
@@ -714,7 +746,7 @@ async fn relay(
     let mut remote = None;
     for _ in 0..100 {
         if let Ok((socket, _)) =
-            tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}/ws")).await
+            tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}{practice_route}")).await
         {
             remote = Some(socket);
             break;
@@ -734,7 +766,7 @@ async fn relay(
                     match incoming {
                         Some(Ok(Message::Text(t)))=>{
                             let mut value:Value=match serde_json::from_str(t.as_str()){Ok(v)=>v,Err(_)=>continue};
-                            if readonly {
+                            if readonly && practice.is_none() {
                                 let kind=value["message"]["kind"].as_str().unwrap_or("");
                                 if kind=="hello" {value["message"]["slot_token"]=Value::Null;}
                                 else if !kind.starts_with("get_"){continue;}
@@ -749,7 +781,7 @@ async fn relay(
                 outgoing=rx.next()=>{
                     match outgoing {
                         Some(Ok(RemoteMessage::Text(t)))=>{
-                            if !readonly && t.len() < 1024 && let Some(user)=&user && let Ok(v)=serde_json::from_str::<Value>(t.as_str()) && v["message"]["kind"]=="slot_claimed" && let Some(slot)=v["message"]["slot"].as_u64() {
+                            if practice.is_none() && !readonly && t.len() < 1024 && let Some(user)=&user && let Ok(v)=serde_json::from_str::<Value>(t.as_str()) && v["message"]["kind"]=="slot_claimed" && let Some(slot)=v["message"]["slot"].as_u64() {
                                 let mut d=c.directory.lock().unwrap();
                                 if d.users.contains_key(user)&&let Some(g)=d.games.get_mut(&id){
                                     // A slot is owned by one browser user; reconnect updates this mapping.

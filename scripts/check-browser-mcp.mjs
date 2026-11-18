@@ -71,7 +71,7 @@ call=async(name,args)=>{const result=await request('tools/call',{name,arguments:
   assert(JSON.stringify(tabs).includes('/guide/'),'guide opened in a browser tab');
   await call('browser_tabs',{action:'select',index:1});
   const snapshot=await call('browser_snapshot',{});
-  assert(JSON.stringify(snapshot).includes('How to play Atemporal Strategy'));
+  assert(JSON.stringify(snapshot).includes('Game Docs'));
   await call('browser_take_screenshot',{filename:`${artifacts}/mcp-guide.png`,fullPage:true,scale:'css'});
   const screenshot=(await readdir(artifacts,{recursive:true})).find(name=>name==='mcp-guide.png'||name.endsWith('/mcp-guide.png'));
   assert(screenshot,'MCP screenshot file was not saved');

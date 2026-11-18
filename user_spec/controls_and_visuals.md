@@ -119,3 +119,15 @@ The remaining fixed-height workspace still wastes too much space, including for 
 Hold Shift while placing a building to keep that building selected for repeated placement, including wall lines. Players keep fog of war throughout active gameplay, including when inspecting timelines; spectators and finished-match replays have full vision. This supersedes the earlier correction that gave all players full vision in recorded timelines. Put the timeline result explanation beneath its main label, state that it describes the final tick, and offer a jump to that state instead of generic “replay available” text. A completed living factory prevents elimination; an earlier replay frame must not be presented as the final state.
 
 Remove assistant-written promotional subtitles/taglines from page headers and dialogs. Keep the user-authored landing subtitle and prose; use functional headings and instructions elsewhere.
+
+## Timeline planning and battlefield feedback
+
+- Ground vision must respect walls, with a generous flood fill allowing limited sight around corners. Show previously seen buildings in gray while they are outside vision.
+- Add a button to expand a selection to all matching unit and building types. Show a prominent signal when another player has committed and is waiting for the viewer.
+- Let players stage a reset of all their future orders from the chosen tick. It takes effect on commit and supports draft undo.
+- Shift-click can queue identical missile launches. If a launch would never be supplied, append the missing missile to the silo’s production queue.
+- Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Publication is optional per commit. Roll minor changes into the next major release.
+
+## Timeline inspection and practice
+
+Provide a view of previous timelines. Offer an optional visualization of the commands and events at each tick. Spectators and players reviewing a finished game can inspect both players’ plans, see which units or buildings received orders, and inspect the production queue of a selected enemy building. Allow new tick submissions in a replay of a completed or abandoned game to explore whether different orders could have won. Preserve the original recording and result.

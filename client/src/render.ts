@@ -30,9 +30,10 @@ export class Renderer {
 
   resize(): void {
     const oldWidth=this.map.width, oldHeight=this.map.height, oldHeader=this.headerHeight;
-    this.map.width = window.innerWidth;
+    if(this.map.width!==window.innerWidth)this.map.width=window.innerWidth;
     this.headerHeight = document.getElementById('top')!.offsetHeight;
-    this.map.height = Math.max(100, document.getElementById('panels')!.getBoundingClientRect().top);
+    const height=Math.floor(Math.max(100,document.getElementById('panels')!.getBoundingClientRect().top));
+    if(this.map.height!==height)this.map.height=height;
     // Keep world positions stable on screen when the contextual workspace changes height.
     this.camera.x += (this.map.width-oldWidth)/(2*this.camera.scale);
     this.camera.y += (this.map.height+this.headerHeight-oldHeight-oldHeader)/(2*this.camera.scale);
@@ -42,6 +43,9 @@ export class Renderer {
     this.timeline.style.minHeight = `${this.game.config.player_count * 12 + 14}px`;
     this.timeline.width = this.timeline.clientWidth || 600;
     this.timeline.height = this.timeline.clientHeight || 80;
+    // Resizing a canvas clears its backing store, including in background tabs
+    // where the next animation frame may be throttled.
+    if(this.game.terrain && this.game.experience)this.draw();
   }
   private headerHeight = 76;
   centerOn(x: number, y: number): void {
@@ -220,15 +224,26 @@ export class Renderer {
       if(px+s<0 || py+s<this.headerHeight || px>width || py>height) continue;
       this.drawEntity(ctx, v, s, byIndex);
     }
+    const review = this.game.experience.review;
+    if (review.active) review.update();
+    ctx.save();
+    ctx.strokeStyle='#ffda70';ctx.lineWidth=2;ctx.setLineDash([5,3]);
+    for (const t of review.sites) {
+      const [x,y] = this.screen(t.x,t.y);ctx.strokeRect(x,y,s,s);
+    }
+    ctx.restore();
     // Selection highlight and orders.
     for (const v of views) {
-      if (!v.id || !this.game.selection.has(idKey(v.id))) continue;
+      if(v.remembered)continue;
+      const selected = this.game.selection.has(idKey(v.id));
+      const ordered = review.recipients.has(idKey(v.id));
+      if (!selected && !ordered) continue;
       const [px, py] = this.screen(v.x, v.y);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = ordered ? '#ffda70' : '#ffffff';
+      ctx.lineWidth = ordered ? 3 : 2;
       ctx.strokeRect(px - 1, py - 1, s + 2, s + 2);
       ctx.lineWidth = 1;
-      const a = this.game.effectiveOrder(v);
+      const a = review.recipients.get(idKey(v.id)) ?? this.game.effectiveOrder(v);
       if (a?.kind === 'attack_move') {
         const [dx, dy] = this.screen(a.destination.x + 0.5, a.destination.y + 0.5);
         ctx.strokeStyle = '#ef5350';
@@ -238,6 +253,13 @@ export class Renderer {
         ctx.lineTo(dx, dy);
         ctx.stroke();
         ctx.setLineDash([]);
+      } else if (a?.kind === 'support') {
+        const target=views.find(entity=>idKey(entity.id)===idKey(a.target));
+        if (target) {
+          const [tx,ty]=this.screen(target.x+.5,target.y+.5);
+          ctx.strokeStyle='#7ed6a7';ctx.setLineDash([4,4]);ctx.beginPath();
+          ctx.moveTo(px+s/2,py+s/2);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);
+        }
       } else if (a?.kind === 'mine' || a?.kind === 'construct') {
         const [rx, ry] = this.screen(a.area.min.x, a.area.min.y);
         ctx.strokeStyle = a.kind === 'mine' ? '#4dd0e1' : '#ffca28';
@@ -281,13 +303,13 @@ export class Renderer {
   private drawEntity(ctx: CanvasRenderingContext2D, v: EntityView, s: number, byIndex: Map<number, EntityView>): void {
     const def = this.game.types.get(v.type_key);
     const [px, py] = this.screen(v.x, v.y);
-    const color = this.game.color(v.owner);
+    const color = v.remembered ? '#96969d' : this.game.color(v.owner);
     const team = this.game.profiles[v.owner]?.profile?.team_id;
     if (team) { ctx.strokeStyle=color;ctx.strokeRect(px-2,py-2,s+4,s+4); } 
     ctx.fillStyle = color;
     ctx.globalAlpha = v.lifecycle === 'site' ? 0.45 : 1;
     const ghost = v.lifecycle === 'blueprint' || v.lifecycle === 'site';
-    ctx.globalAlpha = ghost ? .5 : 1;
+    ctx.globalAlpha = v.remembered ? .48 : ghost ? .5 : 1;
     ctx.save();
     ctx.translate(px+s/2,py+s/2);
     const [fx,fy]=FACING[v.facing] ?? [0,-1];
@@ -312,6 +334,7 @@ export class Renderer {
     else if(v.type_key==='grinder') {box(-.26,-.12,.52,.5);ctx.fillStyle='#ffb69b';circle(-.2,-.24,.2);circle(.2,-.24,.2);}
     else {box(-.3,.14,.19,.25);box(.11,.14,.19,.25);triangle(.28,.23);ctx.fillStyle='#d7efff';circle(0,-.1,.12);}
     ctx.restore();ctx.globalAlpha=1;
+    if(v.remembered)return;
     if(ghost){ctx.strokeStyle=color;ctx.setLineDash([3,2]);ctx.strokeRect(px,py,s,s);ctx.setLineDash([]);}
     const groups=this.groupLabels.get(idKey(v.id));
     if(s>=16 && groups){ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.fillText(groups,px+s-6,py+s+9);}
@@ -348,7 +371,7 @@ export class Renderer {
       }
     }
     for (const v of views) {
-      g.fillStyle = this.game.color(v.owner);
+      g.fillStyle = v.remembered ? '#83838a' : this.game.color(v.owner);
       g.fillRect(v.x * sx, v.y * sy, Math.max(2, sx), Math.max(2, sy));
     }
     const vw = this.map.width / this.camera.scale, vh = (this.map.height - this.headerHeight) / this.camera.scale;

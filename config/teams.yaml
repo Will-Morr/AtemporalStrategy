@@ -32,7 +32,7 @@
       "rules": {
         "victory_rule": {
           "kind": "fixed_target",
-          "points": 5.0
+          "points": 3.0
         },
         "tie_policy": "continue_until_unique",
         "draw_scoring": "none",

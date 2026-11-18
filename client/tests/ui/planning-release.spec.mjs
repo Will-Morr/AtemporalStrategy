@@ -1,0 +1,71 @@
+import {test,expect} from './fixtures.mjs';
+import {isolatedServer,players,revision,tile,seek} from './game-helpers.mjs';
+
+test('a silo supplies a batch of identical launches and a staged reset preserves its previous timeline',async({review},testInfo)=>{
+  const server=await isolatedServer(testInfo, cfg=>{
+    Object.assign(cfg.match_defaults,{max_tick:160,stop_when_decided:false,control_limit:'single_order',starting_matter:2000});
+  }, content=>{content.starting_roster=['silo','miner','miner'];});
+  review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();
+  await revision(a,0);await revision(b,0);
+  const opening=await a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===0).map(e=>({type:e.type_key,x:e.x,y:e.y})));
+  await tile(a,opening.find(e=>e.type==='miner'));
+  await a.getByRole('button',{name:'Select all matching'}).click();
+  await expect(a.locator('#selection-body')).toContainText('miner ×2');
+  await a.setViewportSize({width:1366,height:768});
+  await a.getByText('Game info',{exact:true}).click();
+  await review.capture('game-info-menu-1366',a);
+  const popup=a.waitForEvent('popup');
+  await a.getByRole('link',{name:'Patch notes'}).click();
+  const notes=await popup;
+  await expect(notes.locator('#patch-notes li').first()).toHaveText('Added patch notes');
+  await notes.screenshot({path:testInfo.outputPath('game-info-patch-notes.png'),timeout:15000});await notes.close();
+  await a.getByText('Game info',{exact:true}).click();
+  await a.setViewportSize({width:1920,height:1080});
+  const silo=opening.find(e=>e.type==='silo');
+  await seek(a,12);await tile(a,silo);
+  await a.getByRole('button',{name:'Target Satellite',exact:true}).click({modifiers:['Shift']});
+  await tile(a,silo);
+  await expect(a.locator('.missile-launches li')).toHaveCount(5);
+  await expect(a.locator('.silo-production summary')).toContainText('5 waiting');
+  await expect(a.locator('#draft-title')).toContainText('1 changes');
+  await a.keyboard.press('Control+z');await expect(a.locator('.missile-launches li')).toHaveCount(0);
+  await a.keyboard.press('Control+y');await expect(a.locator('.missile-launches li')).toHaveCount(5);
+  await a.locator('#commit').click();
+  await expect(b.locator('#turn-banner')).toContainText('Player 0 is waiting for your turn');
+  await review.capture('other-player-waiting',b);
+  await b.locator('#commit').click();await revision(a,1);await revision(b,1);
+  await seek(a,13);await tile(a,silo);await expect(a.locator('.missile-launches li')).toHaveCount(5);
+  await seek(a,0);await a.getByRole('button',{name:'Clear all future orders'}).click();
+  await expect(a.locator('#draft-list')).toContainText('after this tick');
+  await a.keyboard.press('Control+z');
+  await expect(a.locator('#draft-list li')).toHaveCount(0);
+  await a.keyboard.press('Control+y');
+  await review.capture('staged-timeline-reset',a);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);
+  await seek(a,13);await tile(a,silo);
+  await expect(a.locator('.missile-launches li')).toHaveCount(0);
+  await expect(a.locator('.silo-production summary')).toContainText('0 waiting');
+});
+
+test('an expired satellite leaves a gray last sighting which survives seeking and refresh',async({review},testInfo)=>{
+  const server=await isolatedServer(testInfo,setup=>Object.assign(setup.match_defaults,{max_tick:250,stop_when_decided:false}),content=>{
+    content.starting_roster=['silo','miner','turret'];
+    content.types.find(t=>t.key==='satellite').missile.reveal_ticks=15;
+  });
+  review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const position=(page,type)=>page.evaluate(type=>{const v=window.atemporal.entities().find(e=>e.owner===window.atemporal.player && e.type_key===type);return{x:v.x,y:v.y};},type);
+  const home=await position(a,'silo'), enemy=await position(b,'turret');
+  const sight=()=>a.evaluate(t=>{const g=window.atemporal;const building=g.entities().find(e=>e.type_key==='turret' && e.x===t.x && e.y===t.y);return !building?'unseen':building.remembered?'remembered':'visible';},enemy);
+  expect(await sight()).toBe('unseen');
+  await tile(a,home);await a.getByRole('button',{name:'Target Satellite',exact:true}).click();await tile(a,enemy);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);
+  await seek(a,100);await expect.poll(sight).toBe('remembered');
+  await tile(a,enemy);expect(await a.evaluate(()=>window.atemporal.selectedViews().length)).toBe(0);
+  await review.capture('gray-enemy-building-after-vision-expires',a);
+  await seek(a,0);await expect.poll(sight).toBe('unseen');
+  await a.reload();await revision(a,1);await seek(a,100);await expect.poll(sight).toBe('remembered');
+});

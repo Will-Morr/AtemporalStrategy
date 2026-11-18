@@ -1,3 +1,4 @@
+import {practice} from './practice';
 import type { ClientMessage, ServerMessage, ServerEnvelope, LobbyState } from './contracts.generated';
 
 type Kind = ServerMessage['kind'];
@@ -12,6 +13,7 @@ export class Net {
   private ranges = new Map<Kind, Promise<unknown>>();
   instance: string | null = null;
   matchId: string | null = null;
+  rulesVersion = 8;
   lobby: LobbyState | null = null;
   published = false;
   bytes = 0;
@@ -24,7 +26,8 @@ export class Net {
   }
   connect(): Promise<void> {
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${this.path.startsWith('/games/') ? this.path.replace(/\/$/, '') : ''}/ws`;
-    this.ws = new WebSocket(url);
+    const branch = practice ? `/practice/${practice.source}/${practice.revision}/${practice.player}` : '';
+    this.ws = new WebSocket(url + branch);
     this.ws.onmessage = event => {
       const text = String(event.data);
       this.bytes += text.length;
@@ -37,7 +40,10 @@ export class Net {
       }
       this.instance = envelope.server_instance_id;
       const message = envelope.message;
-      if(message.kind === "welcome")this.matchId=message.match_id;
+      if (message.kind === 'welcome') {
+        this.matchId = message.match_id;
+        this.rulesVersion = Number(/ rules (\d+)$/.exec(message.fingerprint.sim_build)?.[1] ?? 8);
+      }
       if (message.kind === 'welcome' || message.kind === 'lobby_updated' || message.kind === 'lobby_update_rejected') {
         if (!this.lobby || message.lobby.revision >= this.lobby.revision) this.lobby = message.lobby;
       }

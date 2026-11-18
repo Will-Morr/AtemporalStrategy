@@ -75,7 +75,7 @@ test('order warnings, committed banner, selection markers and unit reference fit
   expect(await a.locator('#actions .planning').evaluate(e=>e.getBoundingClientRect().top>=0)).toBe(true);
   await a.locator('#actions .planning>summary').click();
   await a.keyboard.press('?');expect(await a.locator('#help').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight)).toBe(true);await review.capture('hotkeys-no-scroll-1366',a);await a.keyboard.press('Escape');
-  const popup=a.waitForEvent('popup');await a.locator('#unit-reference').click();const reference=await popup;await reference.waitForLoadState();await expect(reference.locator('#units')).toContainText('Unit reference');await expect(reference.locator('body')).toContainText('miner');
+  const popup=a.waitForEvent('popup');await a.locator('#unit-reference').click();const reference=await popup;await reference.waitForLoadState();await expect(reference.locator('#units')).toHaveText('Unit stats');await expect(reference.locator('body')).toContainText('miner');
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeVisible();await review.capture('committed-waiting-1366',a);
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeHidden();
   await a.locator('#commit').click();await expect(a.locator('#turn-banner')).toBeVisible();await b.locator('#commit').click();await revision(a,1);await expect(a.locator('#turn-banner')).toBeHidden();await expect(a.locator('#order-warnings')).toBeHidden();

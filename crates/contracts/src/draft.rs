@@ -72,7 +72,7 @@ pub fn resolve_local_references(
             if factories.len() > 65536 || factories.windows(2).any(|p| p[0] >= p[1]) {
                 return Err("factory targets must be sorted, unique and fit u16 indices".into());
             }
-            if matches!(edit, ProductionEdit::Append { items } | ProductionEdit::ReplacePending { items } if items.len() > 65536)
+            if matches!(edit, ProductionEdit::Append { items } | ProductionEdit::SupplyLaunches { items, .. } | ProductionEdit::ReplacePending { items } if items.len() > 65536)
             {
                 return Err("too many queue items".into());
             }
@@ -137,6 +137,7 @@ pub fn resolve_local_references(
                             return Err("queue reference must point to a queue edit".into());
                         };
                         let (ProductionEdit::Append { items }
+                        | ProductionEdit::SupplyLaunches { items, .. }
                         | ProductionEdit::ReplacePending { items }) = edit
                         else {
                             return Err("queue reference must point to new items".into());
@@ -167,6 +168,7 @@ pub fn resolve_local_references(
             Ok(ids)
         };
         let command = match &entry.command {
+            Command::ClearFutureOrders {} => Command::ClearFutureOrders {},
             Command::AssignOrder { entities, order } => Command::AssignOrder {
                 entities: entities.clone(),
                 order: order.clone(),
@@ -228,6 +230,12 @@ pub fn resolve_local_references(
             Command::EditProduction { factories, edit } => Command::EditProduction {
                 factories: factories.clone(),
                 edit: match edit {
+                    ProductionEdit::SupplyLaunches { items, plan } => {
+                        ProductionEdit::SupplyLaunches {
+                            items: items.clone(),
+                            plan: plan.clone(),
+                        }
+                    }
                     ProductionEdit::Append { items } => ProductionEdit::Append {
                         items: items.clone(),
                     },
@@ -263,4 +271,34 @@ pub fn resolve_local_references(
         resolved.push(command);
     }
     Ok(resolved)
+}
+
+/// Remove earlier rounds' future turns for the resetting player. The stored ledger remains
+/// immutable so older revisions still show the orders as they originally executed.
+pub fn effective_turns(turns: &[AcceptedTurn]) -> Vec<AcceptedTurn> {
+    let mut by_round: Vec<_> = turns.iter().collect();
+    by_round.sort_by_key(|t| std::cmp::Reverse(t.round));
+    let mut cutoffs = BTreeMap::<PlayerId, Tick>::new();
+    let mut effective = vec![];
+    for turn in by_round {
+        if cutoffs
+            .get(&turn.player)
+            .is_some_and(|tick| turn.tick > *tick)
+        {
+            continue;
+        }
+        if turn
+            .commands
+            .iter()
+            .any(|c| matches!(c.command, Command::ClearFutureOrders {}))
+        {
+            cutoffs
+                .entry(turn.player)
+                .and_modify(|tick| *tick = (*tick).min(turn.tick))
+                .or_insert(turn.tick);
+        }
+        effective.push(turn.clone());
+    }
+    effective.sort_by_key(|t| (t.round, t.player));
+    effective
 }

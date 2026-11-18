@@ -46,7 +46,7 @@ Timed adjudication considers only the constructor/factory end state: the game is
 
 ## Hybrid mode
 
-Add a hybrid mode with the scoreboard goal of five timeline wins and a fixed advance of immutable history each round.
+Add a hybrid mode with the scoreboard configurable timeline-win goal and a fixed advance of immutable history each round.
 
 ## Dynamic simulation horizon
 
@@ -64,13 +64,13 @@ What counts as progress, the exact boolean condition, and how future scheduled i
 
 ## Scoreboard and teams
 
-Award points each resolved round, including passes: an unchanged winning timeline continues to score. Default match victory is first to **5 points**, configurable.
+Award points each resolved round, including passes: an unchanged winning timeline continues to score. Default match victory is first to **3 points** (superseding five), configurable.
 
 Multiplayer supports **FFA or team play**. Add an optional dynamic score-to-win configuration requiring one player to have **N more points than every other player**, since several players may score together. Team scores are based on the number of their members still alive after the simulation.
 
 **Only award survival points when at least one player is eliminated at the end.** Temporary elimination followed by recovery does not count as an elimination for this condition. Stalemates never score. Draw scoring is configurable: either no players score or all players score. This draw-specific rule supersedes the earlier non-scoring-draw assumption; it does not change survival-based scoring for wins.
 
-Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-5 rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
+Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-target rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
 
 There is no scoreboard round limit. Players can stop and archive manually; repeated stalemates or tied scores do not cause an automatic administrative result.
 

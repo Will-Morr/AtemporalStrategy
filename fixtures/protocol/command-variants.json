@@ -275,6 +275,85 @@
             },
             "future_orders": "keep",
             "local_id": "command-9"
+          },
+          {
+            "command": {
+              "kind": "set_silo_plan",
+              "silos": [
+                {
+                  "birth_command": {
+                    "command": {
+                      "round": 0,
+                      "player": 0,
+                      "index": 0
+                    },
+                    "target_index": 0
+                  },
+                  "item_index": 90,
+                  "occurrence": 0
+                }
+              ],
+              "plan": {
+                "automatic": false,
+                "launches": [
+                  {
+                    "type_key": "satellite",
+                    "target": {
+                      "x": 3,
+                      "y": 4
+                    }
+                  }
+                ]
+              }
+            },
+            "future_orders": "keep",
+            "local_id": "command-10"
+          },
+          {
+            "command": {
+              "kind": "edit_production",
+              "factories": [
+                {
+                  "birth_command": {
+                    "command": {
+                      "round": 0,
+                      "player": 0,
+                      "index": 0
+                    },
+                    "target_index": 0
+                  },
+                  "item_index": 90,
+                  "occurrence": 0
+                }
+              ],
+              "edit": {
+                "kind": "supply_launches",
+                "items": [
+                  "satellite"
+                ],
+                "plan": {
+                  "automatic": false,
+                  "launches": [
+                    {
+                      "type_key": "satellite",
+                      "target": {
+                        "x": 3,
+                        "y": 4
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "future_orders": "keep",
+            "local_id": "command-11"
+          },
+          {
+            "command": {
+              "kind": "clear_future_orders"
+            },
+            "future_orders": "keep",
+            "local_id": "command-12"
           }
         ]
       }

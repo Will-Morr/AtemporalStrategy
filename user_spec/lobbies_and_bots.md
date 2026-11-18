@@ -44,11 +44,9 @@ On the first visit to the game directory, let players enter a username without v
 
 ## Minimal opponents and automated playtesting
 
-Bots provide easy, repeatable sandbox opponents for learning without requiring another person. They must not cheat and should work through logic similar to a player. The latest decision is one reasonable, simple AI, superseding the earlier request for multiple varieties.
+Keep the previous Standard policy selectable as bot 1.0. Quick play uses the strongest available policy. Both policies use the same player-visible information and normal orders as a human.
 
-Sophisticated planning and strong play are unnecessary. The suggested approach is a small opening action set, followed by a simple filter choosing a timeline intervention tick and queuing attacks there. Exact policies and bot personalities are implementation choices.
-
-The default quick-play bot must continue making useful interventions beyond its first rounds, react to threats, and make modest economy/production expansion and defense. Keep this lightweight; sophisticated search is not required.
+Review recent games actually played, find the bot’s failure modes, and implement a new opponent that aims to beat most recorded player plans when replayed. Measure its results separately from bot self-play and evaluate balance using specific unit compositions and factory loop queues with comparable matter budgets. Release balance changes supported by those comparisons.
 
 ## Execution constraints
 

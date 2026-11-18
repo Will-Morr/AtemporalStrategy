@@ -70,6 +70,7 @@ pub struct RoundMeasurement {
 }
 
 pub struct Controller {
+    practice_opening_min_end: Option<Tick>,
     pub last_activity_ms: u64,
     pub instance_id: String,
     pub match_id: String,
@@ -123,6 +124,16 @@ pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprin
         config_hash: identity::canonical_hash(config)?,
         content_hash: atemporal_content::content_hash(content)?,
     })
+}
+
+/// Rules 7 recordings retain their original targeting rules when replayed by rules 8.
+pub fn supports_build(recorded: &str, current: &str) -> bool {
+    let rules = |build: &str| {
+        build
+            .rsplit_once(" rules ")
+            .and_then(|(_, version)| version.parse::<u32>().ok())
+    };
+    matches!((rules(recorded), rules(current)), (Some(old), Some(new)) if old == new || (old == 7 && new == 8))
 }
 
 pub fn now_ms() -> u64 {
@@ -214,6 +225,7 @@ impl Controller {
         };
         let (broadcast, _) = broadcast::channel(256);
         Ok(Self {
+            practice_opening_min_end: None,
             last_activity_ms: now_ms(),
             instance_id,
             match_id: format!("match-{}", now_ms()),
@@ -253,6 +265,65 @@ impl Controller {
             use_counter: 0,
             evictions: 0,
         })
+    }
+
+    /// Start a private, in-memory continuation of one published timeline. Its ledger retains
+    /// original command IDs so new turns can target the same units and factory queue items.
+    pub fn practice(
+        config: MatchConfig,
+        content: Content,
+        fingerprint: Fingerprint,
+        lobby: LobbyState,
+        mut base: RevisionData,
+        player: PlayerId,
+        sim: SimThread,
+    ) -> Result<Self> {
+        if player >= config.player_count || !base.loaded || base.outcome.is_none() {
+            return Err("Player or published timeline unavailable".into());
+        }
+        let setup = Setup {
+            schema_version: Version::default(),
+            match_defaults: config,
+            available_teams: lobby.available_teams.clone(),
+            default_port: 8080,
+        };
+        let mut c = Self::new(
+            setup,
+            content,
+            String::new(),
+            String::new(),
+            "/guide/".into(),
+            PathBuf::new(),
+            sim,
+        )?;
+        c.fingerprint = fingerprint;
+        c.lobby = lobby;
+        c.practice_opening_min_end = Some(
+            base.timed
+                .as_ref()
+                .map_or_else(|| minimum_end_tick(&c.config, 0), |t| t.boundary),
+        );
+        c.match_id = format!("practice-{}", c.instance_id);
+        c.tokens[usize::from(player)] = Some("practice".into());
+        // The selected recording is the practice opening. New IDs use the original round
+        // counter, while result revisions and scores start a separate ancestry.
+        c.round = base.round;
+        base.round = 0;
+        base.revision = 0;
+        base.parent = None;
+        base.score = None;
+        base.timed = None;
+        c.revisions.insert(0, base);
+        c.open_planning();
+        Ok(c)
+    }
+
+    pub fn cancel_practice(&mut self) {
+        if self.practice_opening_min_end.is_some()
+            && let Some((_, cancel)) = self.running.take()
+        {
+            cancel.store(true, Ordering::Relaxed);
+        }
     }
 
     pub fn send(&self, message: ServerMessage) {
@@ -566,6 +637,9 @@ impl Controller {
     }
 
     pub fn new_match(&mut self, token: &str, based_on_match_id: &str) -> Result<()> {
+        if self.practice_opening_min_end.is_some() {
+            return Err("Return to the recording to start another practice replay".into());
+        }
         self.require_controller(token)?;
         if based_on_match_id != self.match_id {
             return Err("match changed; refresh the lobby".into());
@@ -1004,8 +1078,15 @@ impl Controller {
             | Objective::Hybrid { rules, .. } = &self.config.objective
             {
                 let previous = self.scores.last();
+                // Ledger rounds continue after the recording to keep entity identities unique.
+                // Only revisions submitted in this private session contribute to its score.
+                let scoring_round = if self.practice_opening_min_end.is_some() {
+                    data.revision
+                } else {
+                    round
+                };
                 let score = scoring::resolve_round(
-                    round,
+                    scoring_round,
                     self.config.player_count,
                     &self.config.multiplayer,
                     rules,
@@ -1242,6 +1323,7 @@ impl Controller {
         let def = |key: &str| self.content.types.iter().find(|t| t.key == key);
         for (command_index, command) in commands.iter().enumerate() {
             match command {
+                Command::ClearFutureOrders {} => {}
                 Command::AssignOrder { entities, order } => {
                     if entities.is_empty() {
                         return Err("assignment without recipients".into());
@@ -1404,7 +1486,16 @@ impl Controller {
                         let recipes = def(&e.type_key)
                             .and_then(|d| d.production.as_ref())
                             .ok_or("target cannot produce")?;
+                        if let ProductionEdit::SupplyLaunches { plan, .. } = edit {
+                            validate_silo_plan(
+                                def(&e.type_key).ok_or("unknown silo type")?,
+                                plan,
+                                state.terrain.width,
+                                state.terrain.height,
+                            )?;
+                        }
                         if let ProductionEdit::Append { items }
+                        | ProductionEdit::SupplyLaunches { items, .. }
                         | ProductionEdit::ReplacePending { items } = edit
                             && items.iter().any(|key| !recipes.recipes.contains(key))
                         {
@@ -1478,7 +1569,9 @@ impl Controller {
             round: self.round,
         };
         self.send(self.planning_opened());
-        if self.committed.len() < usize::from(self.config.player_count) {
+        if self.practice_opening_min_end.is_none()
+            && self.committed.len() < usize::from(self.config.player_count)
+        {
             return Ok((accepted, None));
         }
         self.last_commit_at = Some(now);
@@ -1924,23 +2017,13 @@ impl Controller {
         {
             return Err("archive was recorded under different content/config; refusing to replay it silently".into());
         }
-        if recorded
-            .sim_build
-            .rsplit_once(" rules ")
-            .and_then(|(_, version)| version.parse::<u32>().ok())
-            != Some(atemporal_sim::RULES_VERSION)
-        {
+        if !supports_build(&recorded.sim_build, &c.fingerprint.sim_build) {
             return Err(format!(
                 "archive uses incompatible simulator rules/build: {}; this server uses {}. Resume with the original binary.",
                 recorded.sim_build, c.fingerprint.sim_build
             ));
         }
-        if recorded.sim_build != c.fingerprint.sim_build {
-            eprintln!(
-                "warning: archive recorded with {} but this server is {}; hashes are verified on regeneration",
-                recorded.sim_build, c.fingerprint.sim_build
-            );
-        }
+        c.fingerprint.sim_build.clone_from(&recorded.sim_build);
         let players = usize::from(c.config.player_count);
         c.lobby.rule_summary = rule_summary(&c.config, &c.content);
         for profile in &loaded.manifest.profiles {
@@ -2074,7 +2157,12 @@ impl Controller {
             initial.clone(),
             data.turns.clone(),
             data.precedence.clone(),
-            minimum_end_tick(&self.config, previous_boundary),
+            if revision == 0 {
+                self.practice_opening_min_end
+                    .unwrap_or_else(|| minimum_end_tick(&self.config, 0))
+            } else {
+                minimum_end_tick(&self.config, previous_boundary)
+            },
         );
         request.entity_dictionary = vec![];
         Ok(request)
@@ -2363,11 +2451,9 @@ impl RevisionData {
     pub fn commands_range(&self, from: Tick, to: Tick) -> ServerMessage {
         ServerMessage::Commands {
             revision: self.revision,
-            turns: self
-                .turns
-                .iter()
+            turns: draft::effective_turns(&self.turns)
+                .into_iter()
                 .filter(|t| t.tick >= from && t.tick <= to)
-                .cloned()
                 .collect(),
         }
     }

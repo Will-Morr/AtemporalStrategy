@@ -117,6 +117,7 @@ fn run() -> Result<()> {
         ));
         let router = Router::new()
             .route("/ws", get(ws_upgrade))
+            .route("/ws/practice/{source}/{revision}/{player}", get(practice_upgrade))
             .route("/peripheral/status", get(status))
             .route("/guide", get(guide_root))
             .route("/guide/", get(guide_root))
@@ -130,6 +131,49 @@ fn run() -> Result<()> {
 async fn ws_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(64 << 20)
         .on_upgrade(move |socket: WebSocket| link::relay(app.peripheral, app.controller, socket))
+}
+
+async fn practice_upgrade(
+    State(app): State<App>,
+    axum::extract::Path((source, revision, player)): axum::extract::Path<(
+        String,
+        Revision,
+        PlayerId,
+    )>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let Some(permit) = atemporal_server::ws::practice_permit() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let Some((id, lobby, phase)) = app.peripheral.practice_source.lock().unwrap().clone() else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    if !atemporal_server::ws::practice_available(phase, &lobby) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    if id != source {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    if app.peripheral.prepare(revision).await.is_err() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let guard = app.peripheral.store.lock().unwrap();
+    let Some(s) = guard.as_ref().filter(|s| s.match_id == source) else {
+        return StatusCode::CONFLICT.into_response();
+    };
+    let Ok(base) = s.data(revision) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let branch = atemporal_server::controller::Controller::practice(
+        s.config.clone(),
+        s.content.clone(),
+        s.fingerprint.clone(),
+        lobby,
+        base.clone(),
+        player,
+        app.peripheral.sim.clone(),
+    );
+    atemporal_server::ws::serve_practice(ws, permit, branch)
 }
 
 async fn status(State(app): State<App>) -> Response {

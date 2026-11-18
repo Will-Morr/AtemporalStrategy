@@ -20,7 +20,7 @@ test('coordinator identities, passwords, parallel games, filters and same-addres
   const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url+'lobbies/');await expect(page.locator('#identity')).toBeVisible();await review.capture('coordinator-first-visit-username',page);await identify(page,'Avery <sandbox> with a long unvalidated name');
   await expect(page.locator('#profile')).toContainText('Avery <sandbox>');
-  await page.getByRole('button',{name:'Create game',exact:true}).click();await page.locator('#bot-1').selectOption('standard');await expect(page.locator('#round-budget-label')).toBeHidden();await review.capture('coordinator-simple-create',page);await page.setViewportSize({width:1366,height:768});await page.locator('#submit-create').scrollIntoViewIfNeeded();await review.capture('coordinator-create-1366',page);await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.setViewportSize({width:1920,height:1080});
+  await page.getByRole('button',{name:'Create game',exact:true}).click();await expect(page.locator('#bot-1 option')).toHaveText(['Human','Tactical 2.0','Standard 1.0']);await page.locator('#bot-1').selectOption('standard');await expect(page.locator('#round-budget-label')).toBeHidden();await review.capture('coordinator-simple-create',page);await page.setViewportSize({width:1366,height:768});await page.locator('#submit-create').scrollIntoViewIfNeeded();await review.capture('coordinator-create-1366',page);await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.setViewportSize({width:1920,height:1080});
   const first=await create(page,'Sandbox one',{password:'casual'});await expect(page).toHaveTitle('Sandbox one — Scoreboard');await expect(page.getByLabel('Username',{exact:true})).toBeHidden();await claim(page);await expect(page.locator('#roster li').filter({hasText:'Slot 0:'})).toContainText('Avery <sandbox> with a long unvalidated name');await page.locator('#roster li').filter({hasText:'Slot 0:'}).getByRole('button',{name:'Release slot',exact:true}).click();await expect(page.locator('#roster li').filter({hasText:'Slot 0:'})).toContainText('open');await claim(page);await expect(page.locator('#roster')).toContainText('Bot · Standard');
   await page.getByRole('button',{name:'Map 3',exact:true}).click();await review.capture('coordinator-human-bot-map-lobby',page);
   await page.getByRole('button',{name:'Start match',exact:true}).click();await revision(page,0);
@@ -64,6 +64,13 @@ test('bot-only playtest archives at its budget and exposes read-only recent repl
   const parts=new URL(page.url()).pathname.split('/');const token=JSON.parse(await readFile(`${server.dir}/games/${parts[2]}/replays/${parts[4]}/lobby.json`,'utf8')).tokens[0];
   await page.evaluate(async token=>{const g=window.atemporal;g.net.send({kind:'hello',protocol_version:2,last_revision:null,slot_token:token});await g.net.request({kind:'get_exact_state',revision:g.current,tick:0},'exact_state');},token);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);
   await seek(page,Math.min(100,await page.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick)));await review.capture('coordinator-read-only-replay',page);await page.reload();await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);
+  const sourceRound=`${server.dir}/games/${parts[2]}/replays/${parts[4]}/rounds/3.json`;
+  const recorded=await readFile(sourceRound,'utf8');
+  await page.locator('#replay summary').click();await page.selectOption('#practice-player','0');await page.locator('#start-practice').click();
+  await revision(page,0);await page.locator('#commit').click();await revision(page,1);
+  expect(await readFile(sourceRound,'utf8')).toBe(recorded);
+  await page.locator('#exit-practice').click();await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);
+
 });
 
 test('four bot teams obey single-order limits and advancing hybrid history',async({page,review},testInfo)=>{

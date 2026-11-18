@@ -74,7 +74,7 @@ Display constructors’ 50% mining rate in their selection details. Survival ind
 
 Round results show stalemate, win, or draw plus the separate stop reason, survivor list, and per-player/team score deltas. Multiple opposing survivors may score together. Team entries show surviving members and their count; lead mode shows the margin over the strongest rival and required N. Never label an inactivity/horizon stalemate as a draw, or a partial FFA win as a sole-player victory. Replay inspection presents the same survivor and team-score records as live play.
 
-Lobby rule text states that scoreboard mode awards each resolved round, including passes and unchanged winning timelines. Show the configured target (default 5) or optional lead-N rule explicitly.
+Lobby rule text states that scoreboard mode awards each resolved round, including passes and unchanged winning timelines. Show the configured target (default 3) or optional lead-N rule explicitly.
 
 Team result text explains that survival points are awarded only if at least one player was eliminated. Stalemates always show zero score deltas. Draws show the configured no-score/all-players-score policy and actual credited players, independently of the empty survivor list.
 
@@ -124,7 +124,7 @@ Related commands form left-aligned columns, with capability filtering and clicka
 
 Matter is emphasized at the inspected tick, with sampled values labeled during playback. Purple timeline ticks come from authoritative applied recipients. The outcome banner distinguishes final timeline WIN/LOSS/DRAW/STALEMATE from match completion and explains post-elimination simulation and retained replay. Full-health bars are hidden; incomplete sites keep a completion bar. Unit silhouettes use layered geometric roles and last-move facing.
 
-Fog currently uses Euclidean vision radius from completed friendly units/buildings and shares vision with configured teammates. This is an implementation interpretation of the vision requirement; terrain remains dimly inspectable and spectators see all. Hidden enemies cannot be selected or drawn; combat effects require visible involved tiles. Timeline and statistical inspection remain available by design.
+Completed friendly units and buildings share vision with teammates. Combat effects require the involved tiles to be visible. Timeline and statistical summaries remain available during play. See [fog, selection and timeline reset](#fog-selection-and-timeline-reset) for ground visibility and building sightings.
 
 Players can uncommit while waiting for other players. The commit button becomes “Uncommit · edit my moves”; successful withdrawal restores the submitted draft, including local blueprint and queue references. The final commit closes the turn immediately. Each browser tab stores its own player token; a saved-player chooser supports explicit rejoin and switching without overwriting another tab’s identity.
 
@@ -178,3 +178,17 @@ Missing-order feedback checks the viewed tick's projected state, prioritizes sel
 Order warnings appear only when the current draft contains commands and the viewed tick equals its intervention tick. Empty drafts and browsing other replay ticks show no “Needs orders” warning.
 
 Mixed factory production does not produce capability-mismatch warnings for newborn orders; mining/constructing orders may intentionally apply to only part of the queue. The Switch / rejoin player control accepts pointer input and returns to saved-player selection.
+
+### Fog, selection and timeline reset
+
+Ground observers reveal reachable tiles inside their circular vision range, including up to two extra movement steps around a corner. Terrain walls and constructed wall tiles block propagation. Satellite coverage remains aerial. A gray building silhouette marks its last observed location on that revision. A later observation of the empty tile clears it. Hidden buildings cannot be selected or inspected. The browser restores sightings after a seek or reload from earlier replay samples. Sightings between samples persist only while the browser keeps the observation in memory. Fog limits the browser presentation. The replay transport still carries complete snapshots for local simulation and inspection.
+
+**All matching** expands the selection across the map by owner and type. When another player commits, the remaining player sees their name in an amber waiting banner. **Clear all future orders** stages one command. At commit it removes that player's earlier-round inputs strictly after the chosen tick. Commands before or at that tick continue to determine the current orders and queues. The opponent's inputs, same-round edits and previously published replays are preserved.
+
+Shift-clicking a missile target button or its destination queues five identical launches. Stock, active production, pending recipes and repeating items count toward supply. If more production is needed the launch edit also appends the missing recipes. The two changes share one undo and one command in single-order games.
+
+## Timeline review and practice
+
+Open **Previous timelines & plans** to choose a published revision. The tick inspector shows commands issued at the playhead and counts recorded movement, combat, destruction, displacement, missile and survival events. Order jumps seek the previous or next submitted command tick. Gold outlines mark order recipients and planned tiles. Click a command to focus its recipients or planned site. Spectators and finished-game viewers can inspect both sides’ published plans and production queues. Active players inspect their own orders and events within current vision.
+
+From a finished or manually stopped recording, or a planning game with a disconnected player, choose a timeline, tick and player, then **Play this timeline**. The practice connection starts from the selected ledger under its pinned simulation rules. Subsequent commits add only the practicing player’s orders. The other players retain the orders in that recording. Practice has its own score and opens editing from tick zero, including for a previously locked timeline. The original match remains available through **Exit practice**. Disconnecting, reloading or leaving discards the private session. The coordinator retains the existing expiry window for viewable games.

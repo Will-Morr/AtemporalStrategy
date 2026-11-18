@@ -17,9 +17,9 @@ export function factoryPlan(g: Game, v: EntityView) {
       if(c.kind==='bind_factory_group')group=c.group;
       if(c.kind==='edit_production') {
         const e=c.edit;
-        if(e.kind==='append'||e.kind==='replace_pending') {
+        if(e.kind==='append'||e.kind==='supply_launches'||e.kind==='replace_pending') {
           const items=e.items.map((type,item_index)=>({type,loop,ref:{kind:'draft' as const,local_id:d.local_id,item_index}}));
-          pending=e.kind==='append'?[...pending,...items]:items;
+          pending=e.kind==='replace_pending'?items:[...pending,...items];
         } else if(e.kind==='remove_pending')pending=pending.filter(i=>!e.item_ids.some(ref=>same(ref,i.ref)));
         else if(e.kind==='set_item_loop'){for(const item of pending)if(e.item_ids.some(ref=>same(ref,item.ref)))item.loop=e.enabled;if(active&&e.item_ids.some(ref=>ref.kind==='persistent'&&same(ref.id,active!.item_id)))active.loop_enabled=e.enabled;}
         else if(e.kind==='cancel_active')active=null;

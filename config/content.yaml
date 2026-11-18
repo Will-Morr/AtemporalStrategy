@@ -13,7 +13,7 @@
         "neighbors": "four",
         "cooldown": 6
       },
-      "vision": 5.0,
+      "vision": 8.0,
       "weapon": {
         "damage": 35.0,
         "range": 10.0,

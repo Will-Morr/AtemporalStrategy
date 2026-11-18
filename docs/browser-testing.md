@@ -136,7 +136,7 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 
 ## Production, repair and scoreboard scenarios
 
-`production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real five-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.
+`production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real three-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.
 
 ## Missile silo scenarios
 
@@ -195,3 +195,17 @@ The focused `simple win game type can be selected and started` coordinator scena
 The info-page checks also verify the exact chatbot warning at the top, 14 shared unit-role and stats icons, expanded static SVG markup, and no horizontal page overflow at 390px. The quick-play scenario selects all starting units to exercise the same icons in game controls. See the [shared-icon verification record](integration-verification.md#info-page-warning-and-shared-icons--2026-11-10).
 
 The Game Docs review also checks grouped role/stat cards, links from named units to their generated stats, the current warning, five main actions and positional construction explanation. Stats are checked against the real server’s content (including a changed miner health value). Inspect the top, construction, group-control and stat-card viewport captures as well as the full-page screenshots.
+
+### Fog memory, launch supply and timeline planning
+
+On November 18, 2026, five isolated real-server Chromium scenarios passed across the initial run and a focused retest. The two scenarios in `planning-release.spec.mjs` cover an expired satellite’s remembered building after a seek and refresh, matching-unit selection, the Game info link, atomic supply for a batch of five launches in single-order mode, the opponent-waiting banner, and staging, undoing and committing a timeline reset. Both existing missile scenarios passed, as did the three-win scoreboard scenario.
+
+The initial run exposed a hidden Game info menu. The focused retest followed the repaired link through its popup and inspected the exact patch entry. Full rendered frames were inspected for grayed buildings, opponent waiting, the staged reset and the patch note. Artifacts are under `artifacts/ui/orders-release-initial` and `artifacts/ui/orders-release-verified`. The initial 1366px silo screenshot also caught a cleared canvas during resize. The resize handler now repaints immediately; that change passed TypeScript checks after this browser run.
+
+## Timeline inspection and practice replays
+
+The desktop Chromium release pass used seed 42 at 1920 × 1080. The two `timeline-review.spec.mjs` scenarios passed on the authoritative server and on the native inputs-only peripheral. In the first scenario a constructor's recorded attack led to elimination at tick 123. The inspector showed its command at tick 0, focused and outlined the recipient, and reported attack, impact, destruction and survival events at tick 123. The player opened the earlier timeline, returned to the lost timeline, then submitted an idle order in practice. The alternate timeline ended in stalemate, while exiting practice returned to the recorded winner. The second scenario inspected another player's completed factory and its active and pending grunts at tick 153, started practice while a player was disconnected, then submitted two practice ticks from the manually archived game.
+
+The coordinator recent-replay scenario also passed. It opened an archived bot match through the directory relay, submitted an alternate tick and compared the original round file byte-for-byte before reopening it. The first run caught a scoring error when branching from later rounds. The corrected scorer starts the private score at one while retaining unique historical command IDs.
+
+Inspected full frames and traces are under `artifacts/ui/timeline-review-2`, `artifacts/ui/timeline-review-peripheral`, and `artifacts/ui/timeline-review-event`. Frames included the focused gold recipient outline, the tick-123 event counts, the enemy factory queue and the alternate outcome. A separate compatibility check reproduced the exact public rules 7 round-9 terminal state at tick 1,104 from its initial snapshot, pinned content and submitted turns. Its canonical SHA-256 was `b52757065aebfeb378aae262e35c15adf5fed2c85319434280acc4a495233871`.

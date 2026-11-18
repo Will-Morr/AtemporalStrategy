@@ -2,6 +2,7 @@
 //! state and emit normal drafts; the controller validates them exactly like human input.
 use crate::{controller::Controller, coordinator::atomic_json, ws};
 use atemporal_sim::*;
+mod tactical;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};
 
@@ -10,18 +11,28 @@ use std::{path::PathBuf, time::Duration};
 pub enum Style {
     #[serde(alias = "rusher", alias = "builder", alias = "raider")]
     Standard,
+    Tactical,
 }
-/// One policy for quick play and selectable practice opponents.
-pub const DEFAULT_STYLE: Style = Style::Standard;
+/// The coordinator advertises this policy to quick play.
+pub const DEFAULT_STYLE: Style = Style::Tactical;
 impl Style {
     fn name(self) -> &'static str {
-        "Standard"
+        match self {
+            Self::Standard => "Standard 1.0",
+            Self::Tactical => "Tactical 2.0",
+        }
     }
     fn interval(self) -> Tick {
-        150
+        match self {
+            Self::Standard => 150,
+            Self::Tactical => 100,
+        }
     }
     fn unit(self) -> &'static str {
-        "grunt"
+        match self {
+            Self::Standard => "grunt",
+            Self::Tactical => "tank",
+        }
     }
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -124,21 +135,57 @@ pub fn visible_state(
     config: &MatchConfig,
     content: &Content,
 ) -> WorldState {
+    let walls: std::collections::BTreeSet<_> = state
+        .entities
+        .iter()
+        .filter(|e| e.type_key == "wall")
+        .map(|e| e.tile)
+        .collect();
+    let mut visible = std::collections::BTreeSet::new();
+    for e in &state.entities {
+        if e.lifecycle == Lifecycle::Complete
+            && allied(config, player, e.owner)
+            && let Some(def) = content.types.iter().find(|d| d.key == e.type_key)
+        {
+            vision::flood_vision(
+                &state.terrain,
+                e.tile,
+                def.vision,
+                |tile| walls.contains(&tile),
+                |tile| {
+                    visible.insert(tile);
+                },
+            );
+        }
+    }
     let sees = |tile: Tile| {
-        state.entities.iter().any(|e| {
-            e.lifecycle == Lifecycle::Complete
-                && allied(config, player, e.owner)
-                && content
+        visible.contains(&tile)
+            || state.missiles.iter().any(|flight| {
+                if !allied(config, player, flight.owner)
+                    || flight.launch_tick >= state.tick
+                    || flight.impact_tick < state.tick
+                {
+                    return false;
+                }
+                let Some(m) = content
                     .types
                     .iter()
-                    .find(|t| t.key == e.type_key)
-                    .is_some_and(|d| f64::from(distance(e.tile, tile)) <= d.vision * d.vision)
-        }) || state.recon.iter().any(|z| {
-            z.starts_at <= state.tick
-                && z.expires_at > state.tick
-                && allied(config, player, z.owner)
-                && f64::from(distance(z.center, tile)) <= z.radius * z.radius
-        })
+                    .find(|d| d.key == flight.type_key)
+                    .and_then(|d| d.missile.as_ref())
+                    .filter(|m| m.effect == MissileEffect::Satellite)
+                else {
+                    return false;
+                };
+                let (x, y) = missiles::flight_position(flight, f64::from(state.tick));
+                (x - f64::from(tile.x)).powi(2) + (y - f64::from(tile.y)).powi(2)
+                    <= m.radius * m.radius
+            })
+            || state.recon.iter().any(|z| {
+                z.starts_at <= state.tick
+                    && z.expires_at > state.tick
+                    && allied(config, player, z.owner)
+                    && f64::from(distance(z.center, tile)) <= z.radius * z.radius
+            })
     };
     let mut view = state.clone();
     view.entities
@@ -190,6 +237,30 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
             return rescue.min(c.available_through());
         }
     }
+    if style == Style::Tactical
+        && data
+            .outcome
+            .as_ref()
+            .is_some_and(|o| o.kind == OutcomeKind::Stalemate)
+        && let Some((t, _)) = data
+            .checkpoints
+            .range(wanted..=wanted.saturating_add(500))
+            .find(|(_, s)| {
+                s.entities
+                    .iter()
+                    .filter(|e| {
+                        e.owner == player
+                            && c.content.types.iter().any(|d| {
+                                d.key == e.type_key && d.weapon.is_some() && d.movement.is_some()
+                            })
+                    })
+                    .take(20)
+                    .count()
+                    >= 20
+            })
+    {
+        return (*t).min(c.available_through());
+    }
     // Prefer the first published checkpoint with a mobile army to redirect near the desired tick.
     data.checkpoints
         .range(wanted..c.config.max_tick)
@@ -206,6 +277,53 @@ pub fn intervention(c: &Controller, player: PlayerId, style: Style) -> Tick {
         .filter(|(tick, _)| **tick <= wanted.saturating_add(style.interval()))
         .map_or(wanted, |(t, _)| *t)
 }
+fn append(
+    commands: &mut Vec<DraftCommand>,
+    command: Command<DraftItemRef<BlueprintId>, DraftItemRef<QueueItemId>>,
+) -> String {
+    let local_id = format!("bot-{}", commands.len());
+    let future_orders = if matches!(command, Command::AssignOrder { .. }) {
+        FutureOrderPolicy::DropAll
+    } else {
+        FutureOrderPolicy::Keep
+    };
+    commands.push(DraftCommand {
+        local_id: local_id.clone(),
+        command,
+        future_orders,
+    });
+    local_id
+}
+
+/// Scoreboard wins keep counting when both players pass. Avoid disturbing a winning
+/// timeline until an opponent actually publishes a change that takes the win away.
+pub fn published_plan(
+    c: &Controller,
+    state: &WorldState,
+    player: PlayerId,
+    style: Style,
+) -> TurnDraft {
+    if style == Style::Tactical
+        && c.revisions[&c.current].outcome.as_ref().is_some_and(|o| {
+            o.kind == OutcomeKind::Win
+                && o.survivors.contains(&player)
+                && o.survivors.iter().all(|p| allied(&c.config, player, *p))
+        })
+    {
+        return TurnDraft {
+            based_on_revision: c.current,
+            tick: state.tick,
+            commands: vec![],
+        };
+    }
+    let view = visible_state(state, player, &c.config, &c.content);
+    let mut draft = plan(&view, player, style, &c.config, &c.content, c.current);
+    if style == Style::Tactical && c.config.control_limit != ControlLimit::SingleOrder {
+        tactical::target_observed_bases(c, &view, player, &mut draft);
+        tactical::search_stalemate(c, &view, player, &mut draft);
+    }
+    draft
+}
 pub fn plan(
     state: &WorldState,
     player: PlayerId,
@@ -215,20 +333,7 @@ pub fn plan(
     revision: Revision,
 ) -> TurnDraft {
     let mut commands = vec![];
-    let mut push = |command| {
-        let local_id = format!("bot-{}", commands.len());
-        let future_orders = if matches!(command, Command::AssignOrder { .. }) {
-            FutureOrderPolicy::DropAll
-        } else {
-            FutureOrderPolicy::Keep
-        };
-        commands.push(DraftCommand {
-            local_id: local_id.clone(),
-            command,
-            future_orders,
-        });
-        local_id
-    };
+    let mut push = |command| append(&mut commands, command);
     let own: Vec<_> = state
         .entities
         .iter()
@@ -294,18 +399,24 @@ pub fn plan(
                 .min_by_key(|t| distance(*t, desired))
                 .unwrap_or(home)
         });
-    let recipe = content
+    let recipes = content
         .types
         .iter()
-        .find(|t| t.key == "factory")
+        .find(|d| d.key == "factory")
         .and_then(|d| d.production.as_ref())
-        .and_then(|p| {
-            p.recipes
-                .iter()
-                .find(|k| k.as_str() == style.unit())
-                .or_else(|| p.recipes.first())
-        })
+        .map_or(&[][..], |p| p.recipes.as_slice());
+    let recipe = recipes
+        .iter()
+        .find(|key| key.as_str() == style.unit())
+        .or_else(|| recipes.first())
         .cloned();
+    let can_train = |key: &str| {
+        if style == Style::Standard {
+            content.types.iter().any(|d| d.key == key)
+        } else {
+            recipes.iter().any(|r| r == key)
+        }
+    };
     let count = |key: &str| {
         state
             .entities
@@ -343,13 +454,24 @@ pub fn plan(
         .filter(|e| def(e).is_some_and(|t| t.construction.is_some()))
         .collect();
     if let Some(structure) = structure.filter(|_| !constructors.is_empty() && recipe.is_some()) {
+        let west = style == Style::Tactical && target.x < home.x;
+        let direction = if west {
+            CardinalDirection::W
+        } else {
+            CardinalDirection::E
+        };
         let site = (0..state.terrain.height)
-            .flat_map(|y| (0..state.terrain.width.saturating_sub(1)).map(move |x| Tile { x, y }))
+            .flat_map(|y| (0..state.terrain.width).map(move |x| Tile { x, y }))
             .filter(|t| {
                 let i = usize::from(t.y) * usize::from(state.terrain.width) + usize::from(t.x);
+                let Some(out) = tactical::adjacent(*t, direction, &state.terrain) else {
+                    return false;
+                };
+                let output_index =
+                    usize::from(out.y) * usize::from(state.terrain.width) + usize::from(out.x);
                 distance(*t, home) <= 64
                     && state.terrain.cells[i] == TerrainCell::Floor
-                    && state.terrain.cells[i + 1] == TerrainCell::Floor
+                    && state.terrain.cells[output_index] == TerrainCell::Floor
                     && state.ore[i] == 0.0
                     && !state.entities.iter().any(|e| e.tile == *t)
                     && !state.blueprints.iter().any(|b| b.tile == *t)
@@ -357,14 +479,8 @@ pub fn plan(
                         .entities
                         .iter()
                         .any(|e| e.production.as_ref().is_some_and(|p| p.output_tile == *t))
-                    && !state
-                        .entities
-                        .iter()
-                        .any(|e| e.tile == (Tile { x: t.x + 1, y: t.y }))
-                    && !state
-                        .blueprints
-                        .iter()
-                        .any(|b| b.tile == (Tile { x: t.x + 1, y: t.y }))
+                    && !state.entities.iter().any(|e| e.tile == out)
+                    && !state.blueprints.iter().any(|b| b.tile == out)
             })
             .min_by_key(|t| (distance(*t, home), t.y, t.x));
         if let Some(tile) = site {
@@ -372,16 +488,32 @@ pub fn plan(
                 type_key: structure.into(),
                 tiles: vec![tile],
                 priority: Priority::High,
-                output_directions: (structure == "factory").then(|| vec![CardinalDirection::E]),
+                output_directions: (structure == "factory").then(|| vec![direction]),
             });
             // The following reference is resolved by the ordinary draft machinery.
             if structure == "factory" {
                 let mut queue = vec![];
-                if factory_count == 0 && content.types.iter().any(|t| t.key == "miner") {
-                    queue.extend(["miner".into(), "miner".into()]);
+                if factory_count == 0 && can_train("miner") {
+                    queue.extend(std::iter::repeat_n(
+                        "miner".into(),
+                        if style == Style::Tactical { 6 } else { 2 },
+                    ));
                 }
-                queue.push(recipe.clone().unwrap());
-                let flags = (0..queue.len()).map(|i| i + 1 == queue.len()).collect();
+                let flags = if style == Style::Tactical && factory_count == 0 {
+                    let loop_start = queue.len();
+                    for key in ["miner", "miner", "constructor", "grunt"] {
+                        if can_train(key) {
+                            queue.push(key.into());
+                        }
+                    }
+                    if queue.len() == loop_start {
+                        queue.push(recipe.clone().unwrap());
+                    }
+                    (0..queue.len()).map(|i| i >= loop_start).collect()
+                } else {
+                    queue.push(recipe.clone().unwrap());
+                    (0..queue.len()).map(|i| i + 1 == queue.len()).collect()
+                };
                 push(Command::ConfigureBlueprints {
                     blueprint_ids: vec![DraftItemRef::Draft {
                         local_id: placement,
@@ -428,7 +560,7 @@ pub fn plan(
     };
     let mut utility = vec![];
     for (key, desired) in [("constructor", 1), ("miner", 3)] {
-        if content.types.iter().any(|t| t.key == key) {
+        if can_train(key) {
             for _ in count(key) + queued(key)..desired {
                 utility.push(key.to_string());
             }
@@ -443,7 +575,16 @@ pub fn plan(
                 || p.pending_items
                     .iter()
                     .any(|i| i.type_key == "miner" || i.type_key == "constructor");
-            let newborn_order = if feeding_economy {
+            let newborn_order = if style == Style::Tactical
+                && matches!(p.stored_order, Order::Construct { .. })
+                && p.active_item
+                    .iter()
+                    .map(|i| &i.type_key)
+                    .chain(p.pending_items.iter().map(|i| &i.type_key))
+                    .any(|key| key == "constructor")
+            {
+                p.stored_order.clone()
+            } else if feeding_economy {
                 Order::Mine { area: area.clone() }
             } else {
                 Order::AttackMove {
@@ -510,6 +651,9 @@ pub fn plan(
                 destination: target,
             },
         });
+    }
+    if style == Style::Tactical {
+        tactical::develop(state, player, config, content, home, target, &mut commands);
     }
     if config.control_limit == ControlLimit::SingleOrder {
         commands.truncate(1);
@@ -616,8 +760,7 @@ async fn step(app: &ws::App, bots: &BotConfig) -> Result<()> {
             if c.current != revision || !c.bot_pending(player) {
                 continue;
             }
-            let view = visible_state(&state, player, &c.config, &c.content);
-            let draft = plan(&view, player, *style, &c.config, &c.content, revision);
+            let draft = published_plan(&c, &state, player, *style);
             let mut request = CommitRequest {
                 request_id: format!("bot-{player}-{}", c.round),
                 slot_token: c.bot_token(player).ok_or("bot slot lost")?,
@@ -701,6 +844,35 @@ mod tests {
         }
     }
     #[test]
+    fn legacy_policy_and_tactical_opening_remain_selectable() {
+        let (c, state) = setup();
+        assert_eq!(
+            serde_json::from_str::<Style>("\"standard\"").unwrap(),
+            Style::Standard
+        );
+        assert_eq!(
+            serde_json::to_string(&DEFAULT_STYLE).unwrap(),
+            "\"tactical\""
+        );
+        let view = visible_state(&state, 1, &c.config, &c.content);
+        let legacy = plan(&view, 1, Style::Standard, &c.config, &c.content, 0);
+        let tactical = plan(&view, 1, Style::Tactical, &c.config, &c.content, 0);
+        let structure_count = |draft: &TurnDraft, key: &str| {
+            draft
+                .commands
+                .iter()
+                .filter(
+                    |d| matches!(&d.command,Command::PlaceBlueprints{type_key,..} if type_key==key),
+                )
+                .count()
+        };
+        assert_eq!(structure_count(&legacy, "factory"), 1);
+        assert_eq!(structure_count(&legacy, "silo"), 0);
+        assert!(structure_count(&tactical, "factory") >= 3);
+        assert!(structure_count(&tactical, "silo") >= 1);
+        assert!(tactical.commands.iter().any(|d|matches!(&d.command, Command::ConfigureBlueprints{settings,..} if settings.queue==["artillery"] && settings.queue_loop_flags==[true])));
+    }
+    #[test]
     fn hidden_enemy_state_cannot_change_a_plan() {
         let (c, state) = setup();
         let before = visible_state(&state, 1, &c.config, &c.content);
@@ -761,7 +933,7 @@ mod tests {
             .claim_slot(0, "Human".into(), "#4fc3f7".into(), None)
             .unwrap();
         let bots = BotConfig {
-            slots: vec![None, Some(DEFAULT_STYLE)],
+            slots: vec![None, Some(Style::Standard)],
             playtest_rounds: 20,
         };
         bots.install(&mut c).unwrap();
@@ -770,12 +942,12 @@ mod tests {
         run_round(&mut c, rx);
         let mut later_actions = 0;
         for round in 1..=8 {
-            let tick = intervention(&c, 1, DEFAULT_STYLE);
+            let tick = intervention(&c, 1, Style::Standard);
             let state =
                 atemporal_sim::reconstruct(&c.exact_request(c.current, tick).unwrap(), tick)
                     .unwrap();
             let view = visible_state(&state, 1, &c.config, &c.content);
-            let bot_draft = plan(&view, 1, DEFAULT_STYLE, &c.config, &c.content, c.current);
+            let bot_draft = plan(&view, 1, Style::Standard, &c.config, &c.content, c.current);
             if round > 2 && !bot_draft.commands.is_empty() {
                 later_actions += 1;
             }
@@ -872,7 +1044,7 @@ mod tests {
         enemy.lifecycle = Lifecycle::Complete;
         threatened.entities.push(enemy);
         let view = visible_state(&threatened, 1, &c.config, &c.content);
-        let defense = plan(&view, 1, DEFAULT_STYLE, &c.config, &c.content, c.current);
+        let defense = plan(&view, 1, Style::Standard, &c.config, &c.content, c.current);
         assert!(defense.commands.iter().any(
             |d| matches!(&d.command,Command::PlaceBlueprints{type_key,..} if type_key=="turret")
         ));
@@ -884,7 +1056,7 @@ mod tests {
             .entities
             .retain(|e| e.owner != 1 || (e.type_key != "miner" && e.type_key != "constructor"));
         let view = visible_state(&depleted, 1, &c.config, &c.content);
-        let recovery = plan(&view, 1, DEFAULT_STYLE, &c.config, &c.content, c.current);
+        let recovery = plan(&view, 1, Style::Standard, &c.config, &c.content, c.current);
         assert!(recovery.commands.iter().any(|d| matches!(&d.command,Command::EditProduction{edit:ProductionEdit::Append{items},..} if items.contains(&"constructor".to_string()) && items.contains(&"miner".to_string()))));
         let commands = draft::resolve_local_references(&recovery, c.round, 1).unwrap();
         c.validate_against_state(1, &commands, &depleted).unwrap();
@@ -898,7 +1070,7 @@ mod tests {
             status: SurvivalStatus::Eliminated,
             reasons: vec![Reason::NoBuildAbility],
         });
-        assert!(intervention(&c, 1, DEFAULT_STYLE) <= 200);
+        assert!(intervention(&c, 1, Style::Standard) <= 200);
     }
     #[test]
     fn bot_only_budget_and_human_host_are_explicit() {
