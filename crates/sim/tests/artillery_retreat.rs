@@ -2,6 +2,16 @@ mod common;
 use atemporal_sim::*;
 use common::*;
 
+fn limit_gun_vision(world: &mut World) {
+    world
+        .content
+        .types
+        .iter_mut()
+        .find(|d| d.key == "artillery")
+        .unwrap()
+        .vision = 4.0;
+}
+
 fn next_sim(world: &World) -> Sim {
     let mut sim = Sim::new(&world.request()).unwrap();
     sim.set_artillery_retreat_diagnostics(true);
@@ -11,8 +21,13 @@ fn next_sim(world: &World) -> Sim {
 
 #[test]
 fn retreat_uses_a_strict_euclidean_threshold_and_shared_recon() {
-    for (enemy, expected) in [(tile(14, 3), false), (tile(13, 7), true)] {
+    for (enemy, expected) in [
+        (tile(13, 3), false),
+        (tile(12, 6), true),
+        (tile(13, 4), false),
+    ] {
         let mut w = World::new(&["...................."; 11]);
+        limit_gun_vision(&mut w);
         let gun = w.spawn(0, "artillery", 5, 3);
         w.entity_mut(&gun).next_action_tick = 2;
         w.spawn(1, "miner", enemy.x, enemy.y);
@@ -28,6 +43,12 @@ fn retreat_uses_a_strict_euclidean_threshold_and_shared_recon() {
         let sim = next_sim(&w);
         let plan = sim.last_artillery_retreats().get(&gun);
         assert_eq!(plan.is_some(), expected);
+        let mut previous = w.request();
+        previous.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 10".into();
+        let mut old = Sim::new(&previous).unwrap();
+        old.set_artillery_retreat_diagnostics(true);
+        old.step(&mut |_| {}).unwrap();
+        assert!(old.last_artillery_retreats().contains_key(&gun));
         if let Some(plan) = plan {
             assert_eq!(plan.threats, [enemy]);
             assert_eq!(Some(entity(&sim.state, &gun).tile), plan.next);
@@ -39,10 +60,11 @@ fn retreat_uses_a_strict_euclidean_threshold_and_shared_recon() {
 #[test]
 fn allied_spotters_share_sight_and_do_not_contribute_threat() {
     let mut w = World::new(&["...................."; 11]);
+    limit_gun_vision(&mut w);
     let gun = w.spawn(0, "artillery", 5, 3);
     w.entity_mut(&gun).next_action_tick = 10;
     w.spawn(1, "scout", 12, 6);
-    let enemy = w.spawn(1, "miner", 13, 6);
+    let enemy = w.spawn(1, "miner", 12, 5);
     let enemy_state = w.entity_mut(&enemy);
     enemy_state.id = identity::genesis(2, 0).unwrap();
     enemy_state.owner = 2;
@@ -61,7 +83,7 @@ fn allied_spotters_share_sight_and_do_not_contribute_threat() {
             .collect(),
     };
     let sim = next_sim(&w);
-    assert_eq!(sim.last_artillery_retreats()[&gun].threats, [tile(13, 6)]);
+    assert_eq!(sim.last_artillery_retreats()[&gun].threats, [tile(12, 5)]);
     assert_ne!(entity(&sim.state, &gun).tile, tile(5, 3));
 }
 

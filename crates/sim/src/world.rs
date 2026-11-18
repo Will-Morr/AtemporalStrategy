@@ -23,6 +23,7 @@ pub struct Sim {
     pub content: Content,
     pub state: WorldState,
     pub(crate) legacy_rules: bool,
+    pub(crate) artillery_retreat_margin: f64,
     pub(crate) artillery_retreat_enabled: bool,
     pub(crate) retreat: crate::artillery::RetreatState,
     pub(crate) events: Vec<AcceptedTurn>,
@@ -119,6 +120,11 @@ impl Sim {
         }
         let mut sim = Self {
             legacy_rules: request.fingerprint.sim_build.ends_with(" rules 7"),
+            artillery_retreat_margin: if request.fingerprint.sim_build.ends_with(" rules 10") {
+                1.0
+            } else {
+                2.0
+            },
             artillery_retreat_enabled: ![" rules 7", " rules 9"]
                 .iter()
                 .any(|suffix| request.fingerprint.sim_build.ends_with(suffix)),

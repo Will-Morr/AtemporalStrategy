@@ -100,7 +100,7 @@ taskset -c 0 nice -n 15 "$lab" factory --arena snake --income 6 --ticks 1800 --a
 
 ## Artillery retreat review
 
-In rules 10, artillery reacts to spotted enemy units strictly inside its gun range minus one tile. For the default gun, an enemy at exactly nine tiles does not trigger retreat. A ready gun fires first. Between shots, it can retreat on its normal movement cooldown and keeps its underlying order.
+In rules 11, artillery reacts to spotted enemy units strictly inside its gun range minus two tiles. For the default gun, an enemy at exactly eight tiles does not trigger retreat. A ready gun fires first. Between shots, it can retreat on its normal movement cooldown and keeps its underlying order.
 
 The planner scores candidate tiles using the sum of distance-based pressure from spotted enemy units and a penalty for tight exits and short dead ends. It searches up to six orthogonal steps for a better endpoint and gives shorter routes preference. That allows a sideways first step toward open ground. Allies, satellites and recon can supply the sighting that triggers retreat.
 
@@ -120,3 +120,5 @@ The [saved rules-10 review frames](balance-data/artillery-retreat-rules10.json.g
 A paired smoke test ran artillery against grunts, grinders and tanks, in both seats on open and snake maps, with a 600-matter army budget or 3-matter factory income and a 900-tick cap. Open factory artillery flipped from two losses against tanks to two wins. All six snake factory games hit the cap with retreat enabled, up from two. With a longer horizon artillery destroyed all six opposing factories, winning against grinders at ticks 910 and 986, tanks at 1,831 and 1,919, and grunts at 5,752 and 5,776 (artillery seats 0 and 1 respectively). Both grunt factories still had full health at tick 5,400, while each side fielding artillery had at least 200 guns facing at most four grunts. Base health alone missed the growing attrition advantage. See the [checkpoint results](balance-data/artillery-corridor-progress-rules10.csv).
 
 The change also costs simulation time. In three single-core runs of the 2,000-entity, 150-tick mixed battle benchmark, median wall time rose from 387 ms to 542 ms.
+
+Rules 11 reduced the artillery retreat threshold from nine to eight tiles. In the same six snake factory duels (three matter per tick, both seats per opponent), count ticks on which at least two artillery fired an attack. Over the first 750 ticks of every game the total rose from 358 to 392. The grinder pair rose from 83 to 99, the grunt pair from 208 to 226 and the tank pair stayed at 67. All six opposing factories fell under both rules. Tank games finished 556 and 531 ticks sooner across the two seats; one grunt game ran 142 ticks longer. The [per-seat firing counts and win ticks](balance-data/artillery-retreat-range.csv) cover one arena and income setting.

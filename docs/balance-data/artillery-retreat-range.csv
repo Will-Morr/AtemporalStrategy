@@ -1,0 +1,13 @@
+rules,opponent,artillery_seat,ticks_measured,artillery_shots,ticks_multiple_guns_fired,max_guns_firing_in_tick,ticks_any_gun_fired,artillery_win_tick
+10,grinder,0,750,190,44,7,109,910
+10,grinder,1,750,187,39,5,117,986
+10,tank,0,750,157,33,5,94,1831
+10,tank,1,750,150,34,6,89,1919
+10,grunt,0,750,542,108,9,191,5752
+10,grunt,1,750,495,100,12,190,5776
+11,grinder,0,750,196,49,6,116,848
+11,grinder,1,750,184,50,4,109,798
+11,tank,0,750,158,35,5,99,1275
+11,tank,1,750,154,32,6,85,1388
+11,grunt,0,750,649,118,9,162,5722
+11,grunt,1,750,503,108,10,185,5918

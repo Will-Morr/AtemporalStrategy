@@ -82,7 +82,7 @@ These scenarios run in desktop and narrow Chromium. The mismatch case deliberate
 
 Hybrid launch: `./quickstart.sh --config config/hybrid.yaml` uses the default first-to-three scoreboard and locks 100 additional ticks per round. Hybrid preserves scoreboard eligibility rather than applying timed-mode permanent elimination; reaching the history cap without a winner ends as unfinished. While a round is still waiting, Uncommit durably removes that player’s partial input and restores their draft; published round inputs remain immutable.
 
-The integrated development server writes rules 10 archives. Rules 9 recordings keep their original artillery behavior. Earlier public and development builds both labeled their archives rules 8 while using different simulation behavior. Replay those archives with the build that recorded them. The server retains compatibility with rules 7.
+The integrated development server writes rules 11 archives. Rules 10 recordings retain their one-tile artillery retreat margin. Rules 9 recordings keep their original artillery behavior. Earlier public and development builds both labeled their archives rules 8 while using different simulation behavior. Replay those archives with the build that recorded them. The server retains compatibility with rules 7.
 
 ## Delivery branches
 

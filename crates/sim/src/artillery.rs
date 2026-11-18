@@ -85,12 +85,12 @@ impl Sim {
         let Some(w) = &def.weapon else {
             return false;
         };
-        let r = (w.range - 1.0).ceil() as i32;
+        let threshold = w.range - self.artillery_retreat_margin;
+        let r = threshold.ceil() as i32;
         if r <= 0 {
             return false;
         }
         if self.hostile_prefix.is_empty() {
-            let threshold = w.range - 1.0;
             return self.state.entities.iter().enumerate().any(|(j, enemy)| {
                 self.hostile(e.owner, enemy.owner)
                     && enemy.lifecycle == Lifecycle::Complete
@@ -117,7 +117,7 @@ impl Sim {
     ) -> Option<ArtilleryRetreat> {
         let e = &self.state.entities[i];
         let from = e.tile;
-        let threshold = self.def(i).weapon.as_ref()?.range - 1.0;
+        let threshold = self.def(i).weapon.as_ref()?.range - self.artillery_retreat_margin;
         if threshold <= 0.0 {
             return None;
         }
