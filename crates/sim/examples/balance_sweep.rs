@@ -5,7 +5,7 @@ mod common;
 use atemporal_sim::*;
 use common::{World, attack_move, tile};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -16,9 +16,11 @@ const BASE_X: u16 = 2;
 const BASE_Y: u16 = HEIGHT / 2;
 
 const USAGE: &str = "balance_sweep <army|factory> [--budget MATTER] [--income MATTER_PER_TICK]
-              [--ticks N] [--arena open|choke] [--content PATH] [--armed-only]
+              [--ticks N] [--arena open|choke|snake|straight] [--content PATH]
+              [--armed-only] [--include-miners]
               [--a UNIT[+UNIT...] --b UNIT[+UNIT...]] [--output PATH]
 Without --a and --b, run every pure and two-unit roster against each other, including self-play.
+Default pairings omit miners. Use --include-miners or name miners in an explicit matchup.
 Without --output, write JSONL to stdout. A matching output file resumes completed trials.";
 
 type Roster = Vec<TypeKey>;
@@ -35,6 +37,149 @@ enum Mode {
 enum Arena {
     Open,
     Choke,
+    Snake,
+    Straight,
+}
+
+const LANE_WIDTH: usize = 3;
+const LANE_HALF: usize = LANE_WIDTH / 2;
+const ROOM_X_END: u16 = 5;
+const ROOM_Y_START: u16 = 4;
+const ROOM_Y_END: u16 = 10;
+
+impl Arena {
+    fn has_staging_rooms(self) -> bool {
+        matches!(self, Self::Snake | Self::Straight)
+    }
+
+    fn seat_tile(self, width: u16, x: u16, y: u16, seat: PlayerId) -> Tile {
+        if seat == 0 {
+            tile(x, y)
+        } else {
+            let y = if self.has_staging_rooms() {
+                HEIGHT - 1 - y
+            } else {
+                y
+            };
+            tile(width - 1 - x, y)
+        }
+    }
+
+    fn rows(self) -> Vec<String> {
+        let width = if matches!(self, Self::Straight) {
+            let distance = cardinal_distance(&Self::Snake.rows()).expect("connected snake arena");
+            distance + 2 * usize::from(BASE_X) + 1
+        } else {
+            usize::from(WIDTH)
+        };
+        let height = usize::from(HEIGHT);
+        if !self.has_staging_rooms() {
+            let mut rows = vec![".".repeat(width); height];
+            if matches!(self, Self::Choke) {
+                for (y, row) in rows.iter_mut().enumerate() {
+                    if !(6..=8).contains(&y) {
+                        row.replace_range(14..17, "###");
+                    }
+                }
+            }
+            return rows;
+        }
+
+        let mut rows = vec![vec![b'#'; width]; height];
+        let room_x = usize::from(ROOM_X_END);
+        let mid_y = usize::from(BASE_Y);
+        let mut carve = |x0, x1, y0, y1| {
+            for row in &mut rows[y0..=y1] {
+                row[x0..=x1].fill(b'.');
+            }
+        };
+        let room_top = usize::from(ROOM_Y_START);
+        let room_bottom = usize::from(ROOM_Y_END);
+        carve(0, room_x, room_top, room_bottom);
+        carve(width - 1 - room_x, width - 1, room_top, room_bottom);
+
+        match self {
+            Self::Snake => {
+                // Three full traverses through the center, with an alternating hairpin
+                // at either end of the middle traverse. Walls separate the staging bays
+                // from the middle.
+                let top_y = 2;
+                let bottom_y = height - 1 - top_y;
+                let left_turn = 8;
+                let right_turn = width - 1 - left_turn;
+                let entrance = room_x - LANE_WIDTH + 1;
+                carve(
+                    entrance,
+                    right_turn + LANE_HALF,
+                    top_y - LANE_HALF,
+                    top_y + LANE_HALF,
+                );
+                carve(
+                    left_turn - LANE_HALF,
+                    right_turn + LANE_HALF,
+                    mid_y - LANE_HALF,
+                    mid_y + LANE_HALF,
+                );
+                carve(
+                    left_turn - LANE_HALF,
+                    width - 1 - entrance,
+                    bottom_y - LANE_HALF,
+                    bottom_y + LANE_HALF,
+                );
+                carve(right_turn - LANE_HALF, right_turn + LANE_HALF, top_y, mid_y);
+                carve(
+                    left_turn - LANE_HALF,
+                    left_turn + LANE_HALF,
+                    mid_y,
+                    bottom_y,
+                );
+            }
+            Self::Straight => carve(
+                room_x,
+                width - 1 - room_x,
+                mid_y - LANE_HALF,
+                mid_y + LANE_HALF,
+            ),
+            _ => unreachable!("arena without staging rooms handled above"),
+        }
+
+        rows.into_iter()
+            .map(|row| String::from_utf8(row).expect("ASCII arena"))
+            .collect()
+    }
+}
+
+fn cardinal_distance(rows: &[String]) -> Option<usize> {
+    let width = rows[0].len();
+    let height = rows.len();
+    let start = (usize::from(BASE_X), usize::from(BASE_Y));
+    let goal = (width - 1 - start.0, start.1);
+    let is_floor = |x, y| {
+        rows.get(y)
+            .and_then(|row: &String| row.as_bytes().get(x))
+            .is_some_and(|&cell| cell == b'.')
+    };
+    if !is_floor(start.0, start.1) || !is_floor(goal.0, goal.1) {
+        return None;
+    }
+    let mut visited = vec![vec![false; width]; height];
+    visited[start.1][start.0] = true;
+    let mut queue = VecDeque::from([(start, 0)]);
+    while let Some(((x, y), steps)) = queue.pop_front() {
+        if (x, y) == goal {
+            return Some(steps);
+        }
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (Some(nx), Some(ny)) = (x.checked_add_signed(dx), y.checked_add_signed(dy)) else {
+                continue;
+            };
+            if is_floor(nx, ny) && !visited[ny][nx] {
+                visited[ny][nx] = true;
+                queue.push_back(((nx, ny), steps + 1));
+            }
+        }
+    }
+    None
 }
 
 struct Options {
@@ -44,6 +189,7 @@ struct Options {
     income_per_tick: f64,
     army_budget: f64,
     armed_only: bool,
+    include_miners: bool,
     content: Option<PathBuf>,
     output: Option<PathBuf>,
     a: Option<Roster>,
@@ -63,15 +209,23 @@ impl Options {
             income_per_tick: 3.0,
             army_budget: 600.0,
             armed_only: false,
+            include_miners: false,
             content: None,
             output: None,
             a: None,
             b: None,
         };
         while let Some(flag) = args.next() {
-            if flag == "--armed-only" {
-                options.armed_only = true;
-                continue;
+            match flag.as_str() {
+                "--armed-only" => {
+                    options.armed_only = true;
+                    continue;
+                }
+                "--include-miners" => {
+                    options.include_miners = true;
+                    continue;
+                }
+                _ => {}
             }
             let value = args
                 .next()
@@ -81,7 +235,9 @@ impl Options {
                     options.arena = match value.as_str() {
                         "open" => Arena::Open,
                         "choke" => Arena::Choke,
-                        _ => return Err("--arena must be open or choke".into()),
+                        "snake" => Arena::Snake,
+                        "straight" => Arena::Straight,
+                        _ => return Err("--arena must be open, choke, snake or straight".into()),
                     };
                 }
                 "--ticks" => {
@@ -187,9 +343,17 @@ fn trials(options: &Options, units: &Roster) -> Result<(Vec<Roster>, Vec<TrialKe
         }
         pairs.push((a.clone(), b.clone()));
     } else {
-        rosters.extend(units.iter().map(|key| vec![key.clone()]));
-        for (i, first) in units.iter().enumerate() {
-            for second in &units[i + 1..] {
+        let eligible: Vec<_> = units
+            .iter()
+            .filter(|key| options.include_miners || key.as_str() != "miner")
+            .cloned()
+            .collect();
+        if eligible.is_empty() {
+            return Err("no eligible default pairing units; try --include-miners".into());
+        }
+        rosters.extend(eligible.iter().map(|key| vec![key.clone()]));
+        for (i, first) in eligible.iter().enumerate() {
+            for second in &eligible[i + 1..] {
                 rosters.push(vec![first.clone(), second.clone()]);
             }
         }
@@ -214,11 +378,7 @@ fn trials(options: &Options, units: &Roster) -> Result<(Vec<Roster>, Vec<TrialKe
     Ok((rosters, trials))
 }
 
-fn mirror(x: u16, seat: PlayerId) -> u16 {
-    if seat == 0 { x } else { WIDTH - 1 - x }
-}
-
-fn arena(options: &Options, mut content: Content) -> World {
+fn arena(options: &Options, mut content: Content, rows: &[String]) -> World {
     if options.mode == Mode::Factory {
         // A funded order can finish during the current tick. The real output tile, push
         // rules, birth limit and rally order still apply.
@@ -236,14 +396,6 @@ fn arena(options: &Options, mut content: Content) -> World {
             .as_mut()
             .unwrap()
             .rate = rate;
-    }
-    let mut rows = vec![".".repeat(usize::from(WIDTH)); usize::from(HEIGHT)];
-    if matches!(options.arena, Arena::Choke) {
-        for (y, row) in rows.iter_mut().enumerate() {
-            if !(6..=8).contains(&y) {
-                row.replace_range(14..17, "###");
-            }
-        }
     }
     let mut world = World::with_content(
         &rows.iter().map(String::as_str).collect::<Vec<_>>(),
@@ -289,44 +441,66 @@ impl<'a> Queue<'a> {
     }
 }
 
-fn base(world: &mut World, seat: PlayerId) -> EntityId {
-    let id = world.spawn(seat, "factory", mirror(BASE_X, seat), BASE_Y);
+fn base(world: &mut World, arena: Arena, seat: PlayerId) -> EntityId {
+    let position = arena.seat_tile(world.state.terrain.width, BASE_X, BASE_Y, seat);
+    let id = world.spawn(seat, "factory", position.x, position.y);
     let factory = world.entity_mut(&id);
     factory.priority = Priority::Off;
     id
 }
 
-fn deploy_army(world: &mut World, seat: PlayerId, roster: &Roster, budget: f64) -> Result<f64> {
+fn deploy_army(
+    world: &mut World,
+    arena: Arena,
+    seat: PlayerId,
+    roster: &Roster,
+    budget: f64,
+) -> Result<f64> {
     let mut queue = Queue::new(&world.content, roster);
     let columns = [5, 4, 3, 2, 1, 0, 6, 7, 8, 9, 10, 11, 12, 13];
     let rows = [7, 6, 8, 5, 9, 4, 10, 3, 11, 2, 12, 1, 13, 0, 14];
     let mut positions = columns
         .into_iter()
         .flat_map(|x| rows.into_iter().map(move |y| (x, y)))
-        .filter(|&position| position != (BASE_X, BASE_Y));
+        .filter(|&(x, y)| {
+            !arena.has_staging_rooms()
+                || (x <= ROOM_X_END && (ROOM_Y_START..=ROOM_Y_END).contains(&y))
+        })
+        .filter(|&position| position != (BASE_X, BASE_Y))
+        .map(|(x, y)| arena.seat_tile(world.state.terrain.width, x, y, seat))
+        .filter(|&position| is_floor(&world.state.terrain, position));
     let mut deployments = Vec::new();
     let mut invested = 0.0;
     while let Some(key) = queue.buy(budget) {
-        let (x, y) = positions
+        let position = positions
             .next()
-            .ok_or("army budget exceeds small-map deployment capacity")?;
-        deployments.push((key, x, y));
+            .ok_or("army budget exceeds arena deployment capacity")?;
+        deployments.push((key, position));
         invested += world.def(key).matter_cost;
     }
-    let rally = attack_move(mirror(BASE_X, 1 - seat), BASE_Y);
-    for (key, x, y) in deployments {
-        world.spawn_with(seat, key, mirror(x, seat), y, rally.clone());
+    let target = arena.seat_tile(world.state.terrain.width, BASE_X, BASE_Y, 1 - seat);
+    let rally = attack_move(target.x, target.y);
+    for (key, position) in deployments {
+        world.spawn_with(seat, key, position.x, position.y, rally.clone());
     }
     world.bank(seat, (budget - invested).max(0.0));
     Ok(invested)
 }
 
-fn configure_factory(world: &mut World, seat: PlayerId, id: &EntityId) {
+fn is_floor(terrain: &Terrain, position: Tile) -> bool {
+    let index = usize::from(position.y) * usize::from(terrain.width) + usize::from(position.x);
+    terrain.cells[index] == TerrainCell::Floor
+}
+
+fn configure_factory(world: &mut World, arena: Arena, seat: PlayerId, id: &EntityId) {
+    let width = world.state.terrain.width;
+    let target = arena.seat_tile(width, BASE_X, BASE_Y, 1 - seat);
+    let output = arena.seat_tile(width, BASE_X + 1, BASE_Y, seat);
     let entity = world.entity_mut(id);
     entity.priority = Priority::Medium;
     let factory = entity.production.as_mut().unwrap();
-    factory.stored_order = attack_move(mirror(BASE_X, 1 - seat), BASE_Y);
-    factory.output_tile = tile(mirror(BASE_X + 1, seat), BASE_Y);
+    factory.stored_order = attack_move(target.x, target.y);
+    factory.output_tile = output;
     factory.output_direction = if seat == 0 {
         CardinalDirection::E
     } else {
@@ -436,17 +610,22 @@ fn trial(options: &Options, template: &World, key: TrialKey) -> Result<Trial> {
     world.config = template.config.clone();
     world.state = template.state.clone();
     let seats = [key.a_seat, 1 - key.a_seat];
-    let bases = seats.map(|seat| base(&mut world, seat));
+    let bases = seats.map(|seat| base(&mut world, options.arena, seat));
     let rosters = [&key.a, &key.b];
     let mut queues = rosters.map(|roster| Queue::new(&template.content, roster));
     let mut initial_unit_matter = [0.0; 2];
     for i in 0..2 {
         match options.mode {
             Mode::Army => {
-                initial_unit_matter[i] =
-                    deploy_army(&mut world, seats[i], rosters[i], options.army_budget)?;
+                initial_unit_matter[i] = deploy_army(
+                    &mut world,
+                    options.arena,
+                    seats[i],
+                    rosters[i],
+                    options.army_budget,
+                )?;
             }
-            Mode::Factory => configure_factory(&mut world, seats[i], &bases[i]),
+            Mode::Factory => configure_factory(&mut world, options.arena, seats[i], &bases[i]),
         }
     }
     let mut sim = Sim::new(&world.request())?;
@@ -514,6 +693,10 @@ struct Metadata<'a> {
     effective_content_hash: String,
     map_width: u16,
     map_height: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    map_rows: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    route_length_tiles: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -577,7 +760,8 @@ fn execute(options: Options) -> std::result::Result<(), Box<dyn std::error::Erro
     };
     let units = factory_roster(&content, options.armed_only)?;
     let (rosters, keys) = trials(&options, &units)?;
-    let template = arena(&options, content);
+    let rows = options.arena.rows();
+    let template = arena(&options, content, &rows);
     let header = serde_json::to_string(&Metadata {
         kind: "metadata",
         schema_version: 1,
@@ -592,8 +776,13 @@ fn execute(options: Options) -> std::result::Result<(), Box<dyn std::error::Erro
         config: &template.config,
         content: &template.content,
         effective_content_hash: identity::canonical_hash(&template.content)?,
-        map_width: WIDTH,
-        map_height: HEIGHT,
+        map_width: template.state.terrain.width,
+        map_height: template.state.terrain.height,
+        map_rows: options.arena.has_staging_rooms().then_some(&rows),
+        route_length_tiles: options
+            .arena
+            .has_staging_rooms()
+            .then(|| cardinal_distance(&rows).expect("connected corridor arena")),
     })?;
     let (mut output, completed): (Box<dyn Write>, _) = if let Some(path) = &options.output {
         let (file, completed) = open_results(path, &header, &keys)?;
@@ -649,6 +838,134 @@ mod tests {
     }
 
     #[test]
+    fn default_pairings_omit_miners_and_preserve_other_rosters() {
+        let units = factory_roster(&content(), false).unwrap();
+        let options = Options::parse(["factory"].map(str::to_owned).into_iter()).unwrap();
+        let (rosters, keys) = trials(&options, &units).unwrap();
+        assert_eq!(rosters.len(), 21);
+        assert_eq!(keys.len(), 441);
+        assert!(
+            rosters
+                .iter()
+                .all(|roster| roster.iter().all(|unit| unit != "miner"))
+        );
+        assert!(rosters.iter().any(|roster| roster == &["constructor"]));
+
+        let full = Options::parse(
+            ["factory", "--include-miners"]
+                .map(str::to_owned)
+                .into_iter(),
+        )
+        .unwrap();
+        let (rosters, keys) = trials(&full, &units).unwrap();
+        assert_eq!(rosters.len(), 28);
+        assert_eq!(keys.len(), 784);
+        assert!(rosters.iter().any(|roster| roster == &["grunt", "miner"]));
+
+        let explicit = Options::parse(
+            ["factory", "--a", "miner", "--b", "tank"]
+                .map(str::to_owned)
+                .into_iter(),
+        )
+        .unwrap();
+        let (rosters, keys) = trials(&explicit, &units).unwrap();
+        assert_eq!(rosters, [vec!["miner"], vec!["tank"]]);
+        assert_eq!(keys.len(), 2);
+    }
+
+    #[test]
+    fn snake_requires_all_three_narrow_traverses() {
+        let rows = Arena::Snake.rows();
+        assert_eq!(cardinal_distance(&rows), Some(66));
+        assert_eq!(cardinal_distance(&Arena::Straight.rows()), Some(66));
+
+        let center_x = usize::from(WIDTH / 2);
+        let floor_at_center: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row.as_bytes()[center_x] == b'.')
+            .map(|(y, _)| y)
+            .collect();
+        assert_eq!(floor_at_center, [1, 2, 3, 6, 7, 8, 11, 12, 13]);
+        for traverses in floor_at_center.chunks_exact(LANE_WIDTH) {
+            let mut cut = rows.clone();
+            for &y in traverses {
+                cut[y].replace_range(center_x..=center_x, "#");
+            }
+            assert_eq!(
+                cardinal_distance(&cut),
+                None,
+                "bypass around traverse {traverses:?}"
+            );
+        }
+
+        let straight = Arena::Straight.rows();
+        let straight_x = straight[0].len() / 2;
+        assert_eq!(
+            straight
+                .iter()
+                .filter(|row| row.as_bytes()[straight_x] == b'.')
+                .count(),
+            LANE_WIDTH
+        );
+    }
+
+    #[test]
+    fn corridor_staging_and_factory_outputs_are_floor_and_rotationally_symmetric() {
+        let mut options =
+            Options::parse(["factory", "--ticks", "5"].map(str::to_owned).into_iter()).unwrap();
+        let roster = vec!["grunt".to_owned()];
+        let mut west_deployment = Vec::new();
+        for layout in [Arena::Snake, Arena::Straight] {
+            options.arena = layout;
+            let rows = layout.rows();
+            for (row, rotated) in rows.iter().zip(rows.iter().rev()) {
+                assert!(row.bytes().eq(rotated.bytes().rev()));
+            }
+            let template = arena(&options, content(), &rows);
+            let result = trial(
+                &options,
+                &template,
+                TrialKey {
+                    a: roster.clone(),
+                    b: roster.clone(),
+                    a_seat: 0,
+                },
+            )
+            .unwrap();
+            assert_eq!(result.a_result.surviving_unit_count, 1);
+            assert_eq!(result.b_result.surviving_unit_count, 1);
+
+            let mut world = arena(&options, content(), &rows);
+            for seat in 0..2 {
+                base(&mut world, layout, seat);
+                assert_eq!(
+                    deploy_army(&mut world, layout, seat, &roster, 600.0).unwrap(),
+                    600.0
+                );
+            }
+            assert_eq!(world.state.entities.len(), 82);
+            let (west, east) = world.state.entities.split_at(41);
+            for (left, right) in west.iter().zip(east) {
+                assert!(is_floor(&world.state.terrain, left.tile));
+                assert!(is_floor(&world.state.terrain, right.tile));
+                assert!(left.tile.x <= ROOM_X_END);
+                assert!((ROOM_Y_START..=ROOM_Y_END).contains(&left.tile.y));
+                assert_eq!(
+                    right.tile,
+                    layout.seat_tile(world.state.terrain.width, left.tile.x, left.tile.y, 1)
+                );
+            }
+            let spawn_tiles: Vec<_> = west.iter().map(|entity| entity.tile).collect();
+            if matches!(layout, Arena::Snake) {
+                west_deployment = spawn_tiles;
+            } else {
+                assert_eq!(west_deployment, spawn_tiles);
+            }
+        }
+    }
+
+    #[test]
     fn factory_mix_budgets_each_type_independently() {
         let options = Options::parse(
             [
@@ -668,7 +985,7 @@ mod tests {
         let units = factory_roster(&content, false).unwrap();
         let (_, keys) = trials(&options, &units).unwrap();
         assert_eq!(keys.len(), 2);
-        let world = arena(&options, content);
+        let world = arena(&options, content, &options.arena.rows());
         for key in keys {
             let result = trial(&options, &world, key).unwrap();
             assert_eq!(result.stop, "horizon");
@@ -695,7 +1012,7 @@ mod tests {
         let content = content();
         let units = factory_roster(&content, false).unwrap();
         let (_, keys) = trials(&options, &units).unwrap();
-        let world = arena(&options, content);
+        let world = arena(&options, content, &options.arena.rows());
         for key in keys {
             let result = trial(&options, &world, key).unwrap();
             assert_eq!(result.winner, Some("a"));

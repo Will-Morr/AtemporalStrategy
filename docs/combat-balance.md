@@ -14,7 +14,7 @@ taskset -c 0 nice -n 15 "$lab" factory --income 3 --ticks 900 --output artifacts
 python3 scripts/summarize-balance.py artifacts/balance/factory.jsonl --csv artifacts/balance/factory.csv
 ```
 
-The full sweep includes every mobile factory recipe in the selected content, every two-type mix, and matches between mixed queues. Each distinct matchup runs in both seats. Each self-match needs one run because both seats already use the same queue. The default open map is 31×15 with no ore. Factory income starts at tick zero from an empty bank. A funded unit can finish in one simulation tick. The engine still has one output tile and can deliver at most one unit per factory per tick. At the baseline income, even a single grunt takes five ticks to fund.
+The default sweep excludes miners and includes the other mobile factory recipes, every two-type mix among them, and matches between mixed queues. With shipped content there are six pure queues, 15 two-type queues and 441 seat assignments per arena and economy. Each distinct matchup runs in both seats. Each self-match needs one run because both seats already use the same queue. The default open map is 31×15 with no ore. Factory income starts at tick zero from an empty bank. A funded unit can finish in one simulation tick. The engine still has one output tile and can deliver at most one unit per factory per tick. At the baseline income, even a single grunt takes five ticks to fund.
 
 Each finished trial is flushed to the JSONL file. Restart the same command to resume. The header pins the effective game content, engine rules version, experiment settings and expected trial count. Use a new file for a changed configuration. For a specific matchup or a different map, use a separate output file.
 
@@ -34,7 +34,7 @@ The equal allocation applies over a complete queue cycle. A 15-matter grunt and 
 
 ## Reference runs
 
-The open-map reference sweeps used the player-timeline branch’s rules 8 at commit `0ef5125` with a 900-tick limit. The integrated dev simulator uses rules 9, which also includes alternating tread movement. Generate a fresh rules 9 baseline before comparing unit-stat edits on dev. Each income setting produced 784 trials across the 28 rosters, including 759 base kills and 25 timeouts. The compressed JSONL includes every trial and can be passed directly to the summarizer. [3 matter/tick data](balance-data/open-factory-income3-rules8.jsonl.gz) · [6 matter/tick data](balance-data/open-factory-income6-rules8.jsonl.gz)
+The historical open-map reference sweeps included miners and used the player-timeline branch’s rules 8 at commit `0ef5125` with a 900-tick limit. The integrated dev simulator uses rules 9, which also includes alternating tread movement. Generate a fresh rules 9 baseline before comparing unit-stat edits on dev. Each income setting produced 784 trials across the 28 rosters, including 759 base kills and 25 timeouts. The compressed JSONL includes every trial and can be passed directly to the summarizer. [3 matter/tick data](balance-data/open-factory-income3-rules8.jsonl.gz) · [6 matter/tick data](balance-data/open-factory-income6-rules8.jsonl.gz)
 
 | Matchup | At 3 matter/tick | At 6 matter/tick |
 | --- | --- | --- |

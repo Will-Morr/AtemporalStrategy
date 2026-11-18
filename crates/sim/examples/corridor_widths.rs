@@ -81,8 +81,8 @@ fn report(label: &str, counts: &[usize]) {
 }
 
 fn main() -> atemporal_sim::Result<()> {
-    let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))?
-        .match_defaults;
+    let mut config =
+        atemporal_content::load_setup(include_str!("../../../config/game.yaml"))?.match_defaults;
     config.player_count = 2;
     let content = atemporal_sim::load_content(include_str!("../../../config/content.yaml"))?;
     let n = usize::from(config.map_size);

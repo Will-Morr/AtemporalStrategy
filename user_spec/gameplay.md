@@ -127,6 +127,6 @@ Tanks and artillery use orthogonal tread movement, never diagonal steps. Tread p
 
 Maintain a reusable tool for direct one-on-one combat experiments on a small, minimal map. Both sides simply send every unit to attack the opposing base. Support a deployed army purchased with a maximum matter budget and a factory with effectively instant build capacity, a preselected repeating queue and a steady matter income per tick. Compare equal budgets or income across seats. Save outcomes, surviving units and surviving unit value, calculated as the sum of each unit’s matter cost times its remaining health fraction.
 
-Factory experiments should compare every unit head-to-head and explore every two-unit combination for synergies. Allocate equal matter to each unit type in a mixture and interleave their production over time. Keep long-running experiments suitable for background execution with bounded CPU usage.
+Factory experiments should compare each unit head-to-head and explore every two-unit combination for synergies. Exclude miners from the matchup roster, including mixed queues. Allocate equal matter to each unit type in a mixture and interleave their production over time. Keep long-running experiments suitable for background execution with bounded CPU usage.
 
 Use a map with a single snaking corridor between the two bases to calibrate balance in narrow spaces. Size the passage using the corridors found in actual generated games, and compare how geometry changes combat outcomes.
