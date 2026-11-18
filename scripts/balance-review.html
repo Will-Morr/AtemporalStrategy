@@ -17,12 +17,13 @@ h1{font-size:clamp(2rem,6vw,3.55rem);line-height:1.1;letter-spacing:-.055em;marg
 h2{font-size:1.27rem;letter-spacing:-.02em}
 h3{font-size:1rem}
 p,.muted{color:var(--muted);font-size:.9rem}
-fieldset{margin:0;padding:0;border:0}
-legend{font-size:.8rem;font-weight:650;color:var(--muted);margin-bottom:6px}
-.toggle{display:flex;gap:4px;background:#101612;padding:4px;border:1px solid var(--line);border-radius:8px}
-.toggle label{cursor:pointer;display:flex;align-items:center;gap:6px;padding:5px 9px;color:var(--muted);border-radius:4px;font-size:.85rem;white-space:nowrap}
-.toggle label:has(:checked){background:var(--lime);color:#202a1a;font-weight:700}
-.toggle input{accent-color:#334b2a;margin:0}
+.controls{display:flex;flex-wrap:wrap;gap:10px}
+.controls label{display:grid;gap:4px;color:var(--muted);font-size:.85rem}
+#arena-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:12px;margin-bottom:20px}
+#arena-map{width:100%;max-width:460px;image-rendering:pixelated;border:1px solid var(--line)}
+.comparison{margin:10px 0 14px}
+.comparison caption{text-align:left;font-size:.85rem;color:var(--muted)}
+.comparison td:last-child,.comparison th:last-child{text-align:right;white-space:nowrap}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:20px;min-width:0}
 .section-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:5px 18px;margin-bottom:12px}
 .grids{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:20px;align-items:start}
@@ -71,15 +72,17 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
     <h1>Combat Balance Lab</h1>
     <p id="subtitle">Mirrored factory duels</p>
   </div>
-  <fieldset>
-    <legend>Income per side per tick</legend>
-    <div class="toggle">
-      <label><input type="radio" name="income" value="factory.jsonl" checked>3 matter</label>
-      <label><input type="radio" name="income" value="factory6.jsonl">6 matter</label>
-    </div>
-  </fieldset>
+  <div class="controls">
+    <label>Rules<select id="rules"><option value="9">Rules 9</option><option value="8">Rules 8 · historical</option></select></label>
+    <label>Mode<select id="mode"><option value="army">Army · 600 matter</option><option value="3">Factory · 3 matter/tick</option><option value="6">Factory · 6 matter/tick</option></select></label>
+    <label>Arena<select id="arena"><option value="open">Open</option><option value="choke">Choke</option><option value="straight">Straight corridor</option><option value="snake">Winding corridor</option></select></label>
+  </div>
 </header>
 <p id="status" class="status" role="status" aria-live="polite">Loading sweep…</p>
+<section class="panel" id="arena-panel" hidden>
+  <div><h2 id="arena-title">Arena</h2><p id="arena-caption"></p></div>
+  <canvas id="arena-map" role="img"></canvas>
+</section>
 <div id="results" class="grids" hidden>
   <section class="panel">
     <div class="section-head">
@@ -96,14 +99,15 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
       <label>Roster A<select id="roster-a"></select></label>
       <label>Roster B<select id="roster-b"></select></label>
     </div>
+    <div id="comparison" class="comparison"></div>
     <div id="matchups" aria-live="polite"></div>
   </section>
-  <section class="panel">
-    <div class="section-head"><h2>Mixed queue lift</h2></div>
+  <section class="panel" id="mix-panel">
+    <div class="section-head"><h2 id="mix-title">Mixed queue lift</h2></div>
     <p>Score gives half credit for a draw. Lift compares the mix with the mean score of its two pure components against the same pure opponents.</p>
     <div class="scroll" tabindex="0" aria-label="Mixed queue lift rankings">
       <table aria-label="Mixed queue lift rankings">
-        <thead><tr><th scope="col">Queue</th><th scope="col">Score</th><th scope="col">Lift</th><th scope="col">Surviving matter margin</th></tr></thead>
+        <thead><tr><th scope="col">Roster</th><th scope="col">Score</th><th scope="col">Lift</th><th scope="col">Surviving matter margin</th></tr></thead>
         <tbody id="mixes"></tbody>
       </table>
     </div>
@@ -122,7 +126,10 @@ const signed = value => (value > 0 ? '+' : '') + format(value);
 const key = roster => roster.join('+');
 const name = roster => roster.map(unit => unit.replaceAll('_', ' ').replace(/^./, first => first.toUpperCase())).join(' + ');
 const cache = new Map();
+const controls = [byId('rules'), byId('mode'), byId('arena')];
+const arenas = {open: 'Open', choke: 'Choke', straight: 'Straight corridor', snake: 'Winding corridor'};
 let dataset;
+let comparisonVersion = 0;
 let requestVersion = 0;
 
 function element(tag, text, className) {
@@ -138,29 +145,42 @@ function addResult(groups, a, b, seat, winner, first, second, trial) {
   groups.get(id).push({seat, winner, first, second, ticks: trial.ticks, stop: trial.stop});
 }
 
-async function load(file) {
-  if (cache.has(file)) return cache.get(file);
+function load(file) {
+  if (!cache.has(file)) {
+    cache.set(file, read(file).catch(error => {
+      cache.delete(file);
+      throw error;
+    }));
+  }
+  return cache.get(file);
+}
+
+async function read(file) {
   const response = await fetch(file);
+  if (response.status === 404) return null;
   if (!response.ok) throw new Error(file + ' returned HTTP ' + response.status);
   const [meta, ...trials] = (await response.text()).trim().split(/\r?\n/).map(line => JSON.parse(line));
   if (meta.kind !== 'metadata' || meta.schema_version !== 1 || trials.some(trial => trial.kind !== 'trial')) {
     throw new Error('Unrecognized sweep format');
   }
+  const visibleRosters = meta.rosters.filter(roster => !roster.includes('miner'));
+  const rosters = new Map(visibleRosters.map(roster => [key(roster), roster]));
   const groups = new Map();
+  let count = 0;
   for (const trial of trials) {
     const a = key(trial.a), b = key(trial.b);
+    if (!rosters.has(a) || !rosters.has(b)) continue;
+    count++;
     addResult(groups, a, b, trial.a_seat, trial.winner, trial.a_result, trial.b_result, trial);
     if (a !== b) {
       const winner = trial.winner === null ? null : trial.winner === 'a' ? 'b' : 'a';
       addResult(groups, b, a, 1 - trial.a_seat, winner, trial.b_result, trial.a_result, trial);
     }
   }
-  const data = {
-    meta, groups, count: trials.length, pure: meta.rosters.filter(roster => roster.length === 1),
-    rosters: new Map(meta.rosters.map(roster => [key(roster), roster])),
+  return {
+    meta, groups, count, loadedCount: trials.length,
+    pure: visibleRosters.filter(roster => roster.length === 1), rosters,
   };
-  cache.set(file, data);
-  return data;
 }
 
 function matches(a, b) {
@@ -248,6 +268,7 @@ function showMatchup() {
   const list = byId('matchups');
   const trials = [...matches(a, b)].sort((left, right) => left.seat - right.seat);
   list.replaceChildren();
+  void showComparison(a, b);
   if (!trials.length) list.append(element('p', 'No completed trials for these rosters.'));
   for (const trial of trials) {
     const card = element('article', undefined, 'match');
@@ -265,7 +286,7 @@ function showMatchup() {
 function renderMixes() {
   const units = dataset.pure.map(key);
   const rows = [];
-  for (const mix of dataset.meta.rosters.filter(roster => roster.length === 2)) {
+  for (const mix of [...dataset.rosters.values()].filter(roster => roster.length === 2)) {
     const mixKey = key(mix);
     const common = units.filter(opp => [mixKey, ...mix].every(roster => matches(roster, opp).length));
     if (!common.length) continue;
@@ -296,17 +317,142 @@ function renderMixes() {
   }));
 }
 
-async function changeDataset(file) {
+function sweepFile(rules, mode, arena) {
+  if (rules === '8') return mode === '6' ? 'factory6.jsonl' : 'factory.jsonl';
+  return mode === 'army' ? 'army-' + arena + '.jsonl' : 'factory-' + arena + '-' + mode + '.jsonl';
+}
+
+async function loadSweep(rules, mode, arena) {
+  const file = sweepFile(rules, mode, arena);
+  const data = await load(file);
+  if (!data) return null;
+  const {meta} = data;
+  const expectedMode = mode === 'army' ? 'army' : 'factory';
+  const settingMatches = expectedMode === 'army' ? meta.army_budget === 600 : meta.income_per_tick === Number(mode);
+  if (String(meta.sim_rules_version) !== rules || meta.mode !== expectedMode || meta.arena !== arena || !settingMatches) {
+    throw new Error(file + ' does not match the selected rules, mode or arena.');
+  }
+  if ((arena === 'straight' || arena === 'snake') &&
+      (!Array.isArray(meta.map_rows) || meta.map_rows.length !== meta.map_height ||
+      meta.map_rows.some(row => typeof row !== 'string' || row.length !== meta.map_width))) {
+    throw new Error(file + ' is missing the corridor layout.');
+  }
+  return data;
+}
+
+function setControls(rules, mode, arena) {
+  const historical = rules === '8';
+  controls[0].value = rules;
+  controls[1].querySelector('[value="army"]').disabled = historical;
+  controls[1].value = historical && mode === 'army' ? '3' : mode;
+  controls[2].disabled = historical;
+  controls[2].value = historical ? 'open' : arena;
+}
+
+function drawArena(meta) {
+  const canvas = byId('arena-map');
+  const width = meta.map_width, height = meta.map_height;
+  const rows = meta.map_rows ?? Array.from({length: height}, (_, y) =>
+    Array.from({length: width}, (_, x) => meta.arena === 'choke' &&
+      (y < 6 || y > 8) && x >= 14 && x <= 16 ? '#' : '.').join(''));
+  canvas.width = width * 8;
+  canvas.height = height * 8;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#68726a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#101612';
+  for (const [y, row] of rows.entries()) {
+    for (const [x, tile] of [...row].entries()) {
+      if (tile === '#') ctx.fillRect(x * 8, y * 8, 8, 8);
+    }
+  }
+  const bases = [[2, '#d5ef9e'], [width - 3, '#f1bc9e']];
+  for (const [x, color] of bases) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x * 8 + 1, 7 * 8 + 1, 6, 6);
+  }
+  const arenaTitle = arenas[meta.arena];
+  const length = meta.route_length_tiles ?? (meta.arena === 'open' || meta.arena === 'choke' ? width - 5 : null);
+  canvas.setAttribute('aria-label', arenaTitle + ' layout with the west and east bases highlighted');
+  byId('arena-title').textContent = arenaTitle + ' arena';
+  byId('arena-caption').textContent = width + ' × ' + height + ' tiles' +
+    (length === null ? '' : ' · ' + length + ' cardinal steps between bases') + ' · west and east bases highlighted';
+  byId('arena-panel').hidden = false;
+}
+
+async function showComparison(a, b) {
+  const version = ++comparisonVersion;
+  const panel = byId('comparison');
+  const [rules, mode, selectedArena] = controls.map(control => control.value);
+  panel.replaceChildren();
+  if (rules === '8') return;
+  const table = element('table');
+  table.append(element('caption', 'Roster A wins / draws / losses by arena'));
+  const body = element('tbody');
+  table.append(body);
+  const rows = Object.keys(arenas).map(arena => {
+    const row = element('tr');
+    const title = element('th');
+    title.scope = 'row';
+    const button = element('button', arenas[arena], 'text-button');
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      setControls(rules, mode, arena);
+      void changeDataset();
+    });
+    title.append(arena === selectedArena ? document.createTextNode(arenas[arena]) : button);
+    const result = element('td', 'Loading…');
+    row.append(title, result);
+    body.append(row);
+    return {arena, result};
+  });
+  panel.append(table);
+  await Promise.all(rows.map(async ({arena, result}) => {
+    try {
+      const data = await loadSweep(rules, mode, arena);
+      if (version !== comparisonVersion) return;
+      const matches = data?.groups.get(a + '/' + b) ?? [];
+      const wins = matches.filter(trial => trial.winner === 'a').length;
+      const losses = matches.filter(trial => trial.winner === 'b').length;
+      result.textContent = matches.length
+        ? [wins, matches.length - wins - losses, losses].join(' / ')
+        : data ? 'No trials' : 'Unavailable';
+    } catch {
+      if (version === comparisonVersion) result.textContent = 'Unavailable';
+    }
+  }));
+}
+
+async function changeDataset(fallback = false) {
   const version = ++requestVersion;
+  ++comparisonVersion;
   status.textContent = 'Loading sweep…';
   byId('results').hidden = true;
+  byId('arena-panel').hidden = true;
   try {
-    const next = await load(file);
+    let [rules, mode, arena] = controls.map(control => control.value);
+    let next = await loadSweep(rules, mode, arena);
+    if (!next && fallback) {
+      for (const candidate of [['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
+        next = await loadSweep(...candidate);
+        if (next) {
+          [rules, mode, arena] = candidate;
+          break;
+        }
+      }
+    }
     if (version !== requestVersion) return;
+    if (!next) {
+      status.textContent = 'This sweep is unavailable. Choose another arena, mode, or rules version.';
+      return;
+    }
+    setControls(rules, mode, arena);
     dataset = next;
-    const {meta, count, rosters} = dataset;
-    const title = meta.arena[0].toUpperCase() + meta.arena.slice(1) + ' arena';
-    byId('subtitle').textContent = title + ' · ' + meta.map_width + ' × ' + meta.map_height + ' tiles · ' + meta.ticks + ' ticks max · ' + count + ' trials';
+    const {meta, count, loadedCount, rosters} = dataset;
+    const economy = meta.mode === 'army'
+      ? 'Army · ' + format(meta.army_budget) + ' matter per side'
+      : 'Factory · ' + format(meta.income_per_tick) + ' matter per side per tick';
+    byId('subtitle').textContent = 'Rules ' + meta.sim_rules_version + ' · ' + economy + ' · ' + meta.ticks + ' ticks max · ' + count + ' displayed trials';
     const previous = selectors.map(select => select.value);
     const defaults = ['grunt', 'tank'];
     selectors.forEach((select, i) => {
@@ -317,20 +463,30 @@ async function changeDataset(file) {
       }));
       select.value = [previous[i], defaults[i], rosters.keys().next().value].find(value => rosters.has(value));
     });
+    drawArena(meta);
     renderMatrix();
+    byId('mix-title').textContent = meta.mode === 'army' ? 'Mixed army lift' : 'Mixed queue lift';
+    byId('mix-panel').hidden = ![...rosters.values()].some(roster => roster.length === 2);
     renderMixes();
     showMatchup();
     byId('results').hidden = false;
-    status.textContent = count === meta.expected_trials ? '' : count + ' of ' + meta.expected_trials + ' trials available';
+    status.textContent = loadedCount === meta.expected_trials ? '' : loadedCount + ' of ' + meta.expected_trials + ' recorded trials available';
   } catch (error) {
     if (version === requestVersion) status.textContent = 'Could not load the sweep. ' + error.message;
   }
 }
 for (const selector of selectors) selector.addEventListener('change', showMatchup);
-for (const input of document.querySelectorAll('input[name="income"]')) {
-  input.addEventListener('change', () => changeDataset(input.value));
-}
-changeDataset(document.querySelector('input[name="income"]:checked').value);
+for (const control of controls) control.addEventListener('change', () => {
+  setControls(...controls.map(control => control.value));
+  void changeDataset();
+});
+const query = new URLSearchParams(location.search);
+const requestedMode = query.get('mode');
+const requestedArena = query.get('arena');
+setControls('9',
+  ['army', '3', '6'].includes(requestedMode) ? requestedMode : 'army',
+  Object.hasOwn(arenas, requestedArena) ? requestedArena : 'snake');
+void changeDataset(true);
 </script>
 </body>
 </html>

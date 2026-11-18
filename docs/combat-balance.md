@@ -34,7 +34,7 @@ The equal allocation applies over a complete queue cycle. A 15-matter grunt and 
 
 ## Reference runs
 
-The historical open-map reference sweeps included miners and used the player-timeline branch’s rules 8 at commit `0ef5125` with a 900-tick limit. The integrated dev simulator uses rules 9, which also includes alternating tread movement. Generate a fresh rules 9 baseline before comparing unit-stat edits on dev. Each income setting produced 784 trials across the 28 rosters, including 759 base kills and 25 timeouts. The compressed JSONL includes every trial and can be passed directly to the summarizer. [3 matter/tick data](balance-data/open-factory-income3-rules8.jsonl.gz) · [6 matter/tick data](balance-data/open-factory-income6-rules8.jsonl.gz)
+The historical open-map reference sweeps included miners and used the player-timeline branch’s rules 8 at commit `0ef5125` with a 900-tick limit. The integrated dev simulator uses rules 9, which also includes alternating tread movement. The corridor calibration below includes fresh rules 9 baselines. Each income setting produced 784 trials across the 28 rosters, including 759 base kills and 25 timeouts. The compressed JSONL includes every trial and can be passed directly to the summarizer. [3 matter/tick data](balance-data/open-factory-income3-rules8.jsonl.gz) · [6 matter/tick data](balance-data/open-factory-income6-rules8.jsonl.gz)
 
 | Matchup | At 3 matter/tick | At 6 matter/tick |
 | --- | --- | --- |
@@ -48,13 +48,17 @@ Doubling income reversed both grunt–tank fights and both artillery–tank pure
 
 ## Local review page
 
-A single static page reads the two result files in its directory. To recreate the reference review on localhost, run these commands from the repository root, then open [the review on port 8846](http://127.0.0.1:8846/).
+A single static page reads the result files in its directory. To recreate the geometry review and its historical comparison on localhost, run these commands from the repository root, then open [the review on port 8846](http://127.0.0.1:8846/).
 
 ```sh
 mkdir -p artifacts/balance/review
 cp scripts/balance-review.html artifacts/balance/review/index.html
 gzip -dc docs/balance-data/open-factory-income3-rules8.jsonl.gz > artifacts/balance/review/factory.jsonl
 gzip -dc docs/balance-data/open-factory-income6-rules8.jsonl.gz > artifacts/balance/review/factory6.jsonl
+for path in docs/balance-data/corridors-rules9/*.jsonl.gz; do
+  name=$(basename "$path" .gz)
+  gzip -dc "$path" > "artifacts/balance/review/$name"
+done
 python3 -m http.server 8846 --bind 127.0.0.1 --directory artifacts/balance/review
 ```
 
@@ -70,3 +74,26 @@ Run `cargo run --release --locked -p atemporal-sim --example corridor_widths` to
 | Visits on the generator’s sampled traffic routes | 132,989 | 28.8% | 5 |
 
 Three tiles represents a narrow passage that occurs regularly in generated play. The traffic estimate uses sampled routes from the map generator. It measures terrain geometry independently of where players chose to send units in actual matches.
+
+### What changed in the winding corridor
+
+The snake has two hairpin turns, three traverses across the center, and one three-tile-wide passage between its bases. Closing any traverse disconnects them. Its straight control uses the same corridor width, identical starting formations in 6×7 staging rooms, and the same 66-step shortest cardinal path. The open and single-choke maps are shorter, at 26 steps. Cardinal distance controls for tread travel distance; eight-direction units can take different lines through turns. Bends also change sight lines, traffic and the space between opposing formations.
+
+The rules 9 experiment ran **5,292 duels**: 441 seat assignments × four geometries × three economies. The 21 rosters are six pure queues and all 15 two-unit mixes. Miners were excluded; constructors were included. The endpoint is a destroyed base or a 900-tick timeout. Each table entry counts trials that reached the time limit with both bases standing, out of 441 in that cell. [All trial records](balance-data/corridors-rules9/)
+
+| Economy | Open | Single choke | Straight corridor | Snake |
+| --- | ---: | ---: | ---: | ---: |
+| 600-matter starting army | 12 | 11 | 4 | 3 |
+| Factory, 3 matter/tick | 14 | 14 | 39 | 52 |
+| Factory, 6 matter/tick | 3 | 18 | 96 | 129 |
+
+- **Artillery vs. grinder** shows a winner reversal caused by the corridor layout. At 3 matter/tick, grinders won both straight duels at tick 620. Artillery won both snake duels, at ticks 808 and 825. Both comparisons finished within the same limit.
+- **Grunts** won every 600-matter army duel against the other armed rosters on both long maps (28/28 per map). Factory results depended on geometry and income. At 6 matter/tick they beat pure tanks on open ground in both seats. On both long corridors all four matchups reached tick 900. Extending the limit to 1,800 let tanks win all four, at ticks 1,014 and 1,022 in the snake and 1,178 and 1,477 in the straight.
+- **Artillery + tank vs. tank** initially timed out in both snake duels at both incomes. With 1,800 ticks the mixed queue won all four. The 900-tick counts describe a time limit, and a longer firefight can still have a decisive winner.
+- Comparing the snake directly to the length-matched straight, among the 420 seat assignments with distinct opposing rosters, the army result changed in 35 cases (31 outright winner reversals). Factory results changed in 51 cases at income 3 (18 outright reversals) and 49 at income 6 (4 outright reversals). The remaining changes involved a timeout on one geometry. These are paired deterministic matchups on fixed layouts.
+
+For the long-horizon checks, both seats were run for each combination of straight or snake, income 3 or 6, and grunt, grinder or artillery+tank versus tank. One invocation follows.
+
+```sh
+taskset -c 0 nice -n 15 "$lab" factory --arena snake --income 6 --ticks 1800 --a grunt --b tank
+```
