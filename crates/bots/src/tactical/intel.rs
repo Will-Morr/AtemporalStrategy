@@ -11,7 +11,6 @@ use std::{
 
 const ENTRY_WINDOW: Tick = 90;
 const BACKTRACK_STEPS: u8 = 12;
-const FRESH_ENTRY_AGE: Tick = 600;
 
 pub(super) struct Structure {
     pub tile: Tile,
@@ -219,7 +218,7 @@ fn hostile_structure(content: &Content, entity: &VisibleEntity) -> Option<u32> {
 }
 
 impl Intel {
-    pub(super) fn scan(input: &PolicyTimeline) -> Self {
+    pub(super) fn scan(input: &PolicyTimeline, fresh_entry_ticks: Tick) -> Self {
         let terrain = &input.timeline.terrain;
         let last = input
             .timeline
@@ -387,7 +386,7 @@ impl Intel {
                     }
                     let vote = votes.entry((entry.owner, tile)).or_default();
                     vote.sources += 1;
-                    if last.tick - entry.appear <= FRESH_ENTRY_AGE {
+                    if last.tick - entry.appear <= fresh_entry_ticks {
                         vote.fresh_sources += 1;
                         vote.fresh_ingress.insert(entry.tile);
                     }
@@ -425,7 +424,12 @@ impl Intel {
             && self.last_checked[index(terrain, tile)].is_some_and(|checked| checked >= tick)
     }
 
-    pub(super) fn rally(&self, input: &PolicyTimeline, view: &PlayerFrame) -> Option<Tile> {
+    pub(super) fn rally(
+        &self,
+        input: &PolicyTimeline,
+        view: &PlayerFrame,
+        distance_band: u8,
+    ) -> Option<Tile> {
         let is_armed = |e: &OwnEntity| {
             input
                 .content()
@@ -506,7 +510,7 @@ impl Intel {
             .min_by_key(|s| {
                 (
                     !s.direct,
-                    route_to(s.tile) / 8,
+                    route_to(s.tile) / u32::from(distance_band.max(1)),
                     std::cmp::Reverse(s.worth),
                     route_to(s.tile),
                 )

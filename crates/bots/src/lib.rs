@@ -19,6 +19,37 @@ pub enum Style {
     Standard,
     Tactical,
 }
+/// Offline Tactical tuning knobs. The default preserves the live policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TacticalParams {
+    pub opening_grunts: u8,
+    pub fresh_entry_ticks: Tick,
+    pub rally_distance_band: u8,
+}
+
+impl Default for TacticalParams {
+    fn default() -> Self {
+        Self {
+            opening_grunts: 8,
+            fresh_entry_ticks: 600,
+            rally_distance_band: 8,
+        }
+    }
+}
+
+impl TacticalParams {
+    pub fn validate(self) -> Result<()> {
+        if self.opening_grunts > 16
+            || !(100..=1800).contains(&self.fresh_entry_ticks)
+            || !(1..=24).contains(&self.rally_distance_band)
+        {
+            return Err("Tactical parameters outside supported ranges".into());
+        }
+        Ok(())
+    }
+}
+
 /// The coordinator advertises this policy to quick play.
 pub const DEFAULT_STYLE: Style = Style::Tactical;
 impl Style {
@@ -301,6 +332,14 @@ fn append(
 
 /// Scoreboard wins keep counting when both players pass.
 pub fn published_plan(input: &PolicyTimeline, style: Style) -> TurnDraft {
+    published_plan_with_params(input, style, TacticalParams::default())
+}
+
+pub fn published_plan_with_params(
+    input: &PolicyTimeline,
+    style: Style,
+    params: TacticalParams,
+) -> TurnDraft {
     let tick = intervention(input, style);
     if input.winning() && style == Style::Tactical {
         return TurnDraft {
@@ -319,7 +358,7 @@ pub fn published_plan(input: &PolicyTimeline, style: Style) -> TurnDraft {
         terrain: &input.timeline.terrain,
     };
     if style == Style::Tactical {
-        return tactical::plan(input, frame, rules);
+        return tactical::plan(input, frame, rules, params);
     }
     plan_frame(frame, input.player(), style, rules, input.revision())
 }
@@ -331,7 +370,15 @@ pub fn plan_frame(
     rules: FrameRules<'_>,
     revision: Revision,
 ) -> TurnDraft {
-    plan_frame_with_rally(state, player, style, rules, revision, None)
+    plan_frame_with_rally(
+        state,
+        player,
+        style,
+        rules,
+        revision,
+        None,
+        TacticalParams::default(),
+    )
 }
 
 fn plan_frame_with_rally(
@@ -341,6 +388,7 @@ fn plan_frame_with_rally(
     rules: FrameRules<'_>,
     revision: Revision,
     rally: Option<Tile>,
+    params: TacticalParams,
 ) -> TurnDraft {
     let FrameRules {
         config,
@@ -669,7 +717,7 @@ fn plan_frame_with_rally(
         });
     }
     if style == Style::Tactical {
-        tactical::develop(state, player, rules, home, target, &mut commands);
+        tactical::develop(state, player, rules, home, target, params, &mut commands);
     }
     if config.control_limit == ControlLimit::SingleOrder {
         commands.truncate(1);

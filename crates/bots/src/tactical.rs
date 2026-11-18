@@ -1,4 +1,7 @@
-use super::{FrameRules, OwnEntity, PlayerFrame, PolicyTimeline, allied, append, distance, ore_at};
+use super::{
+    FrameRules, OwnEntity, PlayerFrame, PolicyTimeline, TacticalParams, allied, append, distance,
+    ore_at,
+};
 use atemporal_contracts::{
     BlueprintSettings, CardinalDirection, Command, ControlLimit, DraftCommand, DraftItemRef,
     Lifecycle, MissileLaunch, Order, PlayerId, Priority, ProductionEdit, Rect, SiloPlan, Terrain,
@@ -69,16 +72,20 @@ fn route_lengths(terrain: &Terrain, home: Tile) -> BTreeMap<Tile, u16> {
     routes
 }
 
-fn factory_queue(recipes: &[TypeKey], desired: usize) -> Option<(Vec<TypeKey>, Vec<bool>)> {
+fn factory_queue(
+    recipes: &[TypeKey],
+    desired: usize,
+    opening_grunts: u8,
+) -> Option<(Vec<TypeKey>, Vec<bool>)> {
     let unit = recipes
         .iter()
         .find(|key| key.as_str() == "tank")
         .or_else(|| recipes.first())?;
     let grunts = recipes.iter().any(|r| r == "grunt");
     let (queue, flags) = if desired == 2 && grunts {
-        let mut queue = vec!["grunt".into(); 8];
+        let mut queue = vec!["grunt".into(); usize::from(opening_grunts)];
         queue.push(unit.clone());
-        let mut flags = vec![false; 8];
+        let mut flags = vec![false; usize::from(opening_grunts)];
         flags.push(true);
         (queue, flags)
     } else if desired == 3 && recipes.iter().any(|r| r == "constructor") {
@@ -188,6 +195,7 @@ pub(super) fn develop(
     rules: FrameRules<'_>,
     home: Tile,
     target: Tile,
+    params: TacticalParams,
     commands: &mut Vec<DraftCommand>,
 ) {
     let FrameRules {
@@ -325,7 +333,9 @@ pub(super) fn develop(
         let (queue, flags, plan) = if structure == "turret" {
             (vec![], vec![], None)
         } else if structure == "factory" {
-            let Some((queue, flags)) = factory_queue(&factory.recipes, desired) else {
+            let Some((queue, flags)) =
+                factory_queue(&factory.recipes, desired, params.opening_grunts)
+            else {
                 continue;
             };
             (queue, flags, None)
@@ -404,9 +414,14 @@ pub(super) fn develop(
 
 mod intel;
 
-pub(super) fn plan(input: &PolicyTimeline, view: &PlayerFrame, rules: FrameRules<'_>) -> TurnDraft {
-    let intel = intel::Intel::scan(input);
-    let rally = intel.rally(input, view);
+pub(super) fn plan(
+    input: &PolicyTimeline,
+    view: &PlayerFrame,
+    rules: FrameRules<'_>,
+    params: TacticalParams,
+) -> TurnDraft {
+    let intel = intel::Intel::scan(input, params.fresh_entry_ticks);
+    let rally = intel.rally(input, view, params.rally_distance_band);
     let mut draft = super::plan_frame_with_rally(
         view,
         input.player(),
@@ -414,6 +429,7 @@ pub(super) fn plan(input: &PolicyTimeline, view: &PlayerFrame, rules: FrameRules
         rules,
         input.revision(),
         rally,
+        params,
     );
     if input.config().control_limit != ControlLimit::SingleOrder {
         direct_silos(input, view, &intel, &mut draft);
