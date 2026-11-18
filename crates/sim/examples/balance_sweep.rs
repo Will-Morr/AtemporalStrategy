@@ -685,7 +685,7 @@ mod tests {
     }
 
     #[test]
-    fn army_reports_deployment_spend_and_health_weighted_survivors() {
+    fn army_reports_deployment_spend() {
         let options = Options::parse(
             ["army", "--budget", "613", "--a", "tank", "--b", "miner"]
                 .map(str::to_owned)
@@ -696,7 +696,6 @@ mod tests {
         let units = factory_roster(&content, false).unwrap();
         let (_, keys) = trials(&options, &units).unwrap();
         let world = arena(&options, content);
-        let mut observed_wounded_survivors = false;
         for key in keys {
             let result = trial(&options, &world, key).unwrap();
             assert_eq!(result.winner, Some("a"));
@@ -710,9 +709,19 @@ mod tests {
                 result.b_result.health_weighted_unit_matter
                     <= result.b_result.surviving_unit_matter
             );
-            observed_wounded_survivors |=
-                result.b_result.health_weighted_unit_matter < result.b_result.surviving_unit_matter;
         }
-        assert!(observed_wounded_survivors);
+    }
+
+    #[test]
+    fn surviving_value_weights_each_unit_by_its_own_health() {
+        let mut world = World::with_content(&["....."], content());
+        let base_id = world.spawn(0, "factory", 0, 0);
+        let tank = world.spawn(0, "tank", 1, 0);
+        world.entity_mut(&tank).hp = world.def("tank").max_hp / 4.0;
+        world.spawn(0, "grunt", 2, 0);
+        let result = summarize(&world, &world.state, 0, &base_id, 115.0);
+        assert_eq!(result.surviving_unit_count, 2);
+        assert_eq!(result.surviving_unit_matter, 115.0);
+        assert_eq!(result.health_weighted_unit_matter, 40.0);
     }
 }
