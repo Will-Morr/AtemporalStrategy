@@ -423,14 +423,14 @@ impl PlayerTimeline {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Sight {
+pub(crate) struct Sight {
     width: u16,
     height: u16,
     tiles: Arc<[u64]>,
 }
 
 impl Sight {
-    fn sees(&self, tile: Tile) -> bool {
+    pub(crate) fn sees(&self, tile: Tile) -> bool {
         if tile.x >= self.width || tile.y >= self.height {
             return false;
         }
@@ -440,7 +440,7 @@ impl Sight {
 }
 
 #[derive(Default)]
-struct VisionCache {
+pub(crate) struct VisionCache {
     walls: BTreeSet<Tile>,
     legacy: bool,
     /// Static obstacles plus current built walls determine a footprint. A wall change clears it.
@@ -448,7 +448,7 @@ struct VisionCache {
 }
 
 impl VisionCache {
-    fn update_walls(&mut self, state: &WorldState) {
+    pub(crate) fn update_walls(&mut self, state: &WorldState) {
         let walls = state
             .entities
             .iter()
@@ -461,12 +461,12 @@ impl VisionCache {
         }
     }
 
-    fn sight(
+    pub(crate) fn sight<T: PartialEq>(
         &mut self,
         state: &WorldState,
         player: PlayerId,
         types: &BTreeMap<&str, &TypeDefinition>,
-        teams: &[SideId],
+        teams: &[T],
         previous: Option<&Sight>,
     ) -> Sight {
         let terrain = &state.terrain;
@@ -609,7 +609,7 @@ fn reuse_rows<'a, T: PartialEq + Clone + 'a>(
     share(current, previous)
 }
 
-fn allied(teams: &[SideId], player: PlayerId, other: PlayerId) -> bool {
+fn allied<T: PartialEq>(teams: &[T], player: PlayerId, other: PlayerId) -> bool {
     teams[usize::from(player)] == teams[usize::from(other)]
 }
 

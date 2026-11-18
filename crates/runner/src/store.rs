@@ -68,9 +68,7 @@ impl Store {
         memory_budget: u64,
     ) -> Result<Self> {
         let mut local = fingerprint(&config, &content)?;
-        if remote.sim_build == "atemporal-sim 0.1.0 rules 7"
-            && atemporal_server::controller::supports_build(&remote.sim_build, &local.sim_build)
-        {
+        if atemporal_server::controller::supports_build(&remote.sim_build, &local.sim_build) {
             local.sim_build.clone_from(&remote.sim_build);
         }
         if local != remote {

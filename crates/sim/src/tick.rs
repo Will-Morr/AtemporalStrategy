@@ -15,6 +15,7 @@ struct Intent {
     mine: bool,
     construct: Option<usize>,
     goal: Option<(Tile, bool)>,
+    retreat: Option<(Tile, Tile)>,
     work_goal: bool,
     hold: bool,
 }
@@ -260,6 +261,43 @@ impl Sim {
                 e.engaged_target = engaged;
             }
             out.push(intent);
+        }
+        if self.artillery_retreat_enabled {
+            self.retreat.last.clear();
+            let candidates: Vec<_> = out
+                .iter()
+                .enumerate()
+                .filter(|(i, intent)| {
+                    (self.retreat.diagnostics
+                        || (intent.attack.is_none()
+                            && self.state.entities[*i].next_move_tick <= self.state.tick))
+                        && self.could_retreat(*i)
+                })
+                .map(|(i, _)| i)
+                .collect();
+            let players: Vec<_> = candidates
+                .iter()
+                .map(|&i| self.state.entities[i].owner)
+                .collect();
+            let sights = self.artillery_sights(&players);
+            for i in candidates {
+                let entity = &self.state.entities[i];
+                let sight = &sights[&self.team_of[usize::from(entity.owner)]];
+                if let Some(diagnostics) = self.plan_artillery_retreat(
+                    i,
+                    sight,
+                    out[i].attack.is_some(),
+                    entity.next_move_tick > self.state.tick,
+                ) {
+                    if !diagnostics.firing && !diagnostics.move_cooldown {
+                        out[i].hold = diagnostics.next.is_none();
+                        out[i].retreat = diagnostics.next.zip(diagnostics.destination);
+                    }
+                    if self.retreat.diagnostics {
+                        self.retreat.last.insert(entity.id.clone(), diagnostics);
+                    }
+                }
+            }
         }
         Ok(out)
     }
@@ -956,10 +994,24 @@ impl Sim {
             {
                 continue;
             }
+            let from = e.tile;
+            if let Some((next, goal)) = intent.retreat {
+                let dx = i32::from(next.x) - i32::from(from.x);
+                let dy = i32::from(next.y) - i32::from(from.y);
+                let rank = self.entity_rank(i);
+                let legal = self.step_legal(from, dx, dy, m.neighbors).is_some();
+                let mover = &mut self.state.entities[i];
+                mover.resolved_destination = Some(goal);
+                mover.goal_settled = false;
+                mover.local_detour.clear();
+                if legal {
+                    moves.push((rank, i, next, direction_of(dx, dy)));
+                }
+                continue;
+            }
             let Some((goal, _)) = intent.goal else {
                 continue;
             };
-            let from = e.tile;
             let ready = e.next_move_tick <= t;
             if self.state.entities[i].resolved_destination != Some(goal) {
                 self.state.entities[i].local_detour.clear();

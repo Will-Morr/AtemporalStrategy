@@ -123,6 +123,10 @@ Factory outputs must push blocking units aside when ready to spawn, rather than 
 
 Tanks and artillery use orthogonal tread movement, never diagonal steps. Tread pathfinding should alternate horizontal and vertical steps where possible instead of completing one axis first, following a more intuitive staircase toward the destination.
 
+## Artillery retreat
+
+Artillery should retreat when an enemy unit is closer than its maximum weapon range minus one tile. It should seek lower combined danger using a map of distance-based threat from enemies and a penalty for tight corners and dead ends, so it can kite without routinely trapping itself. Provide gameplay review frames with adjacent corner, enemy-threat and combined fields, plus a full-map overlay of the retreats planned by all units.
+
 ## Balance experiments
 
 Maintain a reusable tool for direct one-on-one combat experiments on a small, minimal map. Both sides simply send every unit to attack the opposing base. Support a deployed army purchased with a maximum matter budget and a factory with effectively instant build capacity, a preselected repeating queue and a steady matter income per tick. Compare equal budgets or income across seats. Save outcomes, surviving units and surviving unit value, calculated as the sum of each unit’s matter cost times its remaining health fraction.

@@ -126,15 +126,18 @@ pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprin
     })
 }
 
-/// Rules 7 recordings retain their original movement and targeting.
+/// Rules 7 recordings retain their original movement and targeting, and rules 9 retain
+/// their original artillery behavior.
 /// Two different builds used rules 8, so that version cannot be replayed here.
 pub fn supports_build(recorded: &str, current: &str) -> bool {
-    let rules = |build: &str| {
-        build
-            .rsplit_once(" rules ")
-            .and_then(|(_, version)| version.parse::<u32>().ok())
+    let Some(((old_build, old_rules), (new_build, new_rules))) = recorded
+        .rsplit_once(" rules ")
+        .zip(current.rsplit_once(" rules "))
+    else {
+        return false;
     };
-    matches!((rules(recorded), rules(current)), (Some(old), Some(new)) if old == new || (old == 7 && new == 9))
+    old_build == new_build
+        && (old_rules == new_rules || (matches!(old_rules, "7" | "9") && new_rules == "10"))
 }
 
 pub fn now_ms() -> u64 {

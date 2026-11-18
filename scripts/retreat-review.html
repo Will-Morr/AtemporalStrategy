@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Artillery retreat review · Atemporal</title>
+<style>
+:root{font:16px/1.4 system-ui,sans-serif;color:#edf4f7;background:#111923;--panel:#192532;--line:#344858;--sub:#bacad4;--accent:#ffdf83}
+*{box-sizing:border-box}
+body{margin:0}
+main{width:min(1520px,100% - 40px);margin:30px auto 48px}
+h1,h2,p{margin:0}
+h1{font-size:clamp(1.8rem,4vw,2.6rem);letter-spacing:-.04em}
+h2{font-size:1rem}
+p,small,label{color:var(--sub)}
+button,select,input{font:inherit;color:inherit}
+button,select{background:#11202c;border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#player{margin-top:16px}
+.controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.controls label{display:grid;gap:4px;font-size:.84rem}
+.seek{flex:1 1 210px;min-width:130px}
+input[type="range"]{width:100%;accent-color:#7ccce8;margin:6px 0}
+.transport{display:flex;gap:5px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
+.game-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:12px}
+.heat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+canvas{display:block;background:#25262b;border:1px solid #526171;width:100%;height:auto;margin:8px auto 0}
+#game{cursor:crosshair}
+.rules,.key,.legend,.legend-note{font-size:.84rem}
+.rules,.key,.legend-note{margin-top:6px}
+.key{display:flex;flex-wrap:wrap;gap:3px 14px}
+.key b{padding-right:4px;font-size:1.05rem}
+.plan-key{color:#69e7ff}.threat-key{color:#ff8091}.selected-key{color:var(--accent)}
+.legend{margin-top:8px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
+.ramp{height:8px;border-radius:3px;border:1px solid var(--line)}
+#corner-ramp{background:linear-gradient(90deg,rgb(35 46 62),rgb(91 112 178),rgb(224 206 250))}
+#threat-ramp{background:linear-gradient(90deg,rgb(50 32 42),rgb(171 57 73),rgb(255 213 173))}
+#combined-ramp{background:linear-gradient(90deg,rgb(29 55 78),rgb(38 148 155),rgb(241 224 141))}
+#selection{display:block;margin:7px 0;font-variant-numeric:tabular-nums}
+#cell-values{display:block;min-height:1.4em;font:0.85rem/1.4 ui-monospace,monospace;color:var(--sub);margin:7px 0}
+#decisions{display:grid;gap:4px;max-height:270px;overflow:auto;margin:8px 0 0;padding:0;list-style:none}
+#decisions button{width:100%;text-align:left;font-size:.83rem}
+#decisions [aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+#frame-info{margin:6px 0;font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+@media(max-width:1000px){.game-grid{grid-template-columns:1fr}.heat-grid{gap:8px}main{width:calc(100% - 24px)}}
+@media(max-width:650px){.heat-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<h1>Artillery retreat review</h1>
+<p id="provenance" role="status">Loading simulation frames…</p>
+<div id="player" hidden>
+  <div class="controls">
+    <label>Scenario<select id="scenario"></select></label>
+    <label>Artillery<select id="unit"></select></label>
+    <div class="transport">
+      <button id="prev" aria-label="Previous frame">‹</button>
+      <button id="play">Play</button>
+      <button id="next" aria-label="Next frame">›</button>
+    </div>
+    <label class="seek">Frame <input id="frame" type="range" min="0" max="0" value="0" aria-label="Frame"></label>
+  </div>
+  <div class="game-grid">
+    <section class="panel" aria-labelledby="game-title">
+      <h2 id="game-title">Game frame</h2>
+      <p id="frame-info"></p>
+      <canvas id="game" role="img" aria-label="Simulation terrain, units, and planned retreat moves"></canvas>
+      <p class="key"><span><b class="plan-key">↗</b> First planned step</span><span><b class="plan-key">⬡</b> Chosen endpoint</span><span><b class="plan-key">○</b> Holding</span><span><b class="plan-key">Ⅱ</b> Movement cooldown</span><span><b class="plan-key">•</b> Firing</span><span><b class="selected-key">□</b> Selected artillery</span><span><b class="threat-key">◇</b> Threat seen by selected artillery</span></p>
+      <p class="legend-note">Dashed lines connect a gun to its chosen endpoint. The solid arrow shows the proposed first step, before movement resolves.</p>
+      <output id="cell-values"></output>
+    </section>
+    <section class="panel" aria-labelledby="plans-title">
+      <h2 id="plans-title">Retreat plans this frame</h2>
+      <output id="selection"></output>
+      <ul id="decisions"></ul>
+    </section>
+  </div>
+  <div class="heat-grid">
+    <section class="panel">
+      <h2>Artillery corner cost</h2>
+      <canvas id="corner" role="img" aria-label="Corner cost for the selected artillery"></canvas>
+      <div class="legend"><span id="corner-min">—</span><div class="ramp" id="corner-ramp"></div><span id="corner-max">—</span></div>
+      <p class="legend-note" id="corner-note"></p>
+    </section>
+    <section class="panel">
+      <h2>Enemy threat</h2>
+      <canvas id="threat" role="img" aria-label="Enemy threat for the selected artillery"></canvas>
+      <div class="legend"><span id="threat-min">—</span><div class="ramp" id="threat-ramp"></div><span id="threat-max">—</span></div>
+      <p class="legend-note" id="threat-note"></p>
+    </section>
+    <section class="panel">
+      <h2>Combined gradient</h2>
+      <canvas id="combined" role="img" aria-label="Combined retreat gradient for the selected artillery"></canvas>
+      <div class="legend"><span id="combined-min">—</span><div class="ramp" id="combined-ramp"></div><span id="combined-max">—</span></div>
+      <p class="legend-note" id="combined-note"></p>
+    </section>
+  </div>
+</div>
+</main>
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+const tileSize = 24;
+const terrainColors = {wall:'#25262b',floor:'#74747a'};
+const ownerColors = ['#4fc3f7','#ff8a65','#aed581','#ce93d8'];
+const facing = {n:0,ne:1,e:2,se:3,s:4,sw:5,w:6,nw:7};
+const fieldNames = ['corner','threat','combined'];
+const palettes = {
+  corner: [[35,46,62],[91,112,178],[224,206,250]],
+  threat: [[50,32,42],[171,57,73],[255,213,173]],
+  combined: [[29,55,78],[38,148,155],[241,224,141]],
+};
+const number = new Intl.NumberFormat(undefined,{maximumFractionDigits:2});
+const key = id => JSON.stringify(id);
+const coord = tile => '(' + tile.x + ', ' + tile.y + ')';
+const sameTile = (a,b) => a && b && a.x === b.x && a.y === b.y;
+let data, scene, frame, selected, focusTile, playing, layerData = {};
+
+function paintTerrain(ctx, rows) {
+  for (const [y,row] of rows.entries()) {
+    for (let x=0;x<row.length;x++) {
+      ctx.fillStyle = row[x] === '#' ? terrainColors.wall : terrainColors.floor;
+      ctx.fillRect(x*tileSize,y*tileSize,tileSize,tileSize);
+    }
+  }
+}
+
+function center(tile) {
+  return [(tile.x+.5)*tileSize,(tile.y+.5)*tileSize];
+}
+
+// Canvas silhouettes and colors mirror the game renderer in client/src/render.ts.
+function paintUnit(ctx, unit) {
+  const {type_key:type, owner, hp, max_hp:maxHp, tile} = unit;
+  const [x,y] = center(tile);
+  const s = tileSize;
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.strokeStyle = '#071019';
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = ownerColors[owner % ownerColors.length];
+  const box = (x,y,w,h) => {ctx.fillRect(x*s,y*s,w*s,h*s);ctx.strokeRect(x*s,y*s,w*s,h*s);};
+  const circle = (x,y,r) => {ctx.beginPath();ctx.arc(x*s,y*s,r*s,0,Math.PI*2);ctx.fill();ctx.stroke();};
+  const polygon = points => {
+    ctx.beginPath();
+    points.forEach(([x,y],i)=>i ? ctx.lineTo(x*s,y*s) : ctx.moveTo(x*s,y*s));
+    ctx.closePath();ctx.fill();ctx.stroke();
+  };
+  const triangle = (w,h) => polygon([[0,-h],[w,h],[-w,h]]);
+  const structure = ['factory','turret','wall','silo'].includes(type);
+  if (!structure) ctx.rotate((facing[unit.last_move_direction] ?? 0)*Math.PI/4);
+  if (structure) {
+    box(-.4,-.4,.8,.8);
+    ctx.fillStyle='#d7efff';
+    if (type === 'turret') {circle(0,0,.25);box(-.06,-.43,.12,.43);}
+    else if (type === 'factory') {
+      box(-.25,-.23,.15,.3);box(.1,-.23,.15,.3);
+      ctx.fillStyle='#071019';box(-.19,.17,.38,.23);
+    } else if (type === 'silo') {circle(-.18,0,.15);circle(.18,0,.15);}
+  } else if (type === 'scout') {
+    triangle(.29,.4);ctx.fillStyle='#d7efff';triangle(.1,.2);
+  } else if (type === 'tank') {
+    box(-.39,-.32,.18,.69);box(.21,-.32,.18,.69);box(-.24,-.29,.48,.6);
+    ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,-.39,.12,.43);
+  } else if (type === 'artillery') {
+    box(-.38,-.12,.16,.53);box(.22,-.12,.16,.53);
+    ctx.beginPath();
+    for (const y of [.02,.16,.3]) {
+      ctx.moveTo(-.38*s,y*s);ctx.lineTo(-.22*s,y*s);
+      ctx.moveTo(.22*s,y*s);ctx.lineTo(.38*s,y*s);
+    }
+    ctx.stroke();
+    polygon([[0,-.22],[.23,-.04],[.18,.22],[-.18,.22],[-.23,-.04]]);
+    ctx.fillStyle='#d7efff';box(-.075,-.46,.15,.53);box(-.16,-.48,.32,.12);
+    ctx.fillStyle='#071019';ctx.fillRect(-.11*s,-.47*s,.22*s,.045*s);
+  } else if (type === 'constructor') {
+    box(-.28,-.25,.56,.55);ctx.fillStyle='#ffe28a';box(-.36,-.42,.12,.35);
+    box(.24,-.42,.12,.35);box(-.17,-.09,.34,.12);box(-.06,-.2,.12,.34);
+  } else if (type === 'miner') {
+    box(-.34,-.26,.15,.56);box(.19,-.26,.15,.56);box(-.24,-.25,.48,.52);
+    box(-.32,-.36,.64,.13);ctx.fillStyle='#e1d9b5';box(-.13,-.15,.26,.09);
+  } else if (type === 'grinder') {
+    box(-.26,-.12,.52,.5);ctx.fillStyle='#ffb69b';circle(-.2,-.24,.2);circle(.2,-.24,.2);
+  } else {
+    box(-.3,.14,.19,.25);box(.11,.14,.19,.25);triangle(.28,.23);ctx.fillStyle='#d7efff';circle(0,-.1,.12);
+  }
+  ctx.restore();
+  const fraction = hp/maxHp;
+  if (fraction < .999999) {
+    ctx.fillStyle='#111a';ctx.fillRect(x-s/2,y-s/2-3,s,3);
+    ctx.fillStyle=fraction>.5?'#79dc9c':fraction>.25?'#ffc46b':'#ff6375';
+    ctx.fillRect(x-s/2,y-s/2-3,s*Math.max(0,fraction),3);
+  }
+}
+
+function outline(ctx, tile, color, pad = 2) {
+  const [x,y] = center(tile);
+  const side = tileSize - pad*2;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x-side/2,y-side/2,side,side);
+}
+
+function threatMarker(ctx, tile) {
+  const [x,y] = center(tile);
+  ctx.strokeStyle = '#ff8091';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();ctx.moveTo(x,y-10);ctx.lineTo(x+10,y);ctx.lineTo(x,y+10);
+  ctx.lineTo(x-10,y);ctx.closePath();ctx.stroke();
+}
+
+function endpointMarker(ctx, plan, highlighted) {
+  if (!plan.destination || sameTile(plan.from,plan.destination)) return;
+  const [x,y] = center(plan.from);
+  const [tx,ty] = center(plan.destination);
+  ctx.save();
+  ctx.strokeStyle = highlighted ? '#ffdf83' : '#69e7ff';
+  ctx.globalAlpha = highlighted ? .9 : .65;
+  ctx.lineWidth = highlighted ? 2 : 1.4;
+  ctx.setLineDash([3,5]);
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tx,ty);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (let i=0;i<6;i++) {
+    const angle = i*Math.PI/3;
+    const px = tx+Math.cos(angle)*8, py = ty+Math.sin(angle)*8;
+    if (i===0) ctx.moveTo(px,py);
+    else ctx.lineTo(px,py);
+  }
+  ctx.closePath();ctx.stroke();
+  ctx.restore();
+}
+
+function plannedMarker(ctx, plan, highlighted) {
+  const [x,y] = center(plan.from);
+  ctx.save();
+  ctx.strokeStyle = highlighted ? '#ffdf83' : '#69e7ff';
+  ctx.lineWidth = highlighted ? 3 : 2.25;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (plan.next && !sameTile(plan.from,plan.next)) {
+    const [tx,ty] = center(plan.next);
+    const angle = Math.atan2(ty-y,tx-x);
+    const endX = tx-4*Math.cos(angle), endY = ty-4*Math.sin(angle);
+    ctx.moveTo(x+5*Math.cos(angle),y+5*Math.sin(angle));ctx.lineTo(endX,endY);
+    for (const side of [-1,1]) {
+      ctx.moveTo(endX,endY);
+      ctx.lineTo(endX-7*Math.cos(angle+side*.66),endY-7*Math.sin(angle+side*.66));
+    }
+  } else if (!plan.move_cooldown && !plan.firing) {
+    ctx.arc(x,y,9,0,Math.PI*2);
+  }
+  ctx.stroke();
+  if (plan.move_cooldown) {
+    ctx.fillStyle='#0b1726';
+    ctx.fillRect(x-7,y-10,14,13);
+    ctx.beginPath();
+    ctx.moveTo(x-3,y-8);ctx.lineTo(x-3,y);ctx.moveTo(x+3,y-8);ctx.lineTo(x+3,y);
+    ctx.stroke();
+  }
+  if (plan.firing) {
+    ctx.fillStyle='#ffdf83';
+    ctx.beginPath();ctx.arc(x+7,y-7,3,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+}
+
+function colorFor(name, value, min, max) {
+  const position = max === min ? 0 : Math.max(0,Math.min(2,2*(value-min)/(max-min)));
+  const index = Math.min(1,Math.floor(position));
+  const t = position-index;
+  const palette = palettes[name];
+  const rgb = palette[index].map((channel,i)=>Math.round(channel+(palette[index+1][i]-channel)*t));
+  return 'rgb(' + rgb.join(',') + ')';
+}
+
+function canvasContext(canvas, limit) {
+  const rows = scene.map_rows;
+  const width = rows[0].length, height = rows.length;
+  const pixelWidth = width*tileSize, pixelHeight = height*tileSize;
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+    canvas.style.maxWidth = 'calc(' + limit + 'vh * ' + width/height + ')';
+  }
+  const ctx = canvas.getContext('2d');
+  paintTerrain(ctx,rows);
+  return ctx;
+}
+
+function buildLayers(plan) {
+  const scores = plan?.scores ?? [];
+  layerData = Object.fromEntries(fieldNames.map(name=>{
+    const values = new Map();
+    for (const score of scores) {
+      if (Number.isFinite(score[name])) values.set(coord(score.tile),{tile:score.tile,value:score[name],reachable:score.reachable});
+    }
+    const points = [...values.values()].map(entry=>entry.value);
+    return [name,{values,min:points.length ? Math.min(...points) : null,max:points.length ? Math.max(...points) : null}];
+  }));
+}
+
+const fmt = value => value === null || value === undefined ? '—' : number.format(value);
+
+function paintLayers(unit, plan) {
+  for (const name of fieldNames) {
+    const ctx = canvasContext($(name),23);
+    const {values,min,max} = layerData[name];
+    for (const {tile,value,reachable} of values.values()) {
+      ctx.fillStyle = colorFor(name,value,min,max);
+      ctx.fillRect(tile.x*tileSize,tile.y*tileSize,tileSize,tileSize);
+      if (reachable === false) {
+        ctx.fillStyle='#0a141d99';
+        ctx.fillRect(tile.x*tileSize+tileSize*.5-2,tile.y*tileSize+tileSize*.5-2,4,4);
+      }
+    }
+    if (unit) outline(ctx,unit.tile,'#ffdf83',1.5);
+    for (const tile of plan?.threats ?? []) threatMarker(ctx,tile);
+    if (focusTile) outline(ctx,focusTile,'#fff',2);
+    $(name+'-min').textContent = fmt(min);
+    $(name+'-max').textContent = fmt(max);
+  }
+}
+
+function effect(ctx, event) {
+  if (event.kind !== 'attack') return;
+  const [x,y] = center(event.source_tile);
+  const [toX,toY] = center(event.target_tile);
+  ctx.beginPath();ctx.moveTo(x,y);
+  if (event.visual_style === 'artillery') {
+    ctx.strokeStyle='#ffd54f9e';ctx.quadraticCurveTo((x+toX)/2,Math.min(y,toY)-tileSize*2,toX,toY);
+  } else {
+    ctx.strokeStyle='#ff786c75';ctx.lineTo(toX,toY);
+  }
+  ctx.lineWidth=1.5;ctx.stroke();
+}
+
+function paintGame(unit, plan, retreatPlans) {
+  const ctx = canvasContext($('game'),48);
+  for (const {tile,matter} of frame.ore ?? scene.ore ?? []) {
+    if (matter > 0) {
+      ctx.fillStyle='#ffcd3865';
+      ctx.fillRect(tile.x*tileSize+1,tile.y*tileSize+1,tileSize-2,tileSize-2);
+    }
+  }
+  for (const {event} of frame.events) effect(ctx,event);
+  for (const entity of frame.entities) paintUnit(ctx,entity);
+  for (const retreat of retreatPlans) endpointMarker(ctx,retreat,key(retreat.unit_id)===selected);
+  for (const tile of plan?.threats ?? []) threatMarker(ctx,tile);
+  for (const retreat of retreatPlans) plannedMarker(ctx,retreat,key(retreat.unit_id)===selected);
+  if (unit) outline(ctx,unit.tile,'#ffdf83',1);
+  if (focusTile) outline(ctx,focusTile,'#fff',3);
+}
+
+function describe(plan, events) {
+  const id = key(plan.unit_id);
+  const move = events.find(event=>event.kind==='move' && key(event.entity_id)===id);
+  const displacement = events.find(event=>event.kind==='displacement' && key(event.involuntary_entity_id)===id);
+  const parts = [coord(plan.from)];
+  if (plan.next && !sameTile(plan.from,plan.next)) parts.push('candidate ' + coord(plan.next));
+  else parts.push('hold');
+  if (plan.destination && !sameTile(plan.from,plan.destination)) parts.push('endpoint ' + coord(plan.destination));
+  if (plan.firing) parts.push('firing');
+  if (plan.move_cooldown) parts.push('movement cooldown');
+  if (move) parts.push('moved to ' + coord(move.to));
+  else if (displacement) parts.push('displaced to ' + coord(displacement.blocker_to));
+  else if (plan.next && !sameTile(plan.from,plan.next)) parts.push('no resolved move');
+  return parts.join(' · ');
+}
+
+function labelUnit(unit, index) {
+  const actor = scene.actors?.find(actor=>key(actor.id)===key(unit.id));
+  const label = actor?.role?.replaceAll('_',' ');
+  return label ? label + ' · P' + (unit.owner+1) : 'P' + (unit.owner+1) + ' artillery ' + (index+1);
+}
+
+function reflectUnits(artillery) {
+  const control = $('unit');
+  control.replaceChildren(...artillery.map((unit,index)=>{
+    const option = new Option(labelUnit(unit,index),key(unit.id));
+    return option;
+  }));
+  if (!artillery.some(unit=>key(unit.id)===selected)) {
+    selected = [frame.selected_unit_id,frame.retreats[0]?.unit_id,artillery[0]?.id]
+      .filter(id=>id!==undefined)
+      .map(key).find(id=>artillery.some(unit=>key(unit.id)===id)) ?? '';
+  }
+  control.value = selected;
+  control.disabled = artillery.length === 0;
+}
+
+function updatePanels(unit, plan, retreatPlans, artillery) {
+  $('selection').textContent = unit
+    ? labelUnit(unit,artillery.indexOf(unit)) + ' · ' + coord(unit.tile) + ' · ' + fmt(unit.hp) + '/' + fmt(unit.max_hp) + ' HP' +
+      (plan ? ' · ' + plan.threats.length + ' visible threat tiles' : ' · no retreat score at this tick')
+    : 'No artillery at this tick.';
+  const events = frame.events.map(item=>item.event);
+  const list = $('decisions');
+  list.replaceChildren(...retreatPlans.map((retreat,index)=>{
+    const row = document.createElement('li');
+    const button = document.createElement('button');
+    const artIndex = artillery.findIndex(candidate=>key(candidate.id)===key(retreat.unit_id));
+    const title = artIndex<0 ? 'Artillery ' + (index+1) : labelUnit(artillery[artIndex],artIndex);
+    button.textContent = title + ' · ' + describe(retreat,events);
+    button.setAttribute('aria-pressed',String(key(retreat.unit_id)===selected));
+    button.onclick = ()=>{
+      selected = key(retreat.unit_id);
+      $('unit').value = selected;
+      render();
+      list.querySelector('[aria-pressed="true"]')?.focus({preventScroll:true});
+    };
+    row.append(button);
+    return row;
+  }));
+  if (!list.children.length) {
+    const detail = document.createElement('li');
+    detail.textContent = 'No retreat decisions recorded.';
+    list.append(detail);
+  }
+}
+
+function refreshTile() {
+  if (!focusTile) {
+    $('cell-values').textContent = 'Hover a tile to inspect its field values.';
+    return;
+  }
+  const id = coord(focusTile);
+  $('cell-values').textContent = 'Tile ' + id + ' · corner ' + fmt(layerData.corner.values.get(id)?.value) +
+    ' · threat ' + fmt(layerData.threat.values.get(id)?.value) +
+    ' · combined ' + fmt(layerData.combined.values.get(id)?.value) +
+    (layerData.combined.values.get(id)?.reachable === false ? ' · outside endpoint search' : '');
+}
+
+function render() {
+  const index = Number($('frame').value);
+  frame = scene.frames[index];
+  const artillery = frame.entities.filter(entity=>entity.type_key==='artillery');
+  reflectUnits(artillery);
+  const retreatPlans = frame.retreats;
+  const unit = artillery.find(candidate=>key(candidate.id)===selected);
+  const plan = retreatPlans.find(candidate=>key(candidate.unit_id)===selected);
+  const attacks = frame.events.filter(item=>item.event.kind==='attack').length;
+  $('frame-info').textContent = 'Tick ' + frame.tick + ' · ' + frame.label + ' · ' +
+    (index+1) + '/' + scene.frames.length + ' frames' + ' · ' + attacks + (attacks===1 ? ' attack' : ' attacks');
+  $('frame').setAttribute('aria-valuetext','Tick ' + frame.tick + ' · ' + frame.label);
+  $('prev').disabled = index === 0;
+  $('next').disabled = index === scene.frames.length-1;
+  updatePanels(unit,plan,retreatPlans,artillery);
+  buildLayers(plan);
+  paintGame(unit,plan,retreatPlans);
+  paintLayers(unit,plan);
+  refreshTile();
+}
+
+function setFrame(index) {
+  $('frame').value = Math.max(0,Math.min(scene.frames.length-1,index));
+  render();
+}
+
+function stopPlayback() {
+  clearInterval(playing);
+  playing = undefined;
+  $('play').textContent = 'Play';
+}
+
+function firstResolvedRetreat(scene) {
+  return scene.frames.findIndex(frame=>frame.retreats.some(plan=>
+    plan.next && frame.events.some(({event})=>event.kind==='move' &&
+      key(event.entity_id)===key(plan.unit_id) && sameTile(event.to,plan.next))));
+}
+
+function pickScenario(index, requestedTick) {
+  stopPlayback();
+  scene = data.scenarios[index];
+  selected = undefined;
+  focusTile = undefined;
+  $('frame').max = scene.frames.length-1;
+  $('frame').disabled = scene.frames.length === 1;
+  $('play').disabled = scene.frames.length === 1;
+  $('provenance').textContent = 'Simulation rules ' + data.sim_rules_version +
+    (scene.map_seed == null ? ' · controlled map' : ' · generated map seed ' + scene.map_seed) +
+    (scene.setup ? ' · ' + scene.setup : '');
+  const requested = scene.frames.findIndex(frame=>String(frame.tick)===requestedTick);
+  setFrame(requested>=0 ? requested : Math.max(0,firstResolvedRetreat(scene)));
+}
+
+function canvasTile(canvas,event) {
+  const box = canvas.getBoundingClientRect();
+  const width = scene.map_rows[0].length, height = scene.map_rows.length;
+  const x = Math.floor((event.clientX-box.left-canvas.clientLeft)/canvas.clientWidth*width);
+  const y = Math.floor((event.clientY-box.top-canvas.clientTop)/canvas.clientHeight*height);
+  return x>=0 && y>=0 && x<width && y<height ? {x,y} : null;
+}
+
+function renderTile(tile) {
+  if (sameTile(focusTile,tile) || (!focusTile && !tile)) return;
+  focusTile = tile;
+  const unit = frame.entities.find(entity=>key(entity.id)===selected);
+  const retreatPlans = frame.retreats;
+  const plan = retreatPlans.find(candidate=>key(candidate.unit_id)===selected);
+  paintGame(unit,plan,retreatPlans);
+  paintLayers(unit,plan);
+  refreshTile();
+}
+
+for (const canvas of document.querySelectorAll('canvas')) {
+  canvas.onpointermove = event=>renderTile(canvasTile(canvas,event));
+  canvas.onpointerleave = ()=>renderTile(null);
+}
+$('game').onclick = event=>{
+  const tile = canvasTile($('game'),event);
+  const unit = frame.entities.find(entity=>entity.type_key==='artillery' && sameTile(entity.tile,tile));
+  if (unit) {
+    selected = key(unit.id);
+    render();
+  }
+};
+$('scenario').onchange = ()=>pickScenario(Number($('scenario').value));
+$('unit').onchange = ()=>{
+  selected = $('unit').value;
+  render();
+};
+$('frame').oninput = ()=>{
+  stopPlayback();
+  render();
+};
+for (const [id,step] of [['prev',-1],['next',1]]) {
+  $(id).onclick = ()=>{
+    stopPlayback();
+    setFrame(Number($('frame').value)+step);
+  };
+}
+$('play').onclick = ()=>{
+  if (playing) {
+    stopPlayback();
+    return;
+  }
+  if (Number($('frame').value)===scene.frames.length-1) setFrame(0);
+  $('play').textContent = 'Pause';
+  playing = setInterval(()=>{
+    setFrame(Number($('frame').value)+1);
+    if (Number($('frame').value)===scene.frames.length-1) stopPlayback();
+  },300);
+};
+$('corner-note').textContent = 'Open exits and escape arms lower this cost. Gray floor has no recorded score.';
+$('threat-note').textContent = 'Threat contribution. Pink diamonds mark visible threats used in scoring.';
+$('combined-note').textContent = 'Corner cost + enemy threat. Lower is better. Dotted tiles are outside the endpoint search. The step decision also charges travel and first-tile occupancy.';
+fetch('frames.json').then(response=>{
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  return response.json();
+}).then(exported=>{
+  if (exported.schema_version!==1 || !exported.scenarios?.length ||
+      exported.scenarios.some(item=>!item.frames?.length || !item.map_rows?.length)) {
+    throw new Error('Unsupported or empty frame export');
+  }
+  data = exported;
+  $('scenario').replaceChildren(...data.scenarios.map((item,index)=>new Option(item.title,index)));
+  const query = new URLSearchParams(location.search);
+  const requested = data.scenarios.findIndex(item=>item.id===query.get('scenario'));
+  const corner = data.scenarios.findIndex(item=>item.id==='dead-end');
+  const sceneIndex = requested>=0 ? requested : Math.max(0,corner);
+  $('scenario').value = String(sceneIndex);
+  pickScenario(sceneIndex,query.get('tick'));
+  $('player').hidden = false;
+}).catch(error=>{
+  $('provenance').textContent = 'Could not load frames.json · ' + error.message;
+});
+</script>
+</body>
+</html>

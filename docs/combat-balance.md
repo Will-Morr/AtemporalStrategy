@@ -97,3 +97,24 @@ For the long-horizon checks, both seats were run for each combination of straigh
 ```sh
 taskset -c 0 nice -n 15 "$lab" factory --arena snake --income 6 --ticks 1800 --a grunt --b tank
 ```
+
+## Artillery retreat review
+
+In rules 10, artillery reacts to spotted enemy units strictly inside its gun range minus one tile. For the default gun, an enemy at exactly nine tiles does not trigger retreat. A ready gun fires first. Between shots, it can retreat on its normal movement cooldown and keeps its underlying order.
+
+The planner scores candidate tiles using the sum of distance-based pressure from spotted enemy units and a penalty for tight exits and short dead ends. It searches up to six orthogonal steps for a better endpoint and gives shorter routes preference. That allows a sideways first step toward open ground. Allies, satellites and recon can supply the sighting that triggers retreat.
+
+To review the decisions, run these commands from the repository root. The exporter advances the real simulator with diagnostics enabled. It writes the map, entities, pre-movement plans and resolved events for selected ticks.
+
+```sh
+mkdir -p artifacts/retreat-review
+CARGO_BUILD_JOBS=2 taskset -c 0,1 nice -n 12 cargo run --release --locked -p atemporal-sim --example artillery_retreat_review -- artifacts/retreat-review/frames.json
+cp scripts/retreat-review.html artifacts/retreat-review/index.html
+python3 -m http.server 8847 --bind 127.0.0.1 --directory artifacts/retreat-review
+```
+
+The review shows snapshot S[t] before the tick is resolved. A solid arrow is a proposed immediate cardinal step and the endpoint marker is the lookahead destination. The event record reports the move that actually happened. A ready shot takes its tick; a movement cooldown or another unit winning an occupied tile can keep the gun in place. Replanning on the next eligible tick lets the destination change as enemies move.
+
+The [saved rules-10 review frames](balance-data/artillery-retreat-rules10.json.gz) can also be decompressed directly to `artifacts/retreat-review/frames.json`. The 18 frames cover five staged engagements. The full-map case uses generated terrain and an authored force placement. In the dead-end case, compare ticks 1 and 7 for the sideways step and entry into the room. In the generated case, tick 73 shows two guns retreating on the same tick.
+
+A paired smoke test ran artillery against grunts, grinders and tanks, in both seats on open and snake maps, with a 600-matter army budget or 3-matter factory income and a 900-tick cap. Open factory artillery flipped from two losses against tanks to two wins. All six snake factory games hit the cap with retreat enabled, up from two. Longer trials would be needed to determine their eventual winners. The change also costs simulation time. In three single-core runs of the 2,000-entity, 150-tick mixed battle benchmark, median wall time rose from 387 ms to 542 ms.
