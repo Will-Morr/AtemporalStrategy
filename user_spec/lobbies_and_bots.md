@@ -52,6 +52,8 @@ Bot policies must have the same information a player can learn during a match. T
 
 Tactical should use the published player timeline to direct troops and choose missile targets. It should remember where enemy units were observed coming from and use that evidence to estimate possible factory locations under fog.
 
+Explore how a bot could improve through self-play and iterative parameter tuning. The choice of optimizer, opponent pool and training budget is open.
+
 ## Execution constraints
 
 Proceed independently through implementation and verification without asking for further input. While the device is busy, keep builds and tests low priority and resource usage limited; use at most two CPU cores and run heavy checks sequentially. This temporarily supersedes the earlier six-core test allowance.
