@@ -59,6 +59,7 @@ button:focus-visible,select:focus-visible,.scroll:focus-visible{outline:2px soli
 .survival-matrix .row-label,.survival-matrix .mean{width:3.1rem;white-space:nowrap}
 .survival-matrix .mean{color:var(--muted)}
 .survival-cell{display:block;width:100%;height:clamp(13px,3.15svh,32px);padding:0;border:0;border-radius:3px;font-size:inherit;font-weight:650;font-variant-numeric:tabular-nums}
+.survival-value{font-size:clamp(.56rem,1.2vw,.82rem);white-space:nowrap}
 .survival-cell.missing{background:repeating-linear-gradient(135deg,#202a24 0 4px,#29352d 4px 8px);color:var(--muted)}
 .survival-cell:is(:hover,:focus-visible,[aria-pressed="true"]){position:relative;outline:2px solid #fff;outline-offset:-2px}
 .pickers,.sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
@@ -80,7 +81,7 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
 .status{margin-bottom:14px}
 .status:empty{display:none}
 [hidden]{display:none!important}
-@media(max-width:690px){
+@media(max-width:800px){
   .survival-value{display:none}
   .survival-tools p,.survival-selection p{font-size:.8rem}
   .survival-matrix .row-label,.survival-matrix .mean{width:2.1rem}
