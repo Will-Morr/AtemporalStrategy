@@ -138,6 +138,17 @@ The playtest-polish scenarios additionally cover shared-browser player identitie
 
 `production-priority.spec.mjs` exercises mixed priority and Off, per-item loop flags, Shift-click batches, blueprint/site/live queues, local queue references, and spending pause/resume through actual commits. `scoreboard.spec.mjs` drives a real three-win match, checks leader/winner totals at past ticks and rounds, and refreshes between wins. Both run through authoritative or input-only transport and desktop viewports. `npm test` also checks score aggregation across revision ancestry, teams, draw credits, adjusted leadership and incomplete history. Full-frame screenshots still require manual inspection before claiming visual readiness.
 
+`factory-queue-delete.spec.mjs` uses the authoritative server to check keyboard removal in one factory, shared pointer removal in two factories, undo and redo across reload, and the remaining production items after a commit. The storage scenarios fill Chromium's actual session quota. One verifies that a current draft saved without history restores on reload. The other verifies that in-tab edits and undo still work when neither write fits, that the warning stays separate from the orders banner, and that persistence resumes after storage is freed.
+
+With Chromium 153.0.8010.12 at 1920 × 1080, a baseline delete at the storage limit threw `QuotaExceededError` before the queue could redraw. The in-memory count fell from five to four while the UI still showed five. The table shows one instrumented run of 30 removals per selection type. Panel time is accumulated inside `updatePanels` and excludes input dispatch and frame presentation.
+
+| Selection | Draft writes before → after | Serialized characters before → after | Panel time before → after |
+| --- | ---: | ---: | ---: |
+| One planned factory | 30 → 30 | 4,985,992 → 391,498 | 362.6 → 178.3 ms |
+| Two planned factories | 90 → 30 | 85,236,006 → 1,002,867 | 3,792.5 → 257.3 ms |
+
+The reports, traces and full frames are under `artifacts/ui/factory-delete-baseline`, `artifacts/ui/factory-delete-fixed`, `artifacts/ui/factory-delete-final` and `artifacts/ui/factory-delete-toast`.
+
 ## Missile silo scenarios
 
 `missiles.spec.mjs` builds and configures a silo through real inputs, checks all three production recipes, manual launch queues and cancellation, range/impact previews, satellite flight and destination vision, blast results, stockpiling, refresh and replay rewrites. A second scenario supplies automatic targeting with an allied spotter, then rewrites the automatic plan into stored ammunition. Both run through the controller or native peripheral on desktop Chromium. The tests compare preview flight times with resolved arrivals and play a one-tick satellite flight between compact replay samples. Capture and inspect the full placement, stockpile, targeting and flight frames; a passing control assertion alone does not establish visual quality.
