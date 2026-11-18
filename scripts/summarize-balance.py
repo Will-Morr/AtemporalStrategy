@@ -238,7 +238,12 @@ def surviving_matter_figure(meta, pairs):
                else f"Factory · {meta['income_per_tick']:g} matter per side per tick")
     figure.text(.025,.975, f"{arena}  /  {economy}", fontsize=19, weight="bold")
     figure.text(.025,.948, "Average surviving matter of the row roster against the column opponent", fontsize=14)
-    figure.text(.025,.927, f"Rules {meta['sim_rules_version']}   ·   Base destruction or tick {meta['ticks']:,}   ·   Both axes ordered by average survival", fontsize=10)
+    identity = f"Rules {meta['sim_rules_version']}"
+    if content_hash := meta.get("effective_content_hash"):
+        identity += f"   ·   Content {content_hash[:12]}"
+    figure.text(.025, .927,
+                f"{identity}   ·   Base destruction or tick {meta['ticks']:,}   ·   Both axes ordered by average survival",
+                fontsize=10)
     if maximum > 0:
         color_ax = figure.add_axes((.21,.044,.40,.012))
         bar = figure.colorbar(ScalarMappable(norm=norm, cmap=cmap), cax=color_ax, orientation="horizontal")

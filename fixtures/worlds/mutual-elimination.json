@@ -11,7 +11,7 @@
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "0b0611e7088a385d06c61e8886345259d73e1bec91d727e9ef39d818fc5cc60b",
-      "content_hash": "925072ba8917f17b74a05b1c963c722693f84163389df69d490290f404ff4231"
+      "content_hash": "23fa3323759b44276e77bfdaf84c7c7e93fe6330b6efec55e6bc811cb642fd5a"
     },
     "config": {
       "schema_version": 2,
@@ -57,7 +57,7 @@
           "key": "artillery",
           "kind": "unit",
           "shape": "circle",
-          "matter_cost": 80.0,
+          "matter_cost": 120.0,
           "max_hp": 50.0,
           "counts_for_survival": false,
           "provides_build_ability": false,
@@ -152,13 +152,13 @@
           "key": "grinder",
           "kind": "unit",
           "shape": "circle",
-          "matter_cost": 100.0,
+          "matter_cost": 110.0,
           "max_hp": 275.0,
           "counts_for_survival": false,
           "provides_build_ability": false,
           "movement": {
             "neighbors": "eight",
-            "cooldown": 2
+            "cooldown": 1
           },
           "vision": 5.0,
           "weapon": null,

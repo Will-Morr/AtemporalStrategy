@@ -5,7 +5,7 @@
       "key": "artillery",
       "kind": "unit",
       "shape": "circle",
-      "matter_cost": 80.0,
+      "matter_cost": 120.0,
       "max_hp": 50.0,
       "counts_for_survival": false,
       "provides_build_ability": false,
@@ -106,13 +106,13 @@
       "key": "grinder",
       "kind": "unit",
       "shape": "circle",
-      "matter_cost": 100.0,
+      "matter_cost": 110.0,
       "max_hp": 275.0,
       "counts_for_survival": false,
       "provides_build_ability": false,
       "movement": {
         "neighbors": "eight",
-        "cooldown": 2
+        "cooldown": 1
       },
       "vision": 5.0,
       "weapon": {

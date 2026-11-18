@@ -145,11 +145,11 @@ fn constructors_choose_shortest_working_route_for_funded_and_unfunded_sites() {
 }
 
 #[test]
-fn grinders_trade_range_for_speed_and_a_small_health_advantage_at_tank_cost() {
+fn grinders_trade_range_for_speed_and_a_small_health_advantage() {
     let w = World::new(&DETOUR);
     let tank = w.def("tank");
     let grinder = w.def("grinder");
-    assert_eq!(grinder.matter_cost, tank.matter_cost);
+    assert_eq!(grinder.matter_cost - tank.matter_cost, 10.0);
     assert!(grinder.max_hp > tank.max_hp && grinder.max_hp <= tank.max_hp * 1.2);
     let (g, t) = (
         grinder.weapon.as_ref().unwrap(),

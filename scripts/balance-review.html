@@ -111,6 +111,7 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
   </div>
   <div class="controls">
     <label>Dataset<select id="rules">
+      <option value="artillery-factory-patch">Artillery factory balance patch</option>
       <option value="artillery-tank-mobility">Artillery and tank mobility</option>
       <option value="grunt-patch">Grunt balance patch · previous</option>
       <option value="12">Rules 12 · pre-patch</option>
@@ -195,7 +196,9 @@ const unitCodes = {artillery: 'A', grinder: 'R', grunt: 'G', scout: 'S', tank: '
 const rosterCode = roster => roster.map(unit => unitCodes[unit] ?? unit).join('');
 const cache = new Map();
 const controls = [byId('rules'), byId('mode'), byId('arena')];
+const currentRules = 'artillery-factory-patch';
 const datasets = {
+  [currentRules]: {version: 12, directory: 'artillery-factory-patch/', title: 'Artillery factory balance patch'},
   'artillery-tank-mobility': {version: 12, directory: 'artillery-tank-mobility/', title: 'Artillery and tank mobility'},
   'grunt-patch': {version: 12, directory: 'grunt-patch/', title: 'Grunt balance patch · previous'},
   '12': {version: 12, directory: 'rules12/', title: 'Rules 12 · pre-patch'},
@@ -204,6 +207,10 @@ const datasets = {
 };
 // Factory sweeps override production rates, so their effective content hash differs.
 const contentHashes = {
+  [currentRules]: {
+    army: 'ca69ad9d1da84e07ee9f7390a5765bda5412e2ac6b4923b0bce29459581b1a75',
+    factory: '3469d22b8f558cfc36f576ac6b3a7eb0aa9926b25c9f643cb1c3973c1335e3d6',
+  },
   'artillery-tank-mobility': {
     army: 'ba15189b1463f78e435de18303de940fea79508bfb58def4751618237c1b39f3',
     factory: 'dce3099d41d18b52c09f338723fc048af6becc7bfbfa9a33117980c1addbdb67',
@@ -660,7 +667,7 @@ async function changeDataset(fallback = false) {
     let [rules, mode, arena] = controls.map(control => control.value);
     let next = await loadSweep(rules, mode, arena);
     if (!next && fallback) {
-      for (const candidate of [['grunt-patch', mode, arena], ['12', mode, arena], ['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
+      for (const candidate of [['artillery-tank-mobility', mode, arena], ['grunt-patch', mode, arena], ['12', mode, arena], ['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
         next = await loadSweep(...candidate);
         if (next) {
           [rules, mode, arena] = candidate;
@@ -724,8 +731,10 @@ const query = new URLSearchParams(location.search);
 const requestedRules = query.get('rules');
 const requestedMode = query.get('mode');
 const requestedArena = query.get('arena');
-setControls(Object.hasOwn(datasets, requestedRules) ? requestedRules : 'artillery-tank-mobility',
-  ['army', '3', '6'].includes(requestedMode) ? requestedMode : 'army',
+const rules = Object.hasOwn(datasets, requestedRules) ? requestedRules : currentRules;
+const defaultMode = rules === currentRules ? '6' : 'army';
+setControls(rules,
+  ['army', '3', '6'].includes(requestedMode) ? requestedMode : defaultMode,
   Object.hasOwn(arenas, requestedArena) ? requestedArena : 'snake');
 void changeDataset(!requestedRules && !requestedMode && !requestedArena);
 </script>

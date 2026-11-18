@@ -48,34 +48,40 @@ Doubling income reversed both grunt–tank fights and both artillery–tank pure
 
 ## Local review page
 
-A single static page reads the result files in its directory. To recreate the geometry review and its historical comparison on localhost, run these commands from the repository root, then open [the review on port 8846](http://127.0.0.1:8846/).
+The static reviewer reads measured trial files in its directory. To reproduce the current release and the historical comparisons, run these commands from the repository root, then open [the review on port 8846](http://127.0.0.1:8846/).
 
 ```sh
-mkdir -p artifacts/balance/review
-cp scripts/balance-review.html artifacts/balance/review/index.html
-gzip -dc docs/balance-data/open-factory-income3-rules8.jsonl.gz > artifacts/balance/review/factory.jsonl
-gzip -dc docs/balance-data/open-factory-income6-rules8.jsonl.gz > artifacts/balance/review/factory6.jsonl
+review=artifacts/balance/review
+mkdir -p "$review"
+cp scripts/balance-review.html "$review/index.html"
+gzip -dc docs/balance-data/open-factory-income3-rules8.jsonl.gz > "$review/factory.jsonl"
+gzip -dc docs/balance-data/open-factory-income6-rules8.jsonl.gz > "$review/factory6.jsonl"
 for path in docs/balance-data/corridors-rules9/*.jsonl.gz; do
   name=$(basename "$path" .gz)
-  gzip -dc "$path" > "artifacts/balance/review/$name"
+  gzip -dc "$path" > "$review/$name"
 done
-mkdir -p artifacts/balance/review/rules12
-for path in docs/balance-data/survival-rules12/*.jsonl.gz; do
-  name=$(basename "$path" .gz)
-  gzip -dc "$path" > "artifacts/balance/review/rules12/$name"
-done
-mkdir -p artifacts/balance/review/grunt-patch
-for path in docs/balance-data/grunt-balance-patch/*.jsonl.gz; do
-  name=$(basename "$path" .gz)
-  gzip -dc "$path" > "artifacts/balance/review/grunt-patch/$name"
-done
-# Generate the downloadable images and combined PDF (requires Matplotlib).
-python3 scripts/summarize-balance.py docs/balance-data/survival-rules12 --heatmap artifacts/balance/review/rules12/survival-charts.pdf
-python3 scripts/summarize-balance.py docs/balance-data/grunt-balance-patch --heatmap artifacts/balance/review/grunt-patch/survival-charts.pdf
-python3 -m http.server 8846 --bind 127.0.0.1 --directory artifacts/balance/review
+
+# Prepare data, downloadable PNGs and a combined PDF (requires Matplotlib).
+prepare_review() {
+  source="docs/balance-data/$1"
+  destination="$review/$2"
+  mkdir -p "$destination"
+  for path in "$source"/*.jsonl.gz; do
+    name=$(basename "$path" .gz)
+    gzip -dc "$path" > "$destination/$name"
+  done
+  python3 scripts/summarize-balance.py "$source" --heatmap "$destination/survival-charts.pdf"
+}
+prepare_review survival-rules12 rules12
+prepare_review grunt-balance-patch grunt-patch
+prepare_review artillery-tank-mobility artillery-tank-mobility
+prepare_review artillery-factory-patch artillery-factory-patch
+python3 -m http.server 8846 --bind 127.0.0.1 --directory "$review"
 ```
 
 The review was checked in Chromium at desktop and phone widths. Selecting a matrix cell opens its seat results, selecting a mix opens its matchup, and switching income preserves the selected rosters. The survival chart fits the available width. On narrow screens, it uses abbreviated roster labels and color-only cells. Select a cell to read its exact value and both roster names. The fit check covered viewport widths from 320 to 1,920 pixels. Screenshots and browser traces are in `artifacts/ui/combat-chart-fit/`.
+
+For the artillery factory patch, the reviewer opens the winding-corridor factory chart at 6 matter/tick. Live Chromium checks loaded all four arenas and three economies, opened both seat results, preserved the selected rosters across income changes and opened all five historical datasets. The full chart fit at 390px; desktop and mobile screenshots, the trace and inspected PNG/PDF exports are in `artifacts/ui/artillery-factory-final/`. Exact zero is solid black across the reviewer and both export formats.
 
 ### Surviving matter by matchup
 
@@ -123,6 +129,24 @@ taskset -c 0 nice -n 15 "$lab" factory --arena snake --income 6 --ticks 3600 --a
 ```
 
 The [extended snake duel log](balance-data/artillery-tank-snake-3600.jsonl.gz) records both seats through base destruction.
+
+### Factory artillery rework
+
+Artillery costs 120 matter, up from 80. At an income of 6 matter per tick, a factory needs 20 ticks of income to pay for a gun, up from about 13. Grinders move every tick instead of every two ticks, and their cost rises from 100 to 110. They keep their 275 HP and melee weapon. In a 600-matter army the new prices buy five guns or five grinders. Testing the faster grinder at the old price produced 27 wins in 28 matchups on three army maps.
+
+The [factory rework](balance-data/artillery-factory-patch/) and [mobility baseline](balance-data/artillery-tank-mobility/) each contain 2,700 mirrored trials. The factory comparison below uses four maps, two incomes and a 1,800-tick cutoff. Each matchup was played from both starting seats.
+
+| Factory result | Mobility baseline | Factory rework |
+| --- | ---: | ---: |
+| Artillery roster vs artillery-free roster, wins / losses / cutoffs (800 games) | 538 / 80 / 182 | 321 / 351 / 128 |
+| Pure artillery vs 14 other rosters, wins / losses / cutoffs (224 games) | 155 / 19 / 50 | 72 / 115 / 37 |
+| Grunt wins against pure artillery (16 games) | 8 | 16 |
+| Grinder wins against pure artillery (16 games) | 4 | 16 |
+| Factory panels led by pure artillery in average surviving matter | 8 of 8 | 2 of 8 |
+
+In 600-matter army duels, artillery beat tanks, tanks beat grinders, and both fast units beat artillery from both seats on all four maps. Every army roster had an opponent that beat it from both seats. The most wins achieved by any roster were 26 of 28 in an army panel and 24 of 28 in a factory panel.
+
+The two high-income corridors still favor artillery in surviving matter. On the winding map at 6 matter/tick, 105 of 210 non-mirror games reached the cutoff, down from 126. Artillery destroyed the tank factory in 12 of 16 standard factory duels. Extending the four winding-map cutoffs produced four more artillery wins, at ticks 2,165 and 2,431 at income 3 and 3,871 and 3,847 at income 6. Income also changes how reinforcements arrive. At the intermediate income of 5 on the straight corridor, both grunt–artillery games reached tick 3,600 with both bases standing and artillery holding over 17,700 surviving matter in each seat. The [extended duel logs](balance-data/artillery-factory-checks/) record these outcomes.
 
 ## Calibrating corridor width
 
