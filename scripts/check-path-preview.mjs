@@ -18,6 +18,7 @@ console.log('Path previews: movement rules, caching, blocked goals, work adjacen
 f=new PreviewFields(terrain,new Set());
 assert.deepEqual(f.route({x:0,y:0},{x:2,y:2},'four'),[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:2,y:1},{x:2,y:2}]);
 assert.deepEqual(f.route({x:0,y:0},{x:2,y:2},'four',false,'e')[1],{x:0,y:1});
+assert.deepEqual(f.route({x:0,y:0},{x:2,y:2},'four',false,'e',false),[{x:0,y:0},{x:1,y:0},{x:2,y:0},{x:2,y:1},{x:2,y:2}]);
 const area={min:{x:0,y:0},max:{x:4,y:4}},ore=new Set([1,4]);
 const miners=[{key:'a',from:{x:0,y:0},area,rule:'four',retained:{x:4,y:0}},{key:'b',from:{x:0,y:1},area,rule:'four'}];
 let targets=miningTargets(f,miners,i=>ore.has(i)?10:0);

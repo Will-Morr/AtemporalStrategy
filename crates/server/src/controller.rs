@@ -126,19 +126,23 @@ pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprin
     })
 }
 
-/// Rules 7 recordings retain their original movement and targeting, and rules 9 through 11 retain
-/// their original artillery behavior.
-/// Two different builds used rules 8, so that version cannot be replayed here.
-pub fn supports_build(recorded: &str, current: &str) -> bool {
+/// Rules 7 and 9–11 retain their original behavior. Rules 8 had two incompatible
+/// implementations, and only the stock public build can be identified unambiguously.
+pub fn supports_build(recorded: &Fingerprint, current: &Fingerprint) -> bool {
     let Some(((old_build, old_rules), (new_build, new_rules))) = recorded
+        .sim_build
         .rsplit_once(" rules ")
-        .zip(current.rsplit_once(" rules "))
+        .zip(current.sim_build.rsplit_once(" rules "))
     else {
         return false;
     };
     old_build == new_build
-        && (old_rules == new_rules
-            || (matches!(old_rules, "7" | "9" | "10" | "11") && new_rules == "12"))
+        && if old_rules == "8" {
+            new_rules == "12" && atemporal_sim::is_public_rules8(recorded)
+        } else {
+            old_rules == new_rules
+                || (matches!(old_rules, "7" | "9" | "10" | "11") && new_rules == "12")
+        }
 }
 
 pub fn now_ms() -> u64 {
@@ -2015,18 +2019,19 @@ impl Controller {
         c.match_id = match_id;
         c.config = loaded.manifest.config.clone();
         c.fingerprint.config_hash = identity::canonical_hash(&c.config)?;
+        ensure_archive_fingerprint(&loaded, &c.fingerprint)?;
         let recorded = &loaded.manifest.fingerprint;
-        if recorded.content_hash != c.fingerprint.content_hash
-            || recorded.config_hash != c.fingerprint.config_hash
-            || recorded.schema_version != c.fingerprint.schema_version
+        if atemporal_sim::is_public_rules8(recorded)
+            && let Some(last) = loaded.rounds.last()
         {
-            return Err("archive was recorded under different content/config; refusing to replay it silently".into());
-        }
-        if !supports_build(&recorded.sim_build, &c.fingerprint.sim_build) {
-            return Err(format!(
-                "archive uses incompatible simulator rules/build: {}; this server uses {}. Resume with the original binary.",
-                recorded.sim_build, c.fingerprint.sim_build
-            ));
+            let request = archived_round_request(&loaded, &c.content, last)?;
+            let result = atemporal_sim::run(&request, &AtomicBool::new(false), &mut |_| {})?;
+            if result.final_hash != last.final_hash || result.outcome != last.outcome {
+                return Err(
+                    "stock public rules 8 archive does not reproduce its latest recorded outcome"
+                        .into(),
+                );
+            }
         }
         c.fingerprint.sim_build.clone_from(&recorded.sim_build);
         let players = usize::from(c.config.player_count);
@@ -2304,18 +2309,44 @@ pub fn collect_run(request: &SimRequest, data: &mut RevisionData, players: u8) -
     Ok(())
 }
 
+fn ensure_archive_fingerprint(loaded: &Loaded, current: &Fingerprint) -> Result<()> {
+    let recorded = &loaded.manifest.fingerprint;
+    if recorded.content_hash != current.content_hash
+        || recorded.config_hash != current.config_hash
+        || recorded.schema_version != current.schema_version
+    {
+        return Err("archive was recorded under different content/config or schema".into());
+    }
+    if !supports_build(recorded, current) {
+        return Err(format!(
+            "archive uses incompatible simulator rules/build: {}; this server uses {}. Verify with the original binary.",
+            recorded.sim_build, current.sim_build
+        ));
+    }
+    Ok(())
+}
+
 /// Reconstruct the inputs of one completed round without resuming or writing to the archive.
 pub fn archived_request(
     loaded: &Loaded,
     content: &Content,
     revision: Revision,
 ) -> Result<SimRequest> {
-    let config = &loaded.manifest.config;
+    ensure_archive_fingerprint(loaded, &fingerprint(&loaded.manifest.config, content)?)?;
     let record = loaded
         .rounds
         .iter()
         .find(|r| r.revision == revision)
         .ok_or("revision is not published")?;
+    archived_round_request(loaded, content, record)
+}
+
+fn archived_round_request(
+    loaded: &Loaded,
+    content: &Content,
+    record: &RoundRecord,
+) -> Result<SimRequest> {
+    let config = &loaded.manifest.config;
     let parent = (record.round > 0)
         .then(|| {
             loaded
@@ -2347,22 +2378,14 @@ pub fn archived_request(
 /// `--verify`: replay every recorded round from the initial state and compare final hashes.
 pub fn verify_archive(loaded: &Loaded, content: &Content) -> Result<bool> {
     let config = &loaded.manifest.config;
-    let recorded = &loaded.manifest.fingerprint.sim_build;
-    let current = fingerprint(config, content)?.sim_build;
-    if !supports_build(recorded, &current) {
-        return Err(format!(
-            "archive uses incompatible simulator rules/build: {recorded}; this server uses {current}. Verify with the original binary."
-        ));
-    }
+    ensure_archive_fingerprint(loaded, &fingerprint(config, content)?)?;
     let mut all_match = true;
     for record in &loaded.rounds {
-        let request = archived_request(loaded, content, record.revision)?;
+        let request = archived_round_request(loaded, content, record)?;
         let started = Instant::now();
-        let mut data = RevisionData::new(record.revision, record.round, None, 0);
-        collect_run(&request, &mut data, config.player_count)?;
-        let terminal = data.outcome.as_ref().map_or(0, |o| o.terminal_state_tick);
-        let ok =
-            data.final_hash == record.final_hash && terminal == record.outcome.terminal_state_tick;
+        let result = atemporal_sim::run(&request, &AtomicBool::new(false), &mut |_| {})?;
+        let terminal = result.outcome.terminal_state_tick;
+        let ok = result.final_hash == record.final_hash && result.outcome == record.outcome;
         all_match &= ok;
         println!(
             "round {} revision {}: {} (terminal {} vs recorded {}, {:?}, hash {}…)",
@@ -2372,7 +2395,7 @@ pub fn verify_archive(loaded: &Loaded, content: &Content) -> Result<bool> {
             terminal,
             record.outcome.terminal_state_tick,
             started.elapsed(),
-            &data.final_hash[..12.min(data.final_hash.len())]
+            &result.final_hash[..12.min(result.final_hash.len())]
         );
     }
     Ok(all_match)
@@ -3180,6 +3203,43 @@ pub(crate) mod tests {
         .err()
         .unwrap();
         assert!(err.contains("different content/config"), "{err}");
+    }
+
+    #[test]
+    fn stock_public_rules_eight_resumes_only_when_the_latest_outcome_reproduces() {
+        let mut c = controller(false, |_| {});
+        c.content_yaml =
+            include_str!("../../../fixtures/compatibility/public-rules8-content.json").into();
+        c.content = atemporal_content::load_content(&c.content_yaml).unwrap();
+        c.fingerprint = fingerprint(&c.config, &c.content).unwrap();
+        c.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 8".into();
+        let a = claim(&mut c, 0, None).unwrap();
+        claim(&mut c, 1, None).unwrap();
+        c.start_match(&a, c.lobby.revision).unwrap();
+        let rx = c.start_job(0, vec![], vec![]).unwrap();
+        run_round(&mut c, rx);
+        let resumed = reopen(&c);
+        assert_eq!(resumed.fingerprint, c.fingerprint);
+        assert_eq!(resumed.phase, Phase::Planning);
+
+        let (archive, mut loaded) = Archive::open(&c.replay_root, &c.match_id).unwrap();
+        assert!(verify_archive(&loaded, &c.content).unwrap());
+        loaded.rounds.last_mut().unwrap().final_hash = "0".repeat(64);
+        assert!(!verify_archive(&loaded, &c.content).unwrap());
+        let setup = atemporal_content::load_setup(&loaded.config_yaml).unwrap();
+        let err = Controller::resume(
+            setup,
+            c.content.clone(),
+            "/guide/".into(),
+            c.replay_root.clone(),
+            SimThread::spawn(),
+            c.match_id.clone(),
+            archive,
+            loaded,
+        )
+        .err()
+        .unwrap();
+        assert!(err.contains("does not reproduce"), "{err}");
     }
 
     #[test]

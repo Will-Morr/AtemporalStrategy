@@ -25,14 +25,14 @@ export class PreviewFields {
     for(let head=0;head<queue.length;head++)for(const [dx,dy] of dirs){const t=this.step(queue[head],dx,dy);if(t&&dist[this.index(t)]<0){dist[this.index(t)]=dist[this.index(queue[head])]+1;queue.push(t);}}
     if(this.fields.size>=256)this.fields.clear();this.fields.set(key,dist);return dist;
   }
-  route(from: Tile, goal: Tile, rule: Neighbors, adjacent=false, facing="n"): Tile[] {
+  route(from: Tile, goal: Tile, rule: Neighbors, adjacent=false, facing="n", alternateTreads=true): Tile[] {
     const dist=this.field(goal,rule,adjacent),route=[from];
     if(!this.open(from)||dist[this.index(from)]<0)return [];
     const dirs=DIRS.slice(0,rule==='four'?4:8);
     while(dist[this.index(from)]>0){
       let next:Tile|null=null,best=dist[this.index(from)],bestRepeat=2;
       const horizontal=facing==='e'||facing==='w';
-      for(const [dx,dy] of dirs){const t=this.step(from,dx,dy);const repeat=rule==='four'&&((dx!==0)===horizontal)?1:0;if(t&&dist[this.index(t)]>=0&&(dist[this.index(t)]<best||(next&&dist[this.index(t)]===best&&repeat<bestRepeat))){next=t;best=dist[this.index(t)];bestRepeat=repeat;}}
+      for(const [dx,dy] of dirs){const t=this.step(from,dx,dy);const repeat=alternateTreads&&rule==='four'&&((dx!==0)===horizontal)?1:0;if(t&&dist[this.index(t)]>=0&&(dist[this.index(t)]<best||(next&&dist[this.index(t)]===best&&repeat<bestRepeat))){next=t;best=dist[this.index(t)];bestRepeat=repeat;}}
       if(!next)return [];route.push(next);facing=next.x!==from.x?'e':'n';from=next;
     }
     return route;

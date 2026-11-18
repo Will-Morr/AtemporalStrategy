@@ -21,6 +21,13 @@ pub use world::Sim;
 /// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
 pub const RULES_VERSION: u32 = 12;
 
+/// The stock public build used rules 8 before alternate tread movement and retreat.
+pub fn is_public_rules8(fingerprint: &Fingerprint) -> bool {
+    fingerprint.sim_build == "atemporal-sim 0.1.0 rules 8"
+        && fingerprint.content_hash
+            == "a8da7078e2f636421a3cf02f05d1691cb94b8f3f876757b01f85a58b6e02af59"
+}
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Run a job from its checkpoint to the horizon or inactivity, emitting samples/checkpoints/events.

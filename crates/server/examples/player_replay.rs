@@ -1,10 +1,7 @@
 //! Export one seat's observations of a published match revision as newline-delimited JSON.
 use atemporal_bots::TurnMarker;
 use atemporal_content::load_archived_content;
-use atemporal_server::{
-    archive::Archive,
-    controller::{archived_request, fingerprint, supports_build},
-};
+use atemporal_server::{archive::Archive, controller::archived_request};
 use atemporal_sim::{
     PlayerId, Result, Revision,
     player_timeline::{self, PlayerFrame, PublicStatsSample},
@@ -66,13 +63,6 @@ fn export(
     .ok_or("requested revision has not been published")?;
     let recorded = &archive.manifest.fingerprint;
     let content = load_archived_content(&archive.content_yaml, &recorded.content_hash)?;
-    let current = fingerprint(&archive.manifest.config, &content)?;
-    if !supports_build(&recorded.sim_build, &current.sim_build)
-        || current.config_hash != recorded.config_hash
-        || current.schema_version != recorded.schema_version
-    {
-        return Err("archive has an incompatible rules build, config or schema".into());
-    }
     let request = archived_request(&archive, &content, record.revision)?;
     let view = player_timeline::build_verified(
         &request,

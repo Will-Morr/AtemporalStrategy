@@ -23,6 +23,7 @@ pub struct Sim {
     pub content: Content,
     pub state: WorldState,
     pub(crate) legacy_rules: bool,
+    pub(crate) alternate_treads: bool,
     pub(crate) terrain_corner_scores: Option<std::sync::Arc<[i32]>>,
     pub(crate) artillery_retreat_margin: f64,
     pub(crate) artillery_retreat_enabled: bool,
@@ -61,6 +62,15 @@ impl Sim {
     pub fn new(request: &SimRequest) -> Result<Self> {
         let content = normalize_content(request.content.clone())?;
         atemporal_content::validate_config(&request.config)?;
+        let build = &request.fingerprint.sim_build;
+        let legacy_rules = build.ends_with(" rules 7");
+        let public_rules8 = is_public_rules8(&request.fingerprint);
+        if build.ends_with(" rules 8")
+            && (!public_rules8
+                || identity::canonical_hash(&content)? != request.fingerprint.content_hash)
+        {
+            return Err("ambiguous rules 8 build/content; use the original simulator".into());
+        }
         let state = identity::canonical_world(&request.checkpoint)?;
         for e in &state.entities {
             let def = content
@@ -120,19 +130,21 @@ impl Sim {
             dictionary.insert(entry.id.clone(), index as u32);
         }
         let mut sim = Self {
-            legacy_rules: request.fingerprint.sim_build.ends_with(" rules 7"),
-            terrain_corner_scores: (![" rules 7", " rules 9", " rules 10", " rules 11"]
-                .iter()
-                .any(|suffix| request.fingerprint.sim_build.ends_with(suffix)))
+            legacy_rules,
+            alternate_treads: !legacy_rules && !public_rules8,
+            terrain_corner_scores: (!public_rules8
+                && ![" rules 7", " rules 9", " rules 10", " rules 11"]
+                    .iter()
+                    .any(|suffix| build.ends_with(suffix)))
             .then(|| crate::artillery::terrain_corner::cached(&state.terrain)),
-            artillery_retreat_margin: if request.fingerprint.sim_build.ends_with(" rules 10") {
+            artillery_retreat_margin: if build.ends_with(" rules 10") {
                 1.0
             } else {
                 2.0
             },
-            artillery_retreat_enabled: ![" rules 7", " rules 9"]
-                .iter()
-                .any(|suffix| request.fingerprint.sim_build.ends_with(suffix)),
+            artillery_retreat_enabled: !public_rules8
+                && !legacy_rules
+                && !build.ends_with(" rules 9"),
             retreat: Default::default(),
             config: request.config.clone(),
             content,

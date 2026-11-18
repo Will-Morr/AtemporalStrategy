@@ -55,7 +55,7 @@ export class OrderPreviews {
         }
         if(!goal)continue;
         targets.set(`${goal.x},${goal.y}`,goal);
-        const points=r.pathPreviews?fields.route(from,goal,rule,adjacent,factory?(v.outputDirection??v.exact?.production?.output_direction??'e'):v.facing):[from,goal];
+        const points=r.pathPreviews?fields.route(from,goal,rule,adjacent,factory?(v.outputDirection??v.exact?.production?.output_direction??'e'):v.facing,g.net.rulesVersion>=9):[from,goal];
         this.routes.push({entity:idKey(v.id),rule,actual:actual.has(rule),from,goal,points});
       }
     }

@@ -139,7 +139,7 @@ impl Sim {
             self.state.entities[mover].last_move_direction,
             Direction::E | Direction::W
         );
-        let alternate_axes = neighbors == Neighbors::Four && !self.legacy_rules;
+        let alternate_axes = neighbors == Neighbors::Four && self.alternate_treads;
         let repeats_axis = |dx: i32| alternate_axes && (dx != 0) == horizontal;
         let mut best: Option<(u16, Occupancy, bool, Tile, Direction)> = None;
         for (dx, dy, dir) in &DIRS[..count] {

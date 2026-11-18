@@ -68,7 +68,7 @@ impl Store {
         memory_budget: u64,
     ) -> Result<Self> {
         let mut local = fingerprint(&config, &content)?;
-        if atemporal_server::controller::supports_build(&remote.sim_build, &local.sim_build) {
+        if atemporal_server::controller::supports_build(&remote, &local) {
             local.sim_build.clone_from(&remote.sim_build);
         }
         if local != remote {
@@ -1061,6 +1061,38 @@ pub fn is_local_query(client: &ClientMessage) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stock_public_rules_eight_is_the_only_accepted_rules_eight_fingerprint() {
+        let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))
+            .unwrap()
+            .match_defaults;
+        config.seed = 42u64.try_into().unwrap();
+        let stock = load_content(include_str!(
+            "../../../fixtures/compatibility/public-rules8-content.json"
+        ))
+        .unwrap();
+        let mut custom = stock.clone();
+        custom.types[0].matter_cost += 1.0;
+        for (content, supported) in [(stock, true), (custom, false)] {
+            let initial = atemporal_sim::map::generate(&config, &content).unwrap();
+            let mut remote = fingerprint(&config, &content).unwrap();
+            remote.sim_build = "atemporal-sim 0.1.0 rules 8".into();
+            let store = Store::new(
+                "test".into(),
+                remote.clone(),
+                config.clone(),
+                content,
+                initial,
+                1 << 26,
+            );
+            if supported {
+                assert_eq!(store.unwrap().fingerprint, remote);
+            } else {
+                assert!(store.is_err());
+            }
+        }
+    }
+
     #[test]
     fn unpublished_inputs_can_be_replaced_and_reopened_without_reusing_a_preview() {
         let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))

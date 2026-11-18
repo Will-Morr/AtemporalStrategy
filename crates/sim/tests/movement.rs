@@ -367,3 +367,59 @@ fn rules_seven_keeps_fixed_tread_axis_precedence() {
         vec![tile(3, 3), tile(4, 3), tile(5, 3), tile(5, 4), tile(5, 5)]
     );
 }
+
+#[test]
+fn stock_public_rules_eight_keeps_fixed_axes_and_artillery_holds() {
+    let mut world = World::new(&["...................."; 9]);
+    world.content = load_content(include_str!(
+        "../../../fixtures/compatibility/public-rules8-content.json"
+    ))
+    .unwrap();
+    let tank = world.spawn_with(0, "tank", 3, 3, attack_move(5, 5));
+    let gun = world.spawn(0, "artillery", 10, 5);
+    world.entity_mut(&gun).next_action_tick = 20;
+    world.spawn(1, "miner", 15, 5);
+
+    let mut request = world.request();
+    request.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 8".into();
+    request.fingerprint.content_hash = atemporal_content::content_hash(&world.content).unwrap();
+    assert!(is_public_rules8(&request.fingerprint));
+    let mut sim = Sim::new(&request).unwrap();
+    sim.set_artillery_retreat_diagnostics(true);
+    for _ in 0..5 {
+        sim.step(&mut |_| {}).unwrap();
+    }
+    assert_eq!(entity(&sim.state, &tank).tile, tile(5, 3));
+    assert_eq!(entity(&sim.state, &gun).tile, tile(10, 5));
+    assert!(sim.last_artillery_retreats().is_empty());
+
+    request.content.types[0].matter_cost += 1.0;
+    assert!(
+        Sim::new(&request).is_err(),
+        "a claimed stock hash is checked"
+    );
+    request.fingerprint.content_hash = atemporal_content::content_hash(&request.content).unwrap();
+    assert!(Sim::new(&request).is_err(), "custom rules 8 is ambiguous");
+}
+
+#[test]
+fn stock_public_rules_eight_uses_wall_aware_indirect_targeting() {
+    let content = load_content(include_str!(
+        "../../../fixtures/compatibility/public-rules8-content.json"
+    ))
+    .unwrap();
+    let mut world = World::with_content(&["....#......."; 7], content);
+    world.spawn(0, "artillery", 2, 3);
+    let target = world.spawn(1, "miner", 6, 3);
+    let mut request = world.request();
+    request.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 8".into();
+    request.fingerprint.content_hash = atemporal_content::content_hash(&world.content).unwrap();
+    let mut sim = Sim::new(&request).unwrap();
+    sim.step(&mut |_| {}).unwrap();
+    assert_eq!(entity(&sim.state, &target).hp, world.def("miner").max_hp);
+
+    request.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 7".into();
+    let mut legacy_vision = Sim::new(&request).unwrap();
+    legacy_vision.step(&mut |_| {}).unwrap();
+    assert!(entity(&legacy_vision.state, &target).hp < world.def("miner").max_hp);
+}
