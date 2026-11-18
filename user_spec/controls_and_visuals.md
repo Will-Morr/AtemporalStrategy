@@ -61,7 +61,7 @@ Complete and commit these fixes before implementing multiplayer, single-order, a
 
 ## Follow-up playtest usability
 
-Reduce the bottom command deck height by 30%, replace dense diagnostic text with readable summaries, and make destructive/clearing buttons state exactly what they remove. Show single-unit stats in a corner and icons for the current selection. Factories, including unfunded blueprints and construction sites, need visible queue icons/counts, priority and loop status, straightforward queue removal, and clear newborn orders. Looping must be configurable before completion. Replay speed must be visibly adjustable.
+Reduce the bottom command deck height by 30%, replace dense diagnostic text with readable summaries, and make destructive/clearing buttons state exactly what they remove. Show single-unit stats in a corner and icons for the current selection. Factories, including unfunded blueprints and construction sites, need visible queue icons/counts, priority and loop status, straightforward queue removal, and clear newborn orders. Repeated queue deletions should keep the page responsive, including when editing several factories together. Looping must be configurable before completion. Replay speed must be visibly adjustable.
 
 Refresh/rejoin must visibly identify the player and preserve independent identities in multiple windows. Never briefly reveal enemy blueprints while seeking. Replace the activity-filled timeline with one bar divided horizontally by player, marking every exact command tick and highlighting each player's most recently written tick. Retain selected-recipient tick highlights.
 

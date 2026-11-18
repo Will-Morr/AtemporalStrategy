@@ -1,3 +1,4 @@
+import {packDraft, unpackDraft, type Draft} from './draft-storage';
 import {practice} from './practice';
 import {GroundVision, BuildingMemory, playerSeesEntity, playerVisibility} from './vision';
 import {guideUrl} from './session';
@@ -77,15 +78,6 @@ type Mode =
   | { kind: 'stored-target'; order: 'attack' }
   | { kind: 'membership'; add: boolean }
   | { kind: 'binding' };
-
-interface Draft {
-  tick: number | null;
-  commands: DraftCommand[];
-  undo: {commands: DraftCommand[]; tick: number | null}[];
-  redo: {commands: DraftCommand[]; tick: number | null}[];
-  policy: FutureOrderPolicy;
-  selected: number | null;
-}
 
 export class Game {
   readonly renderer: Renderer;
@@ -196,8 +188,10 @@ export class Game {
       this.committed = m.committed_players;
       this.progress = null;
       if (!this.draftRestored && this.player !== null) {
-        const saved = JSON.parse(sessionStorage.getItem(this.draftKey) ?? 'null');
-        if (saved?.round === m.round && !this.draft.commands.length) this.draft = saved.draft;
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(this.draftKey) ?? 'null');
+          if (saved?.round === m.round && !this.draft.commands.length) this.draft = unpackDraft(saved.draft);
+        } catch { this.toast('Could not restore the saved draft in this tab.'); }
         this.draftRestored = true;
       }
       this.updatePanels();
@@ -785,7 +779,8 @@ export class Game {
     if(factories.length<2){action();return;}
     if(!this.canStage().ok){this.toast(this.canStage().reason);return;}
     const mixed=new Set(factories.map(v=>factorySignature(this,v))).size>1;
-    const before=structuredClone(this.draft);
+    const before=this.draft;
+    this.draft={...before,commands:[...before.commands]};
     this.factoryEditing=true;
     try {
       if(mixed)for(const v of factories){
@@ -802,7 +797,8 @@ export class Game {
       action();
       if(this.config.control_limit==='single_order'&&this.draft.commands.length>1){this.draft=before;this.toast('This shared edit needs multiple commands. In single-order mode, select factories individually.');}
       else {this.draft.undo=[...before.undo,{commands:before.commands,tick:before.tick}];this.draft.redo=[];}
-    } finally {this.factoryEditing=false;this.updatePanels();}
+    } catch (error) { this.draft=before; throw error; }
+    finally {this.factoryEditing=false;this.updatePanels();}
   }
 
   stage(command: Command, policy: FutureOrderPolicy = 'keep'): void {
@@ -824,12 +820,15 @@ export class Game {
         const left=old[field] as unknown[]|undefined,right=next[field] as unknown[];
         const payload=(c:Record<string,unknown>)=>JSON.stringify({...c,[field]:undefined});
         if(left&&payload(old)===payload(next)&&!left.some(a=>right.some(b=>JSON.stringify(a)===JSON.stringify(b)))){
-          previous.command={...previous.command,[field]:[...left,...right]} as DraftCommand['command'];this.updatePanels();return;
+          this.draft.commands[this.draft.commands.length-1]={...previous,command:{...previous.command,[field]:[...left,...right]} as DraftCommand['command']};
+          return;
         }
       }
     }
-    this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});
-    this.draft.redo = [];
+    if (!this.factoryEditing) {
+      this.draft.undo.push({commands:this.draft.commands,tick:this.draft.tick});
+      this.draft.redo = [];
+    }
     this.draft.tick = Math.floor(this.playhead);
     $('toast').classList.remove('active');
     // A later draft assignment replaces the same recipients' earlier action; undo restores it.
@@ -842,8 +841,8 @@ export class Game {
         return [d];
       });
     }
-    this.draft.commands.push({ local_id: `d${Date.now()}-${this.draft.commands.length}`, command: command as DraftCommand['command'], future_orders: policy });
-    this.updatePanels();
+    this.draft.commands = [...this.draft.commands, { local_id: `d${Date.now()}-${this.draft.commands.length}`, command: command as DraftCommand['command'], future_orders: policy }];
+    if (!this.factoryEditing) this.updatePanels();
   }
 
   undo(): void {
@@ -1421,11 +1420,31 @@ export class Game {
     }
   }
 
-  updatePanels(): void {
-    if (this.draftRestored) {
-      if (!practice && this.draft.commands.length) sessionStorage.setItem(this.draftKey, JSON.stringify({round: this.round, draft: this.draft}));
-      else sessionStorage.removeItem(this.draftKey);
+  private lastSavedCommands?: DraftCommand[];
+  private lastSavedState = '';
+
+  private persistDraft(): void {
+    if (!this.draftRestored) return;
+    const d = this.draft;
+    const state = JSON.stringify([this.round, d.tick, d.selected, d.policy, d.undo.length, d.redo.length]);
+    if (this.lastSavedCommands === d.commands && this.lastSavedState === state) return;
+    this.lastSavedCommands = d.commands;
+    this.lastSavedState = state;
+    try {
+      if (practice || !d.commands.length) sessionStorage.removeItem(this.draftKey);
+      else sessionStorage.setItem(this.draftKey, JSON.stringify({round:this.round, draft:packDraft(d)}));
+    } catch {
+      try {
+        sessionStorage.removeItem(this.draftKey);
+        if (d.commands.length && !practice) {
+          sessionStorage.setItem(this.draftKey, JSON.stringify({round:this.round, draft:{...d,undo:[],redo:[]}}));
+        }
+      } catch { this.toast('Browser storage is full or unavailable. Keep this tab open until you commit.'); }
     }
+  }
+
+  updatePanels(): void {
+    this.persistDraft();
     updateRematch(this);
     this.updateTop();
     this.experience?.update();
