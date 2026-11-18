@@ -39,6 +39,13 @@ test('a silo supplies a batch of identical launches and a staged reset preserves
   await a.locator('#commit').click();
   await expect(b.locator('#turn-banner')).toContainText('Player 0 is waiting for your turn');
   await review.capture('other-player-waiting',b);
+  await b.getByRole('button',{name:'Minimize',exact:true}).click();
+  const compact = b.getByRole('button',{name:'Player waiting',exact:true});
+  await expect(compact).toHaveAttribute('aria-expanded','false');
+  expect((await b.locator('#turn-banner').boundingBox()).width).toBeLessThan(150);
+  await review.capture('other-player-waiting-minimized',b);
+  await compact.click();
+  await expect(b.locator('#turn-banner-message')).toBeVisible();
   await b.locator('#commit').click();await revision(a,1);await revision(b,1);
   await seek(a,13);await tile(a,silo);await expect(a.locator('.missile-launches li')).toHaveCount(5);
   await seek(a,0);await a.getByRole('button',{name:'Clear all future orders'}).click();

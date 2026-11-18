@@ -33,9 +33,14 @@ test('landing page starts a default bot match with one click and retains the pla
   expect(directory.user).toBe('Quick player');
   await page.getByRole('button',{name:'All units',exact:true}).click();
   await expect(page.locator('#selection .unit-icon')).toHaveCount(3);
+  await page.getByRole('button',{name:'Minimize',exact:true}).click();
+  const waiting = page.getByRole('button',{name:'Player waiting',exact:true});
+  await expect(waiting).toBeVisible();
   await page.locator('#commit').click();await revision(page,1);
+  await expect(waiting).toBeVisible();
   await review.capture('quick-play-first-round',page);
   await page.reload();await revision(page,1);
+  await expect(waiting).toBeVisible();
   expect(await page.evaluate(()=>window.atemporal.player)).toBe(0);
   await page.getByRole('link',{name:'All games',exact:true}).click();
   await expect(page).toHaveURL(server.url+'lobbies/');
