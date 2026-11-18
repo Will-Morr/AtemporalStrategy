@@ -118,3 +118,9 @@ Missile costs are now fixed by the user: silo 300 matter, Satellite 50, Cluster 
 Generate five map candidates before a game and let the controlling player pick one. Show the options and current choice to all players. When a game ends, show a small menu for starting a new game from within the UI.
 
 Factory outputs must push blocking units aside when ready to spawn, rather than waiting indefinitely for their orders to move them.
+
+## Balance experiments
+
+Maintain a reusable tool for direct one-on-one combat experiments on a small, minimal map. Both sides simply send every unit to attack the opposing base. Support a deployed army purchased with a maximum matter budget and a factory with effectively instant build capacity, a preselected repeating queue and a steady matter income per tick. Compare equal budgets or income across seats. Save outcomes, surviving units and surviving unit value, calculated as the sum of each unit’s matter cost times its remaining health fraction.
+
+Factory experiments should compare every unit head-to-head and explore every two-unit combination for synergies. Allocate equal matter to each unit type in a mixture and interleave their production over time. Keep long-running experiments suitable for background execution with bounded CPU usage.

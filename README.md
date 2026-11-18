@@ -78,6 +78,8 @@ The coordinator saves its directory, open lobbies and per-game archives under `g
 
 Quick play uses **Tactical 2.0**. Choose **Standard 1.0** in the game directory to practice against the original opponent. Both bots spend normal resources, use player vision and submit ordinary orders. Bot-only playtests stop at the chosen round budget. Read the [balance and replay results](docs/balance-analysis.md) for the comparison. To write a bot or analyze a replay from one player’s perspective, see [Developing a bot](docs/lobbies-and-bots.md#developing-a-bot).
 
+Use the [combat balance lab](docs/combat-balance.md) to compare units on equal budgets, try alternative unit stats, and measure what survives.
+
 For the original standalone workflow, add `--single-match`; its archives still live under `replays/`. Resume a standalone archive with:
 
 ```sh

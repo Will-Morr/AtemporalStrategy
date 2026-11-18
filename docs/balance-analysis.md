@@ -39,6 +39,8 @@ Tactical also won all ten completed matches against Standard on seeds 13, 42, 97
 
 As a check on the historical data, the old-rules replay of November round nine reproduced the published full state at terminal tick 1,104, SHA-256 `b52757065aebfeb378aae262e35c15adf5fed2c85319434280acc4a495233871`.
 
+The [reusable combat balance lab](combat-balance.md) adds income-limited factories, complete pure and mixed rosters, and downloadable results for comparing production economies.
+
 ## Equal-budget scenarios
 
 The engine ran seven recipes against one another, swapping their sides on an open 31×15 map and the same map crossed by a three-tile chokepoint. Each seat got 600 matter. In field fights both armies started deployed, with unspent change kept in the bank. In queue trials both sides started with one factory, an attack rally and a repeating recipe. The simulation stopped by tick 900. Field victory required eliminating the other army. Queue victory required destroying the other factory. The net exchange below uses the opposing side's lost invested matter minus the tested side's losses, including the loss of a factory.

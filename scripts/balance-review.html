@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Atemporal · Combat Balance Lab</title>
+<style>
+:root{font:16px/1.5 system-ui,sans-serif;color:#eff2ea;background:#141a17;--panel:#1c2520;--line:#37443c;--muted:#b5c1b6;--lime:#d5ef9e;--warm:#f1bc9e}
+*{box-sizing:border-box}
+body{margin:0}
+main{width:min(1200px,100% - 40px);margin:0 auto 60px}
+header{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:end;padding:38px 0 24px;border-bottom:1px solid var(--line);margin-bottom:24px}
+.brand{color:var(--lime);font-size:.82rem;font-weight:750;letter-spacing:.15em;text-transform:uppercase}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(2rem,6vw,3.55rem);line-height:1.1;letter-spacing:-.055em;margin:.22em 0}
+h2{font-size:1.27rem;letter-spacing:-.02em}
+h3{font-size:1rem}
+p,.muted{color:var(--muted);font-size:.9rem}
+fieldset{margin:0;padding:0;border:0}
+legend{font-size:.8rem;font-weight:650;color:var(--muted);margin-bottom:6px}
+.toggle{display:flex;gap:4px;background:#101612;padding:4px;border:1px solid var(--line);border-radius:8px}
+.toggle label{cursor:pointer;display:flex;align-items:center;gap:6px;padding:5px 9px;color:var(--muted);border-radius:4px;font-size:.85rem;white-space:nowrap}
+.toggle label:has(:checked){background:var(--lime);color:#202a1a;font-weight:700}
+.toggle input{accent-color:#334b2a;margin:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:20px;min-width:0}
+.section-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:5px 18px;margin-bottom:12px}
+.grids{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:20px;align-items:start}
+.scroll{overflow:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;text-align:left}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:.83rem}
+thead th{color:var(--muted);font-weight:600}
+.matrix th{white-space:nowrap}
+.matrix td{padding:4px;text-align:center}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,select:focus-visible,.scroll:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.cell{width:100%;min-width:55px;padding:7px 2px;border:1px solid transparent;border-radius:5px;background:#354138;color:#f4f5ee;font-weight:650;white-space:nowrap}
+.cell.win{background:#395633;color:#e5f8d4}
+.cell.loss{background:#543a31;color:#ffe2d3}
+.cell[aria-pressed="true"]{border-color:var(--lime)}
+.cell:hover,.text-button:hover{filter:brightness(1.2)}
+.pickers,.sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pickers{margin-bottom:14px}
+.pickers label{display:grid;gap:5px;color:var(--muted);font-size:.85rem}
+select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);border-radius:6px;padding:8px}
+.match{border:1px solid var(--line);border-radius:8px;margin-top:9px;padding:11px}
+.match header{margin:0 0 10px;padding:0 0 8px;gap:2px 12px}
+.match header strong{color:var(--lime);font-size:.9rem}
+.side{min-width:0}
+.side h3{font-size:.85rem;overflow-wrap:anywhere}
+.value{color:#f1f4ea;font-size:1.3rem;font-weight:700}
+.units{list-style:none;padding:0;margin:7px 0 0}
+.units li{font-size:.8rem;display:flex;justify-content:space-between;gap:5px;padding:3px 0;border-bottom:1px solid var(--line)}
+.units span:last-child{color:var(--muted);white-space:nowrap}
+.text-button{border:0;padding:0;background:none;color:var(--lime);text-align:left;text-decoration:underline;text-underline-offset:.2em}
+.up{color:var(--lime)}
+.down{color:var(--warm)}
+.status{margin-bottom:14px}
+.status:empty{display:none}
+[hidden]{display:none!important}
+@media(max-width:900px){.grids{grid-template-columns:1fr;gap:0}}
+@media(max-width:480px){main{width:calc(100% - 24px)}header{padding-top:22px}.panel{padding:12px}th,td{padding-inline:5px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <p class="brand">Atemporal</p>
+    <h1>Combat Balance Lab</h1>
+    <p id="subtitle">Mirrored factory duels</p>
+  </div>
+  <fieldset>
+    <legend>Income per side per tick</legend>
+    <div class="toggle">
+      <label><input type="radio" name="income" value="factory.jsonl" checked>3 matter</label>
+      <label><input type="radio" name="income" value="factory6.jsonl">6 matter</label>
+    </div>
+  </fieldset>
+</header>
+<p id="status" class="status" role="status" aria-live="polite">Loading sweep…</p>
+<div id="results" class="grids" hidden>
+  <section class="panel">
+    <div class="section-head">
+      <h2>Pure matchups</h2>
+      <p>Wins / draws / losses for the row unit</p>
+    </div>
+    <div class="scroll" tabindex="0" aria-label="Pure-unit matchup matrix">
+      <table class="matrix" aria-label="Pure-unit matchup matrix" id="matrix"></table>
+    </div>
+  </section>
+  <section class="panel" id="matchup-panel">
+    <div class="section-head"><h2>Inspect matchup</h2></div>
+    <div class="pickers">
+      <label>Roster A<select id="roster-a"></select></label>
+      <label>Roster B<select id="roster-b"></select></label>
+    </div>
+    <div id="matchups" aria-live="polite"></div>
+  </section>
+  <section class="panel">
+    <div class="section-head"><h2>Mixed queue lift</h2></div>
+    <p>Score gives half credit for a draw. Lift compares the mix with the mean score of its two pure components against the same pure opponents.</p>
+    <div class="scroll" tabindex="0" aria-label="Mixed queue lift rankings">
+      <table aria-label="Mixed queue lift rankings">
+        <thead><tr><th scope="col">Queue</th><th scope="col">Score</th><th scope="col">Lift</th><th scope="col">Surviving matter margin</th></tr></thead>
+        <tbody id="mixes"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</main>
+<script>
+'use strict';
+
+const byId = id => document.getElementById(id);
+const status = byId('status');
+const selectors = [byId('roster-a'), byId('roster-b')];
+const number = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
+const format = value => number.format(value);
+const signed = value => (value > 0 ? '+' : '') + format(value);
+const key = roster => roster.join('+');
+const name = roster => roster.map(unit => unit.replaceAll('_', ' ').replace(/^./, first => first.toUpperCase())).join(' + ');
+const cache = new Map();
+let dataset;
+let requestVersion = 0;
+
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function addResult(groups, a, b, seat, winner, first, second, trial) {
+  const id = a + '/' + b;
+  if (!groups.has(id)) groups.set(id, []);
+  groups.get(id).push({seat, winner, first, second, ticks: trial.ticks, stop: trial.stop});
+}
+
+async function load(file) {
+  if (cache.has(file)) return cache.get(file);
+  const response = await fetch(file);
+  if (!response.ok) throw new Error(file + ' returned HTTP ' + response.status);
+  const [meta, ...trials] = (await response.text()).trim().split(/\r?\n/).map(line => JSON.parse(line));
+  if (meta.kind !== 'metadata' || meta.schema_version !== 1 || trials.some(trial => trial.kind !== 'trial')) {
+    throw new Error('Unrecognized sweep format');
+  }
+  const groups = new Map();
+  for (const trial of trials) {
+    const a = key(trial.a), b = key(trial.b);
+    addResult(groups, a, b, trial.a_seat, trial.winner, trial.a_result, trial.b_result, trial);
+    if (a !== b) {
+      const winner = trial.winner === null ? null : trial.winner === 'a' ? 'b' : 'a';
+      addResult(groups, b, a, 1 - trial.a_seat, winner, trial.b_result, trial.a_result, trial);
+    }
+  }
+  const data = {
+    meta, groups, count: trials.length, pure: meta.rosters.filter(roster => roster.length === 1),
+    rosters: new Map(meta.rosters.map(roster => [key(roster), roster])),
+  };
+  cache.set(file, data);
+  return data;
+}
+
+function matches(a, b) {
+  return dataset.groups.get(a + '/' + b) || [];
+}
+
+function score(trials) {
+  return trials.reduce((sum, trial) => sum + (trial.winner === 'a' ? 1 : trial.winner === null ? 0.5 : 0), 0) / trials.length;
+}
+
+function selectMatch(a, b, jump) {
+  selectors[0].value = a;
+  selectors[1].value = b;
+  showMatchup();
+  if (jump && matchMedia('(max-width:900px)').matches) {
+    byId('matchup-panel').scrollIntoView({block: 'start'});
+  }
+}
+
+function renderMatrix() {
+  const table = byId('matrix');
+  const head = element('thead');
+  const headings = element('tr');
+  headings.append(element('th', 'Unit'));
+  for (const unit of dataset.pure) {
+    const heading = element('th', name(unit));
+    heading.scope = 'col';
+    headings.append(heading);
+  }
+  head.append(headings);
+  const body = element('tbody');
+  for (const a of dataset.pure) {
+    const row = element('tr');
+    const heading = element('th', name(a));
+    heading.scope = 'row';
+    row.append(heading);
+    for (const b of dataset.pure) {
+      const results = matches(key(a), key(b));
+      const wins = results.filter(trial => trial.winner === 'a').length;
+      const losses = results.filter(trial => trial.winner === 'b').length;
+      const draws = results.length - wins - losses;
+      const same = key(a) === key(b);
+      const text = results.length ? same ? 'Self' : [wins, draws, losses].join('/') : '—';
+      const button = element('button', text, 'cell' + (same ? '' : wins > losses ? ' win' : wins < losses ? ' loss' : ''));
+      button.type = 'button';
+      button.dataset.pair = key(a) + '/' + key(b);
+      button.setAttribute('aria-label', name(a) + ' versus ' + name(b) + (same ? ', self-play' : ', ' + wins + ' wins, ' + draws + ' draws, ' + losses + ' losses'));
+      button.addEventListener('click', () => selectMatch(key(a), key(b), true));
+      const cell = element('td');
+      cell.append(button);
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  table.replaceChildren(head, body);
+}
+
+function renderSide(roster, result, letter) {
+  const side = element('div', undefined, 'side');
+  side.append(
+    element('h3', letter + ' · ' + name(roster)),
+    element('div', format(result.health_weighted_unit_matter), 'value'),
+    element('p', 'HP-weighted surviving matter'),
+    element('p', format(result.base_hp) + ' base HP · ' + format(result.unit_spend) + ' matter spent'),
+  );
+  if (!result.survivors.length) {
+    side.append(element('p', 'No surviving units'));
+    return side;
+  }
+  const units = element('ul', undefined, 'units');
+  for (const unit of result.survivors) {
+    const item = element('li');
+    item.append(element('span', unit.count + ' × ' + name([unit.type_key])), element('span', format(unit.health_weighted_matter) + ' matter'));
+    units.append(item);
+  }
+  side.append(units);
+  return side;
+}
+
+function showMatchup() {
+  const [a, b] = selectors.map(select => select.value);
+  for (const cell of byId('matrix').querySelectorAll('button')) {
+    cell.setAttribute('aria-pressed', String(cell.dataset.pair === a + '/' + b));
+  }
+  const list = byId('matchups');
+  const trials = [...matches(a, b)].sort((left, right) => left.seat - right.seat);
+  list.replaceChildren();
+  if (!trials.length) list.append(element('p', 'No completed trials for these rosters.'));
+  for (const trial of trials) {
+    const card = element('article', undefined, 'match');
+    const head = element('header');
+    const winner = trial.winner === null ? trial.stop === 'horizon' ? 'Draw · time limit' : 'Draw · both bases destroyed' : 'Roster ' + trial.winner.toUpperCase() + ' wins';
+    const seats = 'A ' + (trial.seat === 0 ? 'west' : 'east') + ' · B ' + (trial.seat === 0 ? 'east' : 'west');
+    head.append(element('strong', winner), element('p', 'Tick ' + trial.ticks + ' · ' + seats));
+    const sides = element('div', undefined, 'sides');
+    sides.append(renderSide(dataset.rosters.get(a), trial.first, 'A'), renderSide(dataset.rosters.get(b), trial.second, 'B'));
+    card.append(head, sides);
+    list.append(card);
+  }
+}
+
+function renderMixes() {
+  const units = dataset.pure.map(key);
+  const rows = [];
+  for (const mix of dataset.meta.rosters.filter(roster => roster.length === 2)) {
+    const mixKey = key(mix);
+    const common = units.filter(opp => [mixKey, ...mix].every(roster => matches(roster, opp).length));
+    if (!common.length) continue;
+    let total = 0, lift = 0, margin = 0;
+    for (const opp of common) {
+      const trials = matches(mixKey, opp);
+      const point = score(trials);
+      const pureScores = mix.map(unit => unit === opp ? 0.5 : score(matches(unit, opp)));
+      total += point;
+      lift += point - (pureScores[0] + pureScores[1]) / 2;
+      margin += trials.reduce((sum, trial) => sum + trial.first.health_weighted_unit_matter - trial.second.health_weighted_unit_matter, 0) / trials.length;
+    }
+    rows.push({mix, mixKey, score: total / common.length, lift: lift / common.length, margin: margin / common.length});
+  }
+  rows.sort((left, right) => right.lift - left.lift || right.score - left.score);
+  byId('mixes').replaceChildren(...rows.map(row => {
+    const line = element('tr');
+    const title = element('th');
+    title.scope = 'row';
+    const button = element('button', name(row.mix), 'text-button');
+    button.type = 'button';
+    button.addEventListener('click', () => selectMatch(row.mixKey, selectors[1].value, true));
+    title.append(button);
+    line.append(title, element('td', format(row.score * 100) + '%'),
+      element('td', signed(row.lift * 100) + ' pp', row.lift > 0 ? 'up' : row.lift < 0 ? 'down' : ''),
+      element('td', signed(row.margin)));
+    return line;
+  }));
+}
+
+async function changeDataset(file) {
+  const version = ++requestVersion;
+  status.textContent = 'Loading sweep…';
+  byId('results').hidden = true;
+  try {
+    const next = await load(file);
+    if (version !== requestVersion) return;
+    dataset = next;
+    const {meta, count, rosters} = dataset;
+    const title = meta.arena[0].toUpperCase() + meta.arena.slice(1) + ' arena';
+    byId('subtitle').textContent = title + ' · ' + meta.map_width + ' × ' + meta.map_height + ' tiles · ' + meta.ticks + ' ticks max · ' + count + ' trials';
+    const previous = selectors.map(select => select.value);
+    const defaults = ['grunt', 'tank'];
+    selectors.forEach((select, i) => {
+      select.replaceChildren(...[...rosters].map(([value, roster]) => {
+        const option = element('option', name(roster));
+        option.value = value;
+        return option;
+      }));
+      select.value = [previous[i], defaults[i], rosters.keys().next().value].find(value => rosters.has(value));
+    });
+    renderMatrix();
+    renderMixes();
+    showMatchup();
+    byId('results').hidden = false;
+    status.textContent = count === meta.expected_trials ? '' : count + ' of ' + meta.expected_trials + ' trials available';
+  } catch (error) {
+    if (version === requestVersion) status.textContent = 'Could not load the sweep. ' + error.message;
+  }
+}
+for (const selector of selectors) selector.addEventListener('change', showMatchup);
+for (const input of document.querySelectorAll('input[name="income"]')) {
+  input.addEventListener('change', () => changeDataset(input.value));
+}
+changeDataset(document.querySelector('input[name="income"]:checked').value);
+</script>
+</body>
+</html>
