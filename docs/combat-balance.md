@@ -59,3 +59,14 @@ python3 -m http.server 8846 --bind 127.0.0.1 --directory artifacts/balance/revie
 ```
 
 The review was checked in Chromium at desktop and phone widths. Selecting a matrix cell opens its seat results, selecting a mix opens its matchup, and switching income preserves the selected rosters. The table scrolls horizontally on a phone. Screenshots and the interaction trace from the local verification are in `artifacts/balance/`.
+
+## Calibrating corridor width
+
+Run `cargo run --release --locked -p atemporal-sim --example corridor_widths` to measure the shipped generator on 32 default two-player 48×48 maps (seeds 0–31). For each tile the tool finds the largest axis-aligned square of walkable terrain containing it. This gives a consistent width even when a route hugs one wall, though diagonal passages can measure narrower. The sample skips spawn and center clearings and treats widths of eight tiles or more as rooms.
+
+| Measurement outside rooms | Samples | Width ≤3 tiles | Median width |
+| --- | ---: | ---: | ---: |
+| Tiles on any shortest orthogonal base-to-base route | 7,648 | 17.8% | 5 |
+| Visits on the generator’s sampled traffic routes | 132,989 | 28.8% | 5 |
+
+Three tiles represents a narrow passage that occurs regularly in generated play. The traffic estimate uses sampled routes from the map generator. It measures terrain geometry independently of where players chose to send units in actual matches.
