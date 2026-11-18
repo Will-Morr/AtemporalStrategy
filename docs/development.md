@@ -79,7 +79,10 @@ ATEMPORAL_UI_PERIPHERAL=1 npm run ui:review --prefix client -- --grep 'playtest 
 
 These scenarios run in desktop and narrow Chromium. The mismatch case deliberately corrupts the local reference hash and asserts a visible persistent error plus disabled commits; healthy play verifies ghost settings and immediate newborn orders against the locally reproduced state. The full normal browser suite continues to cover controller-hosted multiplayer and recovery.
 
-Hybrid launch: `./quickstart.sh --config config/hybrid.yaml` uses the default first-to-five scoreboard and locks 100 additional ticks per round. Hybrid preserves scoreboard eligibility rather than applying timed-mode permanent elimination; reaching the history cap without a winner ends as unfinished. While a round is still waiting, Uncommit durably removes that player’s partial input and restores their draft; published round inputs remain immutable.
+
+Hybrid launch: `./quickstart.sh --config config/hybrid.yaml` uses the default first-to-three scoreboard and locks 100 additional ticks per round. Hybrid preserves scoreboard eligibility rather than applying timed-mode permanent elimination; reaching the history cap without a winner ends as unfinished. While a round is still waiting, Uncommit durably removes that player’s partial input and restores their draft; published round inputs remain immutable.
+
+The integrated development server writes rules 9 archives. Earlier public and development builds both labeled their archives rules 8 while using different simulation behavior. Replay those archives with the build that recorded them. The server retains compatibility with rules 7.
 
 ## Delivery branches
 
@@ -91,8 +94,12 @@ Keep the latest ready build on port 8080. Active local games are disposable test
 
 ## DEBUG_TEST shortcut
 
-Launch the coordinator with `--test-server` to expose **DEBUG_TEST** on the home page. This is off by default, and the server rejects debug-game creation without the flag. Debug games use the host defaults with two FFA players, authoritative transport and the standard five-win scoreboard so the opening can reach turn 2. Slot 0 belongs to the browser user from creation; a temporary standard bot submits its first turn, alongside the normal opponent bot. At the start of planning turn 2, slot 0 becomes exclusively human-controlled. The opponent continues normally. No extra takeover token or public takeover endpoint is introduced.
+Launch the coordinator with `--test-server` to expose **DEBUG_TEST** on the home page. This is off by default, and the server rejects debug-game creation without the flag. Debug games use the host defaults with two FFA players, authoritative transport and the default three-win scoreboard so the opening can reach turn 2. Slot 0 belongs to the browser user from creation; a temporary Tactical bot submits its first turn, alongside the normal opponent bot. At the start of planning turn 2, slot 0 becomes exclusively human-controlled. The opponent continues normally. No extra takeover token or public takeover endpoint is introduced.
 
-The homescreen waits for the published turn-2 planning state, then opens the game at tick 150 (clamped to the available/editable interval), where the bot normally makes its next intervention. First-time debug users get the name Tester to keep this path one-click. Normal Play Against Bot retains its name prompt and ordinary opening. Debug and normal quick play use separate pending-game keys so retries reconnect to the right match. The per-game debug marker is persisted; restarting with `--test-server` finishes an incomplete bot opening but never lets the temporary bot consume turn 2 or later turns. The worker-only `--debug-test-opening` option is supplied by the coordinator for these games.
+The homescreen waits for the published turn-2 planning state, then opens the game at tick 150 (clamped to the available/editable interval), so the player can inspect the developed opening. First-time debug users get the name Tester to keep this path one-click. Normal Play Against Bot retains its name prompt and ordinary opening. Debug and normal quick play use separate pending-game keys so retries reconnect to the right match. The per-game debug marker is persisted; restarting with `--test-server` finishes an incomplete bot opening but never lets the temporary bot consume turn 2 or later turns. The worker-only `--debug-test-opening` option is supplied by the coordinator for these games.
 
 Enable `--test-server` on the local port-8080 development preview after updates. Public/normal servers omit the flag.
+
+## Publishing patch notes
+
+For a major release, add a dated entry to the patch notes section in `client/guide/introduction.html`. Both the home page and Game info link to its stable `#patch-notes` anchor. Collect smaller changes for the next major entry. Individual commits do not need a release note.

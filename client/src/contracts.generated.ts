@@ -135,6 +135,9 @@ export type Version = number;
  */
 export type Command =
   | {
+      kind: "clear_future_orders";
+    }
+  | {
       entities: EntityId[];
       kind: "assign_order";
       order: Order;
@@ -270,6 +273,11 @@ export type DraftItemRef =
  * via the `definition` "ProductionEdit".
  */
 export type ProductionEdit =
+  | {
+      items: string[];
+      kind: "supply_launches";
+      plan: SiloPlan;
+    }
   | {
       items: string[];
       kind: "append";
@@ -471,6 +479,9 @@ export type VisualStyle = "direct" | "artillery" | "melee";
  */
 export type Command2 =
   | {
+      kind: "clear_future_orders";
+    }
+  | {
       entities: EntityId[];
       kind: "assign_order";
       order: Order;
@@ -536,6 +547,11 @@ export type Command2 =
  * via the `definition` "ProductionEdit2".
  */
 export type ProductionEdit2 =
+  | {
+      items: string[];
+      kind: "supply_launches";
+      plan: SiloPlan;
+    }
   | {
       items: string[];
       kind: "append";

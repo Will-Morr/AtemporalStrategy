@@ -35,11 +35,11 @@ fn teams() -> Multiplayer {
     }
 }
 #[test]
-fn unchanged_pass_rounds_award_once_and_default_ends_at_five() {
+fn unchanged_pass_rounds_award_once_and_default_ends_at_three() {
     let rules = ScoreboardRules::default();
     let o = outcome(2, &Multiplayer::Ffa {}, &[0]);
     let mut prev = None;
-    for round in 1..=5 {
+    for round in 1..=3 {
         let result = resolve_round(
             round,
             2,
@@ -51,7 +51,7 @@ fn unchanged_pass_rounds_award_once_and_default_ends_at_five() {
         )
         .unwrap();
         assert_eq!(result.entries[0].raw_total, round as f64);
-        assert_eq!(result.match_winners.len(), usize::from(round == 5));
+        assert_eq!(result.match_winners.len(), usize::from(round == 3));
         let retry = resolve_round(
             round,
             2,
@@ -120,7 +120,7 @@ fn simultaneous_threshold_ties_and_shared_victory() {
         };
         let o = outcome(3, &mode, &[0, 1]);
         let mut prev = None;
-        for round in 1..=5 {
+        for round in 1..=3 {
             prev =
                 Some(resolve_round(round, 3, &mode, &rules, &o, &times(3), prev.as_ref()).unwrap());
         }
@@ -135,7 +135,7 @@ fn simultaneous_threshold_ties_and_shared_victory() {
         );
         if policy == TiePolicy::ContinueUntilUnique {
             let next = resolve_round(
-                6,
+                4,
                 3,
                 &mode,
                 &rules,
@@ -146,7 +146,7 @@ fn simultaneous_threshold_ties_and_shared_victory() {
             .unwrap();
             assert_eq!(
                 next.entries.iter().map(|e| e.raw_total).collect::<Vec<_>>(),
-                [6., 5., 0.]
+                [4., 3., 0.]
             );
             assert_eq!(next.match_winners, vec![SideId::Player { player_id: 0 }]);
         }

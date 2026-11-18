@@ -43,6 +43,14 @@ struct Consumer {
 
 impl Sim {
     pub fn step(&mut self, emit: &mut dyn FnMut(Output)) -> Result<()> {
+        self.step_observed(emit, &mut |_, _| {})
+    }
+
+    pub(crate) fn step_observed(
+        &mut self,
+        emit: &mut dyn FnMut(Output),
+        observe: &mut dyn FnMut(&Sim, &[WorldEvent]),
+    ) -> Result<()> {
         let t = self.state.tick;
         self.progress = false;
         for a in &mut self.activity {
@@ -69,6 +77,7 @@ impl Sim {
             self.state.inactivity_deadline = t + 1 + self.config.stall_ticks;
         }
         self.state.tick = t + 1;
+        observe(self, &self.pending_events);
         self.emit_state_outputs(emit, false);
         Ok(())
     }
@@ -78,8 +87,7 @@ impl Sim {
         e.next_action_tick <= self.state.tick && e.born_at_tick.is_none_or(|b| b < self.state.tick)
     }
 
-    /// Nearest hostile living entity within `radius`, by squared distance then identity. Line of
-    /// sight is traced in that order and only until the first visible candidate.
+    /// Nearest visible hostile entity within `radius`, by squared distance then identity.
     fn nearest_hostile(&self, i: usize, radius: f64, need_los: bool) -> Option<usize> {
         self.nearest_hostile_matching(i, radius, need_los, false)
     }
@@ -121,17 +129,55 @@ impl Sim {
             }
         }
         candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(b.1)));
+        let mut indirect_tiles = None;
         candidates
             .into_iter()
-            .find(|(_, _, o)| !need_los || self.line_of_sight(e.tile, self.state.entities[*o].tile))
+            .find(|(distance, _, o)| {
+                let target = self.state.entities[*o].tile;
+                if need_los {
+                    return self.line_of_sight(e.tile, target);
+                }
+                if self.legacy_rules {
+                    return true;
+                }
+                if *distance > radius * radius {
+                    return false;
+                }
+                if self.line_of_sight(e.tile, target) {
+                    return true;
+                }
+                indirect_tiles
+                    .get_or_insert_with(|| {
+                        let mut visible = BTreeSet::new();
+                        vision::flood_vision(
+                            &self.state.terrain,
+                            e.tile,
+                            radius,
+                            |tile| self.built_wall(tile),
+                            |tile| {
+                                visible.insert(tile);
+                            },
+                        );
+                        visible
+                    })
+                    .contains(&target)
+            })
             .map(|c| c.2)
+    }
+
+    fn target_in_sight(&self, from: Tile, to: Tile, radius: f64, direct: bool) -> bool {
+        if direct {
+            self.line_of_sight(from, to)
+        } else {
+            self.legacy_rules || self.ground_sees(from, to, radius)
+        }
     }
 
     fn target_valid(&self, i: usize, j: usize, radius: f64, need_los: bool) -> bool {
         let (a, b) = (&self.state.entities[i], &self.state.entities[j]);
         self.hostile(a.owner, b.owner)
             && Self::dist2(a.tile, b.tile) <= radius * radius + EPS
-            && (!need_los || self.line_of_sight(a.tile, b.tile))
+            && self.target_in_sight(a.tile, b.tile, radius, need_los)
     }
 
     /// Fewer armed entities than this run intents serially: per-tick scoped spawns cost more

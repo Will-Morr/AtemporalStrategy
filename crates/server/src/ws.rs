@@ -33,6 +33,10 @@ pub fn router(app: App) -> Router {
     Router::new()
         .route("/ws", get(ws_upgrade))
         .route("/ws/peripheral", get(peripheral_upgrade))
+        .route(
+            "/ws/practice/{source}/{revision}/{player}",
+            get(practice_upgrade),
+        )
         .route("/guide", get(guide_root))
         .route("/guide/", get(guide_root))
         .route("/guide/{*path}", get(guide_file))
@@ -89,6 +93,82 @@ async fn ws_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(64 << 20)
         .on_upgrade(move |socket| connection(app, socket, false))
 }
+/// Bound the number of extra replay bodies retained by private sessions in this process.
+pub fn practice_permit() -> Option<tokio::sync::SemaphorePermit<'static>> {
+    static SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+    SLOTS.try_acquire().ok()
+}
+
+pub fn practice_available(phase: Phase, lobby: &LobbyState) -> bool {
+    matches!(phase, Phase::Finished | Phase::Archived)
+        || (phase == Phase::Planning && lobby.slots.iter().any(|s| s.claimed && !s.connected))
+}
+
+async fn practice_upgrade(
+    State(app): State<App>,
+    axum::extract::Path((source, revision, player)): axum::extract::Path<(
+        String,
+        Revision,
+        PlayerId,
+    )>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let eligible = |c: &Controller| {
+        c.match_id == source
+            && practice_available(c.phase, &c.lobby)
+            && player < c.config.player_count
+    };
+    if app.inputs_only || !eligible(&app.controller.lock().unwrap()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(permit) = practice_permit() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if let Err(message) = prepare(&app, revision).await {
+        return (StatusCode::BAD_REQUEST, message).into_response();
+    }
+    let c = app.controller.lock().unwrap();
+    if !eligible(&c) {
+        return StatusCode::CONFLICT.into_response();
+    }
+    let Ok(base) = c.revision(revision) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let branch = Controller::practice(
+        c.config.clone(),
+        c.content.clone(),
+        c.fingerprint.clone(),
+        c.lobby.clone(),
+        base.clone(),
+        player,
+        c.sim.clone(),
+    );
+    serve_practice(ws, permit, branch)
+}
+
+pub fn serve_practice(
+    ws: WebSocketUpgrade,
+    permit: tokio::sync::SemaphorePermit<'static>,
+    branch: Result<Controller>,
+) -> Response {
+    let controller = match branch {
+        Ok(c) => c,
+        Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
+    };
+    let app = App {
+        controller: Arc::new(Mutex::new(controller)),
+        client_dir: PathBuf::new(),
+        guide_dir: PathBuf::new(),
+        inputs_only: false,
+    };
+    ws.max_message_size(64 << 20)
+        .on_upgrade(move |socket| async move {
+            let _permit = permit;
+            connection(app.clone(), socket, false).await;
+            app.controller.lock().unwrap().cancel_practice();
+        })
+}
+
 async fn peripheral_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
     ws.max_message_size(64 << 20)
         .on_upgrade(move |socket| connection(app, socket, true))

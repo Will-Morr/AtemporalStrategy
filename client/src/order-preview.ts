@@ -11,7 +11,7 @@ export class OrderPreviews {
   private topology='';
   draw(g:Game,r:Renderer,ctx:CanvasRenderingContext2D,views:EntityView[]):void {
     this.routes=[];if(!g.terrain)return;
-    const blocked=new Set(views.filter(v=>!v.blueprint&&g.types.get(v.type_key)?.kind==='structure').map(v=>Math.floor(v.y)*g.terrain!.width+Math.floor(v.x)));
+    const blocked=new Set(views.filter(v=>!v.remembered&&!v.blueprint&&g.types.get(v.type_key)?.kind==='structure').map(v=>Math.floor(v.y)*g.terrain!.width+Math.floor(v.x)));
     const topology=[...blocked].sort((a,b)=>a-b).join(',');
     if(this.fields?.terrain!==g.terrain||topology!==this.topology){this.fields=new PreviewFields(g.terrain,blocked);this.topology=topology;}
     const fields=this.fields!;
@@ -24,7 +24,8 @@ export class OrderPreviews {
     }):[];
     const oreTargets=miningTargets(fields,miners,i=>g.oreAt(i));
     for(const v of views){
-      if(!g.selection.has(idKey(v.id)))continue;
+      if(v.remembered||!g.selection.has(idKey(v.id)))continue;
+      if(!aiming&&g.experience.review.recipients.get(idKey(v.id)))continue;
       const def=g.types.get(v.type_key),factory=!!def?.production&&!def.silo;
       if(!factory&&!def?.movement)continue;
       const plan=factory?factoryPlan(g,v):null;

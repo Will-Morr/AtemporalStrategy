@@ -9,7 +9,7 @@ test('landing page starts a default bot match with one click and retains the pla
   await expect(page.getByRole('heading',{name:'Atemporal',exact:true})).toBeVisible();
   await expect(page.getByText('An RTS from the perspective of God.',{exact:true})).toBeVisible();
   await expect(page.locator('section.description p')).toHaveCount(3);
-  await expect(page.locator('section.description')).toContainText('First player to win 5 timelines wins the game.');
+  await expect(page.locator('section.description')).toContainText('First player to win 3 timelines wins the game.');
   await expect(page.locator('footer.description')).toContainText('Note: This is very much an experiment.');
   expect(await page.locator('footer.description').evaluate(el=>!!(document.querySelector('.actions').compareDocumentPosition(el)&Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(page.locator('dialog[open]')).toHaveCount(0);
@@ -29,7 +29,7 @@ test('landing page starts a default bot match with one click and retains the pla
   const directory=await(await page.request.get(server.url+'api/directory')).json();
   expect(directory.games).toHaveLength(1);
   expect(directory.games[0].bots).toEqual([null,directory.default_bot]);
-  expect(directory.default_bot).toBe('standard');
+  expect(directory.default_bot).toBe('tactical');
   expect(directory.user).toBe('Quick player');
   await page.getByRole('button',{name:'All units',exact:true}).click();
   await expect(page.locator('#selection .unit-icon')).toHaveCount(3);
@@ -45,6 +45,11 @@ test('landing page starts a default bot match with one click and retains the pla
 test('landing navigation, content-backed explainer and retry after creation failure',async({page,review},testInfo)=>{
   const server=await isolatedServer(testInfo,small,content=>{content.types.find(t=>t.key==='miner').max_hp=137;},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url);
+  await page.getByRole('link',{name:'Patch notes',exact:true}).first().click();
+  await expect(page.locator('#patch-notes li').first()).toHaveText('Added patch notes');
+  await expect(page.locator('#patch-notes')).toContainText('Tactical 2.0');
+  await expect(page.locator('#patch-notes')).toContainText('8 tiles away, up from 5');
+  await page.goBack();
   await page.getByRole('link',{name:'Game Docs',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Game Docs',exact:true})).toBeVisible();
   await expect(page.locator('.doc-warning')).toHaveText('Chatbot Docs Warning: Better than nothing but my apologies for the Claudelish');

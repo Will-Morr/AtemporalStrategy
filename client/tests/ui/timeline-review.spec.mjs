@@ -1,0 +1,80 @@
+import {test,expect} from './fixtures.mjs';
+import {isolatedServer,isolatedPeripheral,players,revision,tile,seek,area} from './game-helpers.mjs';
+
+const serverFor = process.env.ATEMPORAL_UI_PERIPHERAL ? isolatedPeripheral : isolatedServer;
+const unit = (page,owner,type) => page.evaluate(({owner,type}) => {
+  const v=window.atemporal.entities().find(e=>e.owner===owner && e.type_key===type);
+  return {x:v.x,y:v.y};
+},{owner,type});
+
+test('completed timeline can be replayed with different orders without changing its result',async({review},testInfo)=>{
+  const server=await serverFor(testInfo,c=>{c.match_defaults.max_tick=1200;c.match_defaults.objective.rules.victory_rule.points=1;});
+  review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const target=await unit(a,0,'turret'), constructor=await unit(b,1,'constructor');
+  await tile(b,constructor);await b.keyboard.press('f');await tile(b,target);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);
+  await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-status','winner');
+
+  await b.getByRole('button',{name:'Try a different timeline'}).click();
+  await b.locator('#review-plans').check();await seek(b,0);
+  await expect(b.locator('#tick-activity')).toContainText('Attack move');
+  await expect.poll(()=>b.evaluate(()=>window.atemporal.experience.review.recipients.size)).toBeGreaterThan(0);
+  await b.locator('#tick-activity .review-command').click();
+  await review.capture('completed-orders-at-tick-zero',b);
+  const destroyed = await b.evaluate(()=>window.atemporal.rev().events.find(e=>e.event.kind==='destroyed')?.tick);
+  expect(destroyed).toBeGreaterThan(0);
+  await seek(b,destroyed);await expect(b.locator('#tick-activity')).toContainText('destroyed');
+  await review.capture('combat-event-at-resolved-tick',b);
+  await seek(b,0);
+  await b.selectOption('#round-picker','0');await revision(b,0);
+  await expect(b.locator('#tick-activity')).not.toContainText('Attack move');
+  await b.selectOption('#round-picker','1');await revision(b,1);
+  await b.selectOption('#practice-player','1');await b.locator('#start-practice').click();
+  await revision(b,0);await expect(b.locator('#top-phase')).toContainText('Practice');
+  await tile(b,constructor);await b.keyboard.press('x');await b.locator('#commit').click();await revision(b,1);
+  await expect.poll(()=>b.evaluate(()=>window.atemporal.rev().outcome.kind)).not.toBe('win');
+  await expect(b.locator('.scoreboard-heading')).toContainText('after round 1');
+  await review.capture('alternate-order-changes-timeline-outcome',b);
+  await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-status','winner');
+  await b.getByRole('link',{name:'Exit practice'}).click();
+  await revision(b,1);await expect(b.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-status','winner');
+});
+
+test('spectators inspect enemy production and branch an archived unfinished game',async({review},testInfo)=>{
+  const server=await serverFor(testInfo,c=>{c.match_defaults.max_tick=600;});review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
+  const s=await(await review.newContext('observer')).newPage();await s.goto(server.url);await s.locator('#spectate').click();await revision(s,0);
+  const constructor=await unit(a,0,'constructor');
+  await tile(a,constructor);
+  const spot=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=c.y-2;y<=c.y+2;y++)for(let x=c.x-2;x<=c.x+2;x++)if(g.validPlacement({x,y},true))return{x,y};});
+  await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'factory'}).click();await tile(a,spot);await tile(a,spot);
+  await a.getByRole('button',{name:'Queue grunt',exact:true}).click({modifiers:['Shift']});
+  await tile(a,constructor);await a.keyboard.press('c');await area(a,spot);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(s,1);
+  await seek(s,153);await tile(s,spot);
+  expect(await s.evaluate(()=>window.atemporal.selectedViews()[0]?.lifecycle)).toBe('complete');await expect(s.locator('.review-queue')).toContainText('Queue · grunt');
+  await expect(s.locator('.review-queue button')).toHaveCount(0);
+  await review.capture('spectator-inspects-enemy-factory-queue',s);
+  await b.goto('about:blank');
+  await s.locator('#replay summary').click();await expect(s.locator('#start-practice')).toBeVisible();
+  await s.locator('#start-practice').click();await revision(s,0);
+  await s.locator('#commit').click();await revision(s,1);
+  await s.locator('#exit-practice').click();await s.locator('#spectate').click();await revision(s,1);
+  await expect(a.locator('#commit')).toBeEnabled();
+  await b.goto(server.url);await revision(b,1);
+  expect(await b.evaluate(()=>window.atemporal.player)).toBe(1);
+  await a.locator('#actions .planning>summary').click();await a.locator('#stop-archive').click();
+  await expect(b.locator('#new-game-menu')).toBeVisible();
+  await seek(b,153);await tile(b,spot);
+  await expect(b.locator('.review-queue')).toContainText('Queue · grunt');
+  await expect(b.locator('.review-queue button')).toHaveCount(0);
+  await review.capture('archived-player-inspects-enemy-factory-queue',b);
+  await expect(s.locator('#new-game-menu')).toBeVisible();await s.getByRole('button',{name:'Try a different timeline'}).click();
+  await s.selectOption('#practice-player','1');await s.locator('#start-practice').click();
+  await revision(s,0);await expect(s.locator('#top-phase')).toContainText('Practice');
+  await s.locator('#commit').click();await revision(s,1);
+  await s.locator('#commit').click();await revision(s,2);
+  expect(await a.evaluate(()=>window.atemporal.latest)).toBe(1);
+});

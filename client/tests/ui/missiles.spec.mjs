@@ -13,7 +13,14 @@ test('silo blueprint production, launch previews, satellite replay and stockpili
   await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'silo'}).click();await hover(a,build);await expect(a.locator('#range-readout')).toContainText('Manual launches: unlimited range');await review.capture('silo-placement-auto-range',a);await tile(a,build);await tile(a,build);
   await a.setViewportSize({width:1366,height:768});await a.locator('.silo-production>summary').click();
   await a.keyboard.press('q');await expect(a.locator('#mode-options button')).toHaveCount(3);await a.locator('#mode-options button').filter({hasText:'satellite'}).click();await a.getByRole('button',{name:'Queue cluster',exact:true}).click();await a.getByRole('button',{name:'Queue tac_nuke',exact:true}).click();
-  expect(await a.evaluate(()=>Array.from(document.querySelectorAll('#panels>div')).filter(e=>e.scrollHeight>e.clientHeight+2||e.scrollWidth>e.clientWidth+2).map(e=>e.id))).toEqual([]);await review.capture('silo-production-no-scroll-1366',a);
+  expect(await a.evaluate(()=>Array.from(document.querySelectorAll('#panels>div')).filter(e=>e.scrollHeight>e.clientHeight+2||e.scrollWidth>e.clientWidth+2).map(e=>e.id))).toEqual([]);
+  expect(await a.evaluate(()=>{
+    const canvas=document.getElementById('map');
+    canvas.width-=1;
+    window.atemporal.renderer.resize();
+    return canvas.getContext('2d').getImageData(canvas.width/2,canvas.height/2,1,1).data[3];
+  })).toBe(255);
+  await review.capture('silo-production-no-scroll-1366',a);
   await a.locator('.silo-production>summary').click();
   await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');
   const predicted={};

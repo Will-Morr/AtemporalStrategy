@@ -945,6 +945,19 @@
         {
           "additionalProperties": false,
           "properties": {
+            "kind": {
+              "const": "clear_future_orders",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "entities": {
               "items": {
                 "$ref": "#/$defs/EntityId"
@@ -1243,6 +1256,19 @@
     },
     "Command2": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "clear_future_orders",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {
@@ -3655,6 +3681,30 @@
               "type": "array"
             },
             "kind": {
+              "const": "supply_launches",
+              "type": "string"
+            },
+            "plan": {
+              "$ref": "#/$defs/SiloPlan"
+            }
+          },
+          "required": [
+            "kind",
+            "items",
+            "plan"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
               "const": "append",
               "type": "string"
             }
@@ -3746,6 +3796,30 @@
     },
     "ProductionEdit2": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "supply_launches",
+              "type": "string"
+            },
+            "plan": {
+              "$ref": "#/$defs/SiloPlan"
+            }
+          },
+          "required": [
+            "kind",
+            "items",
+            "plan"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {

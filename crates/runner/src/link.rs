@@ -71,7 +71,13 @@ pub async fn sync_loop(p: Arc<Peripheral>, controller: String, guide: Arc<Guide>
                 continue;
             };
             match envelope.message {
-                ServerMessage::Welcome { match_id: id, .. } => {
+                ServerMessage::Welcome {
+                    match_id: id,
+                    lobby,
+                    phase,
+                    ..
+                } => {
+                    *p.practice_source.lock().unwrap() = Some((id.clone(), lobby, phase));
                     let stale = p
                         .store
                         .lock()
@@ -86,6 +92,16 @@ pub async fn sync_loop(p: Arc<Peripheral>, controller: String, guide: Arc<Guide>
                         p.bump();
                     }
                     match_id = id;
+                }
+                ServerMessage::LobbyUpdated { lobby } => {
+                    if let Some((_, slots, _)) = p.practice_source.lock().unwrap().as_mut() {
+                        *slots = lobby;
+                    }
+                }
+                ServerMessage::MatchFinished { .. } | ServerMessage::MatchArchived { .. } => {
+                    if let Some((_, _, phase)) = p.practice_source.lock().unwrap().as_mut() {
+                        *phase = Phase::Finished;
+                    }
                 }
                 ServerMessage::ReplayBootstrap {
                     fingerprint,
@@ -142,6 +158,11 @@ pub async fn sync_loop(p: Arc<Peripheral>, controller: String, guide: Arc<Guide>
                     precedence,
                     editable_from,
                 } => {
+                    if let Some((_, _, phase)) = p.practice_source.lock().unwrap().as_mut()
+                        && !matches!(phase, Phase::Finished | Phase::Archived)
+                    {
+                        *phase = Phase::Simulating;
+                    }
                     if let Some(store) = p.store.lock().unwrap().as_mut() {
                         store.accept_inputs(revision, turns, precedence, editable_from);
                     }
@@ -160,6 +181,9 @@ pub async fn sync_loop(p: Arc<Peripheral>, controller: String, guide: Arc<Guide>
                     p.schedule();
                 }
                 ServerMessage::PlanningOpened { revision, .. } => {
+                    if let Some((_, _, phase)) = p.practice_source.lock().unwrap().as_mut() {
+                        *phase = Phase::Planning;
+                    }
                     let discarded = p
                         .store
                         .lock()

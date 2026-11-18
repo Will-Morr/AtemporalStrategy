@@ -22,6 +22,7 @@ pub struct Sim {
     pub config: MatchConfig,
     pub content: Content,
     pub state: WorldState,
+    pub(crate) legacy_rules: bool,
     pub(crate) events: Vec<AcceptedTurn>,
     pub(crate) precedence: Vec<RoundPrecedence>,
     pub(crate) ty: Vec<usize>,
@@ -96,7 +97,7 @@ impl Sim {
         if state.players.len() != players {
             return Err("checkpoint player count disagrees with configuration".into());
         }
-        let mut events = request.events.clone();
+        let mut events = draft::effective_turns(&request.events);
         events.sort_by_key(|t| (t.tick, t.round, t.player));
         let mut precedence = request.precedence.clone();
         precedence.sort_by_key(|p| p.round);
@@ -115,6 +116,7 @@ impl Sim {
             dictionary.insert(entry.id.clone(), index as u32);
         }
         let mut sim = Self {
+            legacy_rules: request.fingerprint.sim_build.ends_with(" rules 7"),
             config: request.config.clone(),
             content,
             state,
@@ -317,7 +319,30 @@ impl Sim {
     pub(crate) fn hostile(&self, a: PlayerId, b: PlayerId) -> bool {
         self.team_of[usize::from(a)] != self.team_of[usize::from(b)]
     }
-    /// Symmetric integer line traversal; only rock blocks direct fire.
+    pub(crate) fn built_wall(&self, tile: Tile) -> bool {
+        self.state
+            .entities
+            .get(self.occ[self.idx(tile)] as usize)
+            .is_some_and(|e| e.type_key == "wall")
+    }
+    pub(crate) fn ground_sees(&self, a: Tile, b: Tile, radius: f64) -> bool {
+        if Self::dist2(a, b) > radius * radius {
+            return false;
+        }
+        if self.line_of_sight(a, b) {
+            return true;
+        }
+        let mut visible = false;
+        vision::flood_vision(
+            &self.state.terrain,
+            a,
+            radius,
+            |tile| self.built_wall(tile),
+            |tile| visible |= tile == b,
+        );
+        visible
+    }
+    /// Symmetric line traversal for direct fire. Current games include constructed walls.
     pub(crate) fn line_of_sight(&self, a: Tile, b: Tile) -> bool {
         let (a, b) = if a <= b { (a, b) } else { (b, a) };
         let (mut x, mut y) = (i32::from(a.x), i32::from(a.y));
@@ -331,6 +356,7 @@ impl Sim {
             if (x, y) == (x1, y1) {
                 return true;
             }
+            let previous = (x, y);
             let e2 = 2 * err;
             if e2 >= dy {
                 err += dy;
@@ -340,9 +366,22 @@ impl Sim {
                 err += dx;
                 y += sy;
             }
-            if (x, y) != (x1, y1)
-                && self.state.terrain.cells[(y * self.width() + x) as usize] == TerrainCell::Wall
+            let blocked = |x: i32, y: i32| {
+                self.state.terrain.cells[(y * self.width() + x) as usize] == TerrainCell::Wall
+                    || (!self.legacy_rules
+                        && self.built_wall(Tile {
+                            x: x as u16,
+                            y: y as u16,
+                        }))
+            };
+            if !self.legacy_rules
+                && x != previous.0
+                && y != previous.1
+                && (blocked(x, previous.1) || blocked(previous.0, y))
             {
+                return false;
+            }
+            if (x, y) != (x1, y1) && blocked(x, y) {
                 return false;
             }
         }

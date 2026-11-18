@@ -58,12 +58,13 @@ for(const variant of [
   await expect(a.locator('#timeline')).toHaveAttribute('data-order-ticks',variant.timed?'0,100':'0');
   // Preserve tokens, accepted commands, revision, score and exact state across real archive resume.
   const before=await a.evaluate(()=>({round:window.atemporal.round,score:window.atemporal.rev().score,timed:window.atemporal.editableFrom,groups:window.atemporal.exact.state.control_groups}));
+  const previousInstance=await a.evaluate(()=>window.atemporal.net.instance);
   const match=(await readdir(`${server.dir}/replays`))[0];
   for(const p of [...ps,spectator])await p.context().setOffline(true);
   await server.stop();await server.start(['--resume',match]);
   for(const p of [...ps,spectator])await p.context().setOffline(false);
   // Tabs reload themselves onto the resumed server.
-  for(const p of [...ps,spectator]){if(p===spectator)await p.getByRole('button',{name:'Spectate',exact:true}).click({timeout:15000});await revision(p,2);}
+  for(const p of [...ps,spectator]){if(p===spectator)await p.getByRole('button',{name:'Spectate',exact:true}).click({timeout:15000});await revision(p,2,previousInstance);}
   await seek(a,tick+1);
   expect(await a.evaluate(()=>({round:window.atemporal.round,score:window.atemporal.rev().score,timed:window.atemporal.editableFrom,groups:window.atemporal.exact.state.control_groups}))).toEqual(before);
   await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.rounds.size)).toBe(3);
@@ -126,9 +127,13 @@ test('result: finished match shows a green win, red loss and retained replay',as
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await revision(b,1);
   for(const [p,verdict] of [[a,'loss'],[b,'win']]){
     await expect(p.locator('#outcome-banner')).toHaveAttribute('data-outcome',verdict);
-    await expect(p.locator('#outcome-banner')).toContainText('MATCH ENDED');await expect(p.locator('#outcome-banner')).toContainText('Replay remains available');
+    await expect(p.locator('#outcome-banner')).toContainText('MATCH ENDED');
     await expect(p.locator('#commit')).toBeDisabled();
-    await seek(p,await p.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick));
+    const finalTick=await p.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick);
+    const explanation=verdict==='loss' ? `At the final tick (${finalTick})` : `Final result at tick ${finalTick}`;
+    await expect(p.locator('#outcome-banner')).toContainText(explanation);
+    await p.getByRole('button',{name:'View final state',exact:true}).click();
+    await expect.poll(()=>p.evaluate(()=>window.atemporal.exact?.tick)).toBe(finalTick);
     await review.capture(`finished-match-${verdict}`,p);
     await seek(p,0);await p.locator('#play').click();await expect.poll(()=>p.evaluate(()=>window.atemporal.playhead)).toBeGreaterThan(0);await p.locator('#play').click();
   }

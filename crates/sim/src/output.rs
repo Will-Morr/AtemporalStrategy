@@ -20,6 +20,16 @@ pub struct RunResult {
     pub final_state: WorldState,
 }
 
+pub(crate) fn activity_of(e: &EntityState) -> Activity {
+    match &e.action {
+        Order::Mine { .. } => Activity::Mining,
+        Order::Construct { .. } => Activity::Construction,
+        _ if e.engaged_target.is_some() => Activity::Combat,
+        Order::AttackMove { .. } | Order::Support { .. } if !e.goal_settled => Activity::Movement,
+        _ => Activity::Idle,
+    }
+}
+
 impl Sim {
     /// Emit outputs for the current state S[tick]; `initial` is the job's checkpoint state.
     pub(crate) fn emit_state_outputs(&mut self, emit: &mut dyn FnMut(Output), initial: bool) {
@@ -105,18 +115,6 @@ impl Sim {
         }
     }
 
-    fn activity_of(&self, e: &EntityState) -> Activity {
-        match &e.action {
-            Order::Mine { .. } => Activity::Mining,
-            Order::Construct { .. } => Activity::Construction,
-            _ if e.engaged_target.is_some() => Activity::Combat,
-            Order::AttackMove { .. } | Order::Support { .. } if !e.goal_settled => {
-                Activity::Movement
-            }
-            _ => Activity::Idle,
-        }
-    }
-
     pub fn sample(&self) -> Sample {
         let entities = self
             .state
@@ -129,7 +127,7 @@ impl Sim {
                 hp: e.hp,
                 facing: e.last_move_direction,
                 lifecycle: e.lifecycle,
-                activity: self.activity_of(e),
+                activity: activity_of(e),
                 engaged: e
                     .engaged_target
                     .as_ref()

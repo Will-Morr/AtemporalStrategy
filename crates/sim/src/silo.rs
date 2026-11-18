@@ -87,7 +87,11 @@ impl Sim {
         self.state.entities.iter().enumerate().any(|(i, e)| {
             e.lifecycle == Lifecycle::Complete
                 && !self.hostile(owner, e.owner)
-                && within(f64::from(e.tile.x), f64::from(e.tile.y), self.def(i).vision)
+                && if self.legacy_rules {
+                    within(f64::from(e.tile.x), f64::from(e.tile.y), self.def(i).vision)
+                } else {
+                    self.ground_sees(e.tile, tile, self.def(i).vision)
+                }
         }) || self.state.recon.iter().any(|r| {
             r.expires_at > self.state.tick
                 && !self.hostile(owner, r.owner)

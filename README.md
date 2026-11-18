@@ -6,7 +6,7 @@ Build factories, mine resources, and send units into battle. Each round, everyon
 
 You can watch and scrub completed ticks while the rest of a replay is still being simulated. The timeline shows how far you can view; planning opens when the full result is ready.
 
-The default game is 1v1, with simultaneous planning and a race to five points. There are also three- and four-player free-for-all games, teams, and a timed mode that gradually locks the past.
+The default game is 1v1, with simultaneous planning and a race to three points. There are also three- and four-player free-for-all games, teams, and a timed mode that gradually locks the past.
 
 `VIBE CODE WARNING: I have read almost none of this code` I spent a good chunk of time planning out how this game should function and steering the implementation via playtesting but have not read the code and do not recommend that you do so. This is mostly a mix of Astra 6 and Fable 5.1. 
 
@@ -78,7 +78,9 @@ Match settings live in [config/game.yaml](config/game.yaml) (the default `seed` 
 
 The coordinator saves its directory, open lobbies and per-game archives under `games/` (override with `--coordinator-dir DIR`). Restart on the same port and refresh a game tab to resume. Each game runs in a separate worker, reached through the same public address. Recent completed/archived games can be viewed read-only from the directory.
 
-The **Standard** bot uses ordinary orders, resources and visibility. Bot-only playtests stop at the chosen round budget. It uses a simple economy, expansion and defense policy.
+Quick play uses **Tactical 2.0**. Choose **Standard 1.0** in the game directory to practice against the original opponent. Both bots spend normal resources, use player vision and submit ordinary orders. Bot-only playtests stop at the chosen round budget. Read the [balance and replay results](docs/balance-analysis.md) for the comparison. To write a bot or analyze a replay from one player’s perspective, see [Developing a bot](docs/lobbies-and-bots.md#developing-a-bot).
+
+Use the [combat balance lab](docs/combat-balance.md) to compare units on equal budgets, try alternative unit stats, and measure what survives.
 
 For the original standalone workflow, add `--single-match`; its archives still live under `replays/`. Resume a standalone archive with:
 
@@ -104,7 +106,7 @@ npm run ui:review --prefix client        # real-browser gameplay scenarios
 - [Verification results and limits](docs/integration-verification.md) — tested scenarios and performance measurements.
 - [Remaining work](docs/implementation.md#remaining-review-coverage) — open review items.
 
-To combine the default first-to-five scoreboard with 100 ticks of fixed history per round, launch `./quickstart.sh --config config/hybrid.yaml`.
+To combine the default first-to-three scoreboard with 100 ticks of fixed history per round, launch `./quickstart.sh --config config/hybrid.yaml`.
 
 For a small unattended remote host, see [hosting and automatic updates](docs/hosting.md).
 

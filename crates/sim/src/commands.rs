@@ -178,6 +178,8 @@ impl Sim {
         };
         let policy = committed.future_orders;
         match &committed.command {
+            // The input scheduler has already removed superseded turns.
+            Command::ClearFutureOrders {} => {}
             Command::AssignOrder { entities, order } => {
                 self.deliver(entities, order, player, round, policy, &mut outcome)?;
             }
@@ -471,6 +473,14 @@ impl Sim {
                         }
                         Ok(i) => i,
                     };
+                    if let ProductionEdit::SupplyLaunches { plan, .. } = edit
+                        && !self.silo_plan_valid(&self.state.entities[i].type_key, plan)
+                    {
+                        outcome
+                            .skipped
+                            .push(self.skip(Some(id.clone()), SkipReason::Incompatible));
+                        continue;
+                    }
                     let recipes = self.def(i).production.as_ref().map(|p| p.recipes.clone());
                     let Some(p) = self.state.entities[i].production.as_mut() else {
                         outcome
@@ -498,8 +508,14 @@ impl Sim {
                         Ok(out)
                     };
                     match edit {
-                        ProductionEdit::Append { items } => match make(items) {
-                            Ok(items) => p.pending_items.extend(items),
+                        ProductionEdit::Append { items }
+                        | ProductionEdit::SupplyLaunches { items, .. } => match make(items) {
+                            Ok(items) => {
+                                if let ProductionEdit::SupplyLaunches { plan, .. } = edit {
+                                    p.silo.as_mut().expect("validated silo").plan = plan.clone();
+                                }
+                                p.pending_items.extend(items);
+                            }
                             Err(_) => {
                                 outcome
                                     .skipped

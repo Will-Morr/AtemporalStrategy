@@ -1,3 +1,4 @@
+import {practice} from './practice';
 import { Net } from './net';
 import { runLobby, type Session } from './lobby';
 import { Game } from './game';
@@ -23,6 +24,7 @@ net.onInstanceChange = () => { stale = true; showConnection('Server updated. Rel
 net.onClose = () => {
   game?.updatePanels();
   if (stale || reconnecting) return;
+  if (practice) {showConnection('Practice session closed. Reload to start again from the recording. '); return;}
   showConnection('Disconnected. Reconnecting; your view and draft are retained. ');
   reconnecting = true;
   window.setTimeout(async () => {
@@ -43,7 +45,7 @@ net.on('match_reset', () => {
   showConnection('Opening the next game. Your player slot is retained. ');
   location.reload();
 });
-const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=location.pathname.includes('/replays/'); document.getElementById('top')!.append(switchPlayer);
+const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=!!practice || location.pathname.includes('/replays/'); document.getElementById('top')!.append(switchPlayer);
 
 async function boot(): Promise<void> {
   if (location.pathname.startsWith('/games/')) {
@@ -58,15 +60,15 @@ async function boot(): Promise<void> {
     const entry=identity.games.find((g:{id:string})=>g.id===location.pathname.split('/')[2]);
     if(entry){document.body.dataset.gameName=entry.name;document.querySelector('#lobby h1')!.textContent=entry.name;}
     document.body.dataset.botOnly=String(!!entry?.bots?.length && entry.bots.every((bot:unknown)=>bot!==null));
-    if(location.pathname.includes('/replays/')) sessionStorage.removeItem(slotStorageKey);
+    if(!practice && location.pathname.includes('/replays/')) sessionStorage.removeItem(slotStorageKey);
   }
   try {
     await net.connect();
   } catch {
-    status.textContent = 'Cannot reach the game server. Is it running on this address?';
+    status.textContent = practice ? 'Practice replay unavailable. Return to the recording and try again.' : 'Cannot reach the game server. Is it running on this address?';
     return;
   }
-  const session: Session = { slot: null, token: tabToken() };
+  const session: Session = { slot: null, token: practice ? 'practice' : tabToken() };
   const welcome = net.request({ kind: 'hello', protocol_version: 2, last_revision: null, slot_token: session.token }, 'welcome');
   net.on('slot_claimed', m => {
     session.slot = m.slot;
@@ -77,14 +79,21 @@ async function boot(): Promise<void> {
   // The server confirms the private slot before welcome; no timing guess is needed.
   if (session.slot === null) {
     session.token = null;
-    sessionStorage.removeItem(slotStorageKey);
+    if (!practice) sessionStorage.removeItem(slotStorageKey);
   }
-  if (session.slot !== null && session.token) rememberPlayer(w.match_id, session.slot, session.token, w.lobby.slots[session.slot]?.profile?.username ?? `Player ${session.slot}`);
+  if (!practice && session.slot !== null && session.token) rememberPlayer(w.match_id, session.slot, session.token, w.lobby.slots[session.slot]?.profile?.username ?? `Player ${session.slot}`);
   status.textContent = `Connected · ${w.config.player_count} players · ${w.phase}`;
-  const { session: settled, lobby } = await runLobby(net, w.config, net.lobby ?? w.lobby, net.published ? 'planning' : w.phase, session, w.match_id);
+  const { session: settled, lobby } = practice ? {session, lobby:w.lobby} : await runLobby(net, w.config, net.lobby ?? w.lobby, net.published ? 'planning' : w.phase, session, w.match_id);
   game = new Game(net, w.config, settled, lobby);
   // Debug/test hook: agent-run browser checks read state through it; never used by gameplay code.
   (window as unknown as { atemporal: Game }).atemporal = game;
+  if (practice) {
+    game.playhead = practice.tick;
+    const back = document.createElement('a');
+    back.href = location.pathname; back.textContent = 'Exit practice'; back.id = 'exit-practice';
+    document.getElementById('top')!.prepend(back);
+    document.title = 'Practice replay · Atemporal Strategy';
+  }
   await game.start();
   if (settled.slot !== null) game.toast(`Connected as ${lobby.slots[settled.slot]?.profile?.username ?? `Player ${settled.slot}`}. This tab keeps your player when refreshed.`);
   // Late joiners need the current revision; the server resends it on hello, so replay any queued one.

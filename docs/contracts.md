@@ -256,7 +256,7 @@ Each accepted player turn is atomically written and flushed before acknowledgeme
 
 Persist thinking time periodically in a separate atomic planning record, with the interval documented. Record resume events and any operator action. Provide CLI replay verification/resume and browser replay loading as read-only spectator mode. Results are inspectable by round, not only the final rewritten timeline.
 
-User-confirmed scoreboard cadence is once per resolved round, including passes and unchanged winning timelines. Default victory rule is `FixedTarget{points: 5}`, configurable; multiplayer may instead use `Lead{margin: N}`.
+User-confirmed scoreboard cadence is once per resolved round, including passes and unchanged winning timelines. Default victory rule is `FixedTarget{points: 3}`, configurable; multiplayer may instead use `Lead{margin: N}`.
 
 Proposed score reduction: construct the complete vector of player/team deltas, persist it once per round, then evaluate the configured threshold. In lead mode compare the selected total of each side with the maximum of all rivals; require a positive margin. For example, totals `[8, 8, 3]` have no leader by 2, while `[10, 8, 3]` do. FFA win deltas are proposed as one per survivor; team deltas equal survivor count. Per user confirmation, survival points require at least one eliminated player: team raw delta is final surviving-member count on `win` and always zero on `stalemate`. On `draw`, use configured `draw_scoring`: `none` gives zero, `all_players` credits every original player (proposed one raw point each, summed by team). Score reduction belongs in the controller, not combat AI or client calculations.
 

@@ -1,9 +1,9 @@
 import type {Setup, LobbySlot} from './contracts.generated';
 import {setFingerprint} from './session';
 setFingerprint();
-type Style='standard';
+type Style='standard'|'tactical';
 interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
-interface Directory {games:Entry[];user:string|null;defaults:Setup}
+interface Directory {games:Entry[];user:string|null;defaults:Setup;default_bot:Style}
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 let directory:Directory;
 let advancedDirty=false;
@@ -32,7 +32,7 @@ function setup():Setup {
   const s=structuredClone(directory.defaults),c=s.match_defaults;
   c.player_count=Number($<HTMLSelectElement>('player-count').value);c.map_size=Number($<HTMLSelectElement>('map-size').value);c.symmetric=$<HTMLSelectElement>('symmetric').value==='true';c.control_limit=$<HTMLSelectElement>('control').value as typeof c.control_limit;
   const kind=$<HTMLSelectElement>('objective').value;
-  const rules={victory_rule:{kind:'fixed_target' as const,points:5},tie_policy:'continue_until_unique' as const,draw_scoring:'none' as const,time_penalty:'none' as const};
+  const rules={victory_rule:{kind:'fixed_target' as const,points:3},tie_policy:'continue_until_unique' as const,draw_scoring:'none' as const,time_penalty:'none' as const};
   c.objective=kind===c.objective.kind?c.objective:kind==='timed'?{kind,lock_ticks_per_round:100}:kind==='hybrid'?{kind,lock_ticks_per_round:100,rules}:{kind:kind==='simple_win'?'simple_win':'scoreboard',rules};
   if($<HTMLSelectElement>('sides').value==='teams'){
     s.available_teams=[{team_id:'cyan',label:'Cyan',capacity:Math.ceil(c.player_count/2)},{team_id:'orange',label:'Orange',capacity:Math.ceil(c.player_count/2)}];
@@ -45,8 +45,8 @@ function slots():void {
   const container=$('bot-slots'),previous=Array.from(container.querySelectorAll('select')).map(s=>s.value),all=$<HTMLInputElement>('all-bots').checked;container.replaceChildren();
   for(let i=0;i<Number($<HTMLSelectElement>('player-count').value);i++){
     const label=document.createElement('label');label.className='field';label.textContent=`Slot ${i}`;const select=document.createElement('select');select.id=`bot-${i}`;
-    for(const [value,text] of [['','Human'],['standard','Standard bot']]){if(all&&!value||!all&&i===0&&value)continue;const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);}
-    select.value=all?(previous[i]||'standard'):i===0?'':previous[i]??'';label.append(select);container.append(label);
+    for(const [value,text] of [['','Human'],['tactical','Tactical 2.0'],['standard','Standard 1.0']]){if(all&&!value||!all&&i===0&&value)continue;const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);}
+    select.value=all?(previous[i]||directory.default_bot):i===0?'':previous[i]??'';label.append(select);container.append(label);
   }
   $('round-budget-label').hidden=!all;
 }

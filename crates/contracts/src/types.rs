@@ -182,7 +182,7 @@ record!(ScoreboardRules {
 impl Default for ScoreboardRules {
     fn default() -> Self {
         Self {
-            victory_rule: VictoryRule::FixedTarget { points: 5.0 },
+            victory_rule: VictoryRule::FixedTarget { points: 3.0 },
             tie_policy: TiePolicy::ContinueUntilUnique,
             draw_scoring: DrawScoring::None,
             time_penalty: TimePenalty::None,
@@ -374,6 +374,10 @@ pub enum MemberEdit {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProductionEdit<Reference = QueueItemId> {
+    SupplyLaunches {
+        items: Vec<TypeKey>,
+        plan: SiloPlan,
+    },
     Append {
         items: Vec<TypeKey>,
     },
@@ -392,6 +396,7 @@ pub enum ProductionEdit<Reference = QueueItemId> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command<BlueprintReference = BlueprintId, QueueReference = QueueItemId> {
+    ClearFutureOrders {},
     AssignOrder {
         entities: Vec<EntityId>,
         order: Order,

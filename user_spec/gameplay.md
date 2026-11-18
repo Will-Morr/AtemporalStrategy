@@ -46,7 +46,7 @@ Timed adjudication considers only the constructor/factory end state: the game is
 
 ## Hybrid mode
 
-Add a hybrid mode with the scoreboard goal of five timeline wins and a fixed advance of immutable history each round.
+Add a hybrid mode with the scoreboard configurable timeline-win goal and a fixed advance of immutable history each round.
 
 ## Dynamic simulation horizon
 
@@ -64,13 +64,13 @@ What counts as progress, the exact boolean condition, and how future scheduled i
 
 ## Scoreboard and teams
 
-Award points each resolved round, including passes: an unchanged winning timeline continues to score. Default match victory is first to **5 points**, configurable.
+Award points each resolved round, including passes: an unchanged winning timeline continues to score. Default match victory is first to **3 points** (superseding five), configurable.
 
 Multiplayer supports **FFA or team play**. Add an optional dynamic score-to-win configuration requiring one player to have **N more points than every other player**, since several players may score together. Team scores are based on the number of their members still alive after the simulation.
 
 **Only award survival points when at least one player is eliminated at the end.** Temporary elimination followed by recovery does not count as an elimination for this condition. Stalemates never score. Draw scoring is configurable: either no players score or all players score. This draw-specific rule supersedes the earlier non-scoring-draw assumption; it does not change survival-based scoring for wins.
 
-Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-5 rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
+Game-end score ties must be configurable. The user specified the default as “have play continue until there is a single team with a score exceeding the win state.” The current architecture interprets this as one uniquely leading team meeting the configured victory threshold, preserving the earlier first-to-target rule; alternate tie policies and exact threshold comparisons remain explicit implementation details.
 
 There is no scoreboard round limit. Players can stop and archive manually; repeated stalemates or tied scores do not cause an automatic administrative result.
 
@@ -122,3 +122,9 @@ Factory outputs must push blocking units aside when ready to spawn, rather than 
 ## Tread movement
 
 Tanks and artillery use orthogonal tread movement, never diagonal steps. Tread pathfinding should alternate horizontal and vertical steps where possible instead of completing one axis first, following a more intuitive staircase toward the destination.
+
+## Balance experiments
+
+Maintain a reusable tool for direct one-on-one combat experiments on a small, minimal map. Both sides simply send every unit to attack the opposing base. Support a deployed army purchased with a maximum matter budget and a factory with effectively instant build capacity, a preselected repeating queue and a steady matter income per tick. Compare equal budgets or income across seats. Save outcomes, surviving units and surviving unit value, calculated as the sum of each unit’s matter cost times its remaining health fraction.
+
+Factory experiments should compare every unit head-to-head and explore every two-unit combination for synergies. Allocate equal matter to each unit type in a mixture and interleave their production over time. Keep long-running experiments suitable for background execution with bounded CPU usage.

@@ -148,6 +148,9 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 #lobby [hidden]{display:none!important}
 #roster li.open-slot{cursor:pointer}#roster li.open-slot:hover,#roster li.open-slot:focus-visible{outline:1px solid var(--accent)}
 #roster li span:nth-of-type(2){min-width:0;overflow-wrap:anywhere;flex:1}#top-phase{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#game-info{pointer-events:auto;position:relative;white-space:nowrap}#game-info[open]>a{position:absolute;top:100%;left:0;background:#172938;border:1px solid #61829c;border-radius:4px;padding:10px;z-index:16}
+#turn-banner[data-other="true"]{background:#674316;border-color:#ffd387;color:#fff5d8}#clear-future{font-weight:700;background:#633434;border-color:#bc7971;padding:6px 10px}
+.review-tools{display:grid;gap:7px;margin:8px 0;padding:8px 0;border-block:1px solid var(--edge)}.review-tools [hidden],#practice-options[hidden]{display:none}.review-tools small{display:block;color:#c8c7c0}.review-command{display:block;width:100%;text-align:left;padding-left:6px;border-left:3px solid;margin:4px 0}.review-jumps{display:flex;gap:4px}#practice-options{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#tick-activity{max-height:10rem;overflow:auto}#tick-activity strong{color:#ffda70}.review-queue{display:grid;gap:4px}#exit-practice{pointer-events:auto}
 </style></head><body>
 
 <section id="lobby">
@@ -182,7 +185,7 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
   <div id="panels">
     <div id="selection"><h3>Selection</h3><div id="selection-body" class="muted">Nothing selected. Click or drag on the map. Press ? for hotkeys.</div></div>
     <div id="timeline-wrap"><canvas id="timeline"></canvas><div id="transport"><button id="play">Play</button><button id="step-back">◀ 1</button><button id="step-fwd">1 ▶</button><button id="jump-back">◀ 100</button><button id="jump-fwd">100 ▶</button><span id="rate"></span><input id="tick-input" type="number" min="0" style="width:6rem"><button id="to-draft">Draft tick</button><span id="timeline-info" class="muted"></span></div></div>
-    <div><canvas id="minimap"></canvas><div id="draft-panel"><h3 id="draft-title">Draft</h3><ul id="draft-list"></ul><button id="commit" disabled>Commit</button></div></div>
+    <div><canvas id="minimap"></canvas><div id="draft-panel"><h3 id="draft-title">Draft</h3><ul id="draft-list"></ul><button id="clear-future" title="Stage removal of your previously committed orders strictly after this tick">Clear all future orders</button><button id="commit" disabled>Commit</button></div></div>
   </div>
 </section>
 <script type="module" src="/app.js"></script>

@@ -1,11 +1,13 @@
+import {practice} from './practice';
+import {GroundVision, BuildingMemory, playerSeesEntity, playerVisibility} from './vision';
 import {guideUrl} from './session';
 import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
-import {flightPosition, missileName, setSiloPlan, siloPlan} from './silo';
+import {missileName, queueLaunches} from './silo';
 import { unitIcon } from './icons';
 import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type {
-  ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
+  Activity, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   TypeDefinition, WorldEvent, WorldState,
 } from './contracts.generated';
 import type { Net } from './net';
@@ -17,6 +19,16 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 const CHUNK = 1000;
 const RATES = [0.25, 0.5, 1, 2, 4, 8, 16];
 export const idKey = (id: EntityId): string => JSON.stringify(id);
+
+// Mirrors the exact-state activity projected by atemporal_sim::output::activity_of.
+function activityOf(entity: WorldState['entities'][number]): Activity {
+  const kind = entity.action.kind;
+  if (kind === 'mine') return 'mining';
+  if (kind === 'construct') return 'construction';
+  if (entity.engaged_target) return 'combat';
+  if ((kind === 'attack_move' || kind === 'support') && !entity.goal_settled) return 'movement';
+  return 'idle';
+}
 
 export interface RevisionView {
   revision: number;
@@ -44,6 +56,7 @@ export interface EntityView {
   activity: string;
   engaged: number | null;
   blueprint?: DraftItemRef;
+  remembered?: boolean;
   settings?: BlueprintSettings;
   outputDirection?: import('./contracts.generated').CardinalDirection;
   silo?: import('./contracts.generated').SiloState | null;
@@ -53,7 +66,7 @@ export interface EntityView {
 type Mode =
   | { kind: 'none' }
   | { kind: 'attack' }
-  | { kind: 'launch'; type_key: string; silos: EntityId[] }
+  | { kind: 'launch'; type_key: string; silos: EntityId[]; batch:boolean }
   | { kind: 'support' }
   | { kind: 'area'; order: 'mine' | 'construct' }
   | { kind: 'build' }
@@ -125,10 +138,22 @@ export class Game {
   planningSince = performance.now();
 
   constructor(readonly net: Net, readonly config: MatchConfig, readonly session: Session, lobby: LobbyState) {
-    this.profiles = lobby.slots;
+    this.updateLobby(lobby);
     this.renderer = new Renderer($('map'), $('minimap'), $('timeline'), this);
     $('game').classList.add('active');
     $('lobby').style.display = 'none';
+  }
+
+  private updateLobby(lobby: LobbyState): void {
+    this.profiles = lobby.slots;
+    if (!lobby.available_teams.length) return;
+    const assignments = lobby.slots.flatMap(({slot, profile}) =>
+      profile?.team_id == null ? [] : [{player_id:slot, team_id:profile.team_id}],
+    );
+    if (assignments.length === this.config.player_count) {
+      this.config.multiplayer = {kind:'teams', assignments};
+      this.visionCache = null;
+    }
   }
 
   get player(): number | null {
@@ -138,6 +163,7 @@ export class Game {
     return this.session.slot === null;
   }
   get fullVision(): boolean { return this.spectator || this.finished !== null; }
+  canInspectPlan(owner: number): boolean { return this.fullVision || owner === this.player; }
   color(owner: number): string {
     const team = this.profiles[owner]?.profile?.team_id;
     if (team) { const first = this.profiles.find(s => s.profile?.team_id === team); if (first?.profile) return first.profile.color; }
@@ -180,10 +206,11 @@ export class Game {
       this.updatePanels();
     });
     this.net.on('lobby_updated', m => {
-      this.profiles = m.lobby.slots;
+      this.updateLobby(m.lobby);
+      this.experience?.review.update();
     });
     this.net.on('welcome', m => {
-      this.profiles = m.lobby.slots;
+      this.updateLobby(m.lobby);
       if(m.phase==='finished'||m.phase==='archived'){this.finished=m.phase==='archived'?'Match archived.':'Match complete.';this.updatePanels();}
       this.net.send({kind:'get_replay_progress'});
     });
@@ -255,7 +282,11 @@ export class Game {
       while(this.previewCoverage.size>8){const old=this.previewCoverage.keys().next().value!;this.previewCoverage.delete(old);for(const t of rev.samples.keys())if(Math.floor(t/CHUNK)===old)rev.samples.delete(t);rev.events=rev.events.filter(e=>Math.floor(e.tick/CHUNK)!==old);}
       if(!this.terrain){this.terrain=m.snapshot.terrain;this.initialOre=m.snapshot.ore;this.renderer.fit();const own=m.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
       const changed=this.exact?.revision!==m.revision || this.exact.tick!==tick;
-      if(this.viewingPreview && Math.floor(this.playhead)===tick) this.exact={revision:m.revision,tick,state:m.snapshot};
+      if (!this.fullVision) this.recordBuildingSamples(rev, m.samples);
+      if(this.viewingPreview && Math.floor(this.playhead)===tick) {
+        this.exact={revision:m.revision,tick,state:m.snapshot};
+        if (!this.fullVision) this.recordExactBuildings(rev, m.snapshot);
+      }
       if(changed)this.updatePanels();else this.updatePreviewStatus();
     } catch(error) {
       // Publication or retry can expire an in-flight provisional query.
@@ -291,7 +322,10 @@ export class Game {
       const needsFit = !this.terrain;
       this.terrain = exact.snapshot.terrain;
       this.initialOre = exact.snapshot.ore;
-      if(this.current===m.revision && !this.viewingPreview)this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
+      if(this.current===m.revision && !this.viewingPreview) {
+        this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
+        if (!this.fullVision) this.recordExactBuildings(view, exact.snapshot);
+      }
       console.log(`initial exact state in ${Math.round(performance.now() - t0)} ms`);
       if(needsFit){this.renderer.fit();const own=exact.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
     }
@@ -330,18 +364,26 @@ export class Game {
   async ensureChunk(k: number): Promise<void> {
     if(this.viewingPreview){if(k===Math.floor(this.playhead/CHUNK))void this.loadPreview();return;}
     const rev = this.rev();
-    if (!rev || this.replayErrors.has(rev.revision) || rev.chunks.has(k) || rev.loading.has(k) || k * CHUNK > rev.outcome.terminal_state_tick) return;
+    if (!rev || this.replayErrors.has(rev.revision) || rev.loading.has(k) || k * CHUNK > rev.outcome.terminal_state_tick) return;
+    if (rev.chunks.has(k)) {
+      void this.loadBuildingHistory(rev);
+      return;
+    }
     rev.loading.add(k);
     const from = k * CHUNK;
     const to = Math.min(from + CHUNK - 1, rev.outcome.terminal_state_tick);
+    const stride = this.config.snapshot_interval;
+    const sampleStart = from - (from % stride);
     const t0 = performance.now();
     try {
-      const range = await this.net.request({ kind: 'get_snapshot_range', revision: rev.revision, from_tick: from, to_tick: to, stride: this.config.snapshot_interval }, 'snapshot_range', s => s.revision === rev.revision && (s.samples.length === 0 || s.samples[0].tick >= from));
+      const range = await this.net.request({ kind: 'get_snapshot_range', revision: rev.revision, from_tick: sampleStart, to_tick: to, stride }, 'snapshot_range', s => s.revision === rev.revision);
       rev.dictionary = range.entity_dictionary;
       for (const s of range.samples) rev.samples.set(s.tick, s);
+
       const events = await this.net.request({ kind: 'get_events', revision: rev.revision, from_tick: from, to_tick: to, effects_only: true }, 'events', e => e.revision === rev.revision);
       rev.events = rev.events.concat(events.events);
       rev.chunks.add(k);
+      void this.loadBuildingHistory(rev);
       while (rev.chunks.size > 8) {
         const oldest = rev.chunks.values().next().value!; rev.chunks.delete(oldest);
         for (const tick of rev.samples.keys()) if (Math.floor(tick/CHUNK) === oldest) rev.samples.delete(tick);
@@ -371,6 +413,7 @@ export class Game {
         if (this.exactPending?.tick === tick && this.exactPending.revision === rev.revision) this.exactPending = null;
         if (Math.floor(this.playhead) === tick && this.current === rev.revision) {
           this.exact = { revision: rev.revision, tick, state: e.snapshot };
+          if (!this.fullVision) this.recordExactBuildings(rev, e.snapshot);
           if (this.player !== null && this.phase && this.phase.revision === rev.revision) this.net.send({ kind: 'planning_ready', round: this.phase.round, revision: rev.revision });
           this.updatePanels();
         }
@@ -383,31 +426,19 @@ export class Game {
       });
   }
 
+  private exactAtPlayhead(): WorldState | null {
+    const tick = Math.floor(this.playhead);
+    return this.exact?.revision === this.current && this.exact.tick === tick && (this.playhead === tick || !this.playing)
+      ? this.exact.state : null;
+  }
+
   /** Entities to draw at the playhead: exact state when available, otherwise interpolated samples. */
   rawEntities(): EntityView[] {
     const rev = this.rev();
     if (!rev) return [];
     const tick = this.playhead;
-    const whole = Math.floor(tick);
-    if (this.exact && this.exact.revision === rev.revision && this.exact.tick === whole && (tick === whole || !this.playing)) {
-      const dictionary = new Map(rev.dictionary.map((d, i) => [idKey(d.id), i]));
-      return this.exact.state.entities.map(e => ({
-        index: dictionary.get(idKey(e.id)) ?? -1,
-        id: e.id,
-        owner: e.owner,
-        type_key: e.type_key,
-        x: e.tile.x,
-        y: e.tile.y,
-        hp: e.hp,
-        maxHp: this.maxHp(e.type_key, e.lifecycle, e.paid_matter),
-        facing: e.last_move_direction,
-        lifecycle: e.lifecycle,
-        activity: e.action.kind === 'mine' ? 'mining' : e.action.kind === 'construct' ? 'construction' : e.engaged_target ? 'combat' : e.action.kind === 'idle' ? 'idle' : 'movement',
-        engaged: e.engaged_target ? (dictionary.get(idKey(e.engaged_target)) ?? null) : null,
-        exact: e,
-        silo: e.production?.silo,
-      }));
-    }
+    const exact = this.exactAtPlayhead();
+    if (exact) return this.exactEntities(rev, exact);
     const interval = this.config.snapshot_interval;
     const ta = Math.floor(tick / interval) * interval;
     const a = rev.samples.get(ta);
@@ -436,12 +467,34 @@ export class Game {
     });
   }
 
+  private exactEntities(rev:RevisionView, state:WorldState):EntityView[] {
+    const dictionary = new Map(rev.dictionary.map((d, i) => [idKey(d.id), i]));
+    return state.entities.map(e => ({
+      index: dictionary.get(idKey(e.id)) ?? -1,
+      id: e.id,
+      owner: e.owner,
+      type_key: e.type_key,
+      x: e.tile.x,
+      y: e.tile.y,
+      hp: e.hp,
+      maxHp: this.maxHp(e.type_key, e.lifecycle, e.paid_matter),
+      facing: e.last_move_direction,
+      lifecycle: e.lifecycle,
+      activity: activityOf(e),
+      engaged: e.engaged_target ? (dictionary.get(idKey(e.engaged_target)) ?? null) : null,
+      exact: e,
+      silo: e.production?.silo,
+    }));
+  }
+
   entities(): EntityView[] {
     const all = this.rawEntities();
     const visible = this.visibility(all);
-    const views = all.filter(e => this.fullVision || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
+    const views = all
+      .filter(e => this.fullVision || playerSeesEntity(this.player, visible, e))
+      .map(e => this.canInspectPlan(e.owner) ? e : {...e, exact:undefined, silo:undefined});
     if (this.exact?.revision === this.current && this.exact.tick === Math.floor(this.playhead)) {
-      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.fullVision)) {
+      for (const b of this.exact.state.blueprints) if (!b.site_id && this.canInspectPlan(b.owner)) {
         views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},outputDirection:b.output_direction??undefined,settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
       }
     }
@@ -452,6 +505,11 @@ export class Game {
         if (c.kind === 'cancel_blueprints') for (let i = views.length - 1; i >= 0; i--) if (c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(views[i].blueprint ?? (views[i].exact?.blueprint_id ? {kind:'persistent',id:views[i].exact!.blueprint_id} : null)))) views.splice(i, 1);
         if (c.kind === 'configure_blueprints') for (const v of views) if (v.blueprint && c.blueprint_ids.some(b => JSON.stringify(b) === JSON.stringify(v.blueprint))) v.settings = c.settings;
       });
+    }
+    const revision=this.rev();
+    if (!this.fullVision && revision && this.terrain) {
+      const memory = this.memoryFor(revision);
+      views.push(...memory.remembered(Math.floor(this.playhead), visible));
     }
     return views;
   }
@@ -474,31 +532,83 @@ export class Game {
     return {missiles:[...flights.values()].filter(f=>f.launch_tick<this.playhead && f.impact_tick>=this.playhead),recon:[...zones.values()].filter(r=>r.starts_at<=this.playhead && r.expires_at>this.playhead)};
   }
 
-  private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; tiles: Set<string> } | null = null;
+  private sightHistory=new WeakMap<RevisionView,{next:number,busy:boolean}>();
+  private async loadBuildingHistory(rev:RevisionView):Promise<void> {
+    if(this.fullVision || this.viewingPreview || !this.terrain)return;
+    const history=this.sightHistory.get(rev)??{next:0,busy:false};
+    if(history.busy || history.next>Math.floor(this.playhead/CHUNK))return;
+    this.sightHistory.set(rev,history);history.busy=true;
+    try {
+      while(this.rev()===rev && !this.fullVision && history.next<=Math.floor(this.playhead/CHUNK)){
+        const k=history.next,from=k*CHUNK,to=Math.min(from+CHUNK-1,rev.outcome.terminal_state_tick);
+        let samples:Sample[];
+        if(rev.chunks.has(k))samples=[...rev.samples.values()].filter(s=>s.tick>=from && s.tick<=to).sort((a,b)=>a.tick-b.tick);
+        else {
+          const stride=this.config.snapshot_interval;
+          const range=await this.net.request({kind:'get_snapshot_range',revision:rev.revision,from_tick:from-(from%stride),to_tick:to,stride},'snapshot_range',m=>m.revision===rev.revision);
+          if(this.rev()!==rev)return;
+          rev.dictionary=range.entity_dictionary;samples=range.samples;
+        }
+        this.recordBuildingSamples(rev,samples);
+        history.next++;
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }
+    } catch(error){console.warn('Could not restore building sightings',error);}
+    finally {history.busy=false;}
+  }
+  private sampleGroundVision = new GroundVision();
+  private groundVision = new GroundVision();
+  private buildingMemory = new WeakMap<RevisionView,BuildingMemory>();
+
+  private memoryFor(rev:RevisionView):BuildingMemory {
+    let memory=this.buildingMemory.get(rev);
+    if(!memory){
+      const terrain=this.terrain!;
+      memory=new BuildingMemory(terrain.width,terrain.height);
+      this.buildingMemory.set(rev,memory);
+    }
+    return memory;
+  }
+
+  private recordExactBuildings(rev:RevisionView, state:WorldState):void {
+    const views = this.exactEntities(rev, state);
+    const visible = playerVisibility(this.sampleGroundVision, state.terrain, views,
+      {missiles:state.missiles??[], recon:state.recon??[]}, this.types, this.config.multiplayer,
+      this.player, state.tick, this.net.rulesVersion===7);
+    this.memoryFor(rev).observe(state.tick, visible, views.filter(v => this.otherBuilding(v)), true);
+  }
+
+  private otherBuilding(v:EntityView):boolean {
+    return v.owner !== this.player && this.types.get(v.type_key)?.kind==='structure';
+  }
+
+  private recordBuildingSamples(rev:RevisionView,samples:Sample[]):void {
+    const memory=this.memoryFor(rev);
+    for(const sample of samples){
+      const views=sample.entities.flatMap(entity=>{
+        const ref=rev.dictionary[entity.index];
+        const def=ref && this.types.get(ref.type_key);
+        return def ? [{...ref,...entity,...entity.tile,maxHp:def.max_hp,engaged:null}] : [];
+      });
+      const visible = playerVisibility(this.sampleGroundVision, this.terrain!, views,
+        {missiles:sample.missiles??[], recon:sample.recon??[]}, this.types, this.config.multiplayer,
+        this.player, sample.tick, this.net.rulesVersion===7);
+      memory.observe(sample.tick, visible, views.filter(v => this.otherBuilding(v)));
+    }
+  }
+
+  private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; events: unknown; tiles: Set<string> } | null = null;
   visibility(all?: EntityView[]): Set<string> {
     const sample = this.rev()?.samples.get(Math.floor(this.playhead / this.config.snapshot_interval) * this.config.snapshot_interval);
     const nextSample = this.rev()?.samples.get((Math.floor(this.playhead / this.config.snapshot_interval) + 1) * this.config.snapshot_interval);
     const cached = this.visionCache;
-    if (cached && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample) return cached.tiles;
-    const visible = new Set<string>();
-    this.visionCache = { revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, tiles: visible };
-    if (this.spectator || !this.terrain) return visible;
-    const team = this.profiles[this.player!]?.profile?.team_id;
-    for (const e of all ?? this.rawEntities()) {
-      if (e.lifecycle !== 'complete' || (e.owner !== this.player && (!team || this.profiles[e.owner]?.profile?.team_id !== team))) continue;
-      const radius = this.types.get(e.type_key)?.vision ?? 0;
-      for (let y=Math.max(0,Math.ceil(e.y-radius));y<=Math.min(this.terrain.height-1,Math.floor(e.y+radius));y++)
-        for (let x=Math.max(0,Math.ceil(e.x-radius));x<=Math.min(this.terrain.width-1,Math.floor(e.x+radius));x++)
-          if ((x-e.x)**2+(y-e.y)**2<=radius**2) visible.add(`${x},${y}`);
-    }
-    const allied=(owner:number)=>owner===this.player || (!!team && this.profiles[owner]?.profile?.team_id===team);
-    const reveal=(center:Tile,radius:number)=>{
-      for(let y=Math.max(0,Math.ceil(center.y-radius));y<=Math.min(this.terrain!.height-1,Math.floor(center.y+radius));y++)
-        for(let x=Math.max(0,Math.ceil(center.x-radius));x<=Math.min(this.terrain!.width-1,Math.floor(center.x+radius));x++)if((x-center.x)**2+(y-center.y)**2<=radius**2)visible.add(`${x},${y}`);
-    };
-    const state=this.missileState();
-    for(const flight of state.missiles){const m=this.types.get(flight.type_key)?.missile;if(allied(flight.owner)&&m?.effect==='satellite')reveal(flightPosition(flight,this.playhead),m.radius);}
-    for(const zone of state.recon)if(allied(zone.owner)&&zone.starts_at<=this.playhead&&zone.expires_at>this.playhead)reveal(zone.center,zone.radius);
+    const events = this.rev()?.events;
+    if (cached && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample && cached.events === events) return cached.tiles;
+    const visible = this.fullVision || !this.terrain ? new Set<string>() : playerVisibility(
+      this.groundVision, this.terrain, all ?? this.rawEntities(), this.missileState(),
+      this.types, this.config.multiplayer, this.player, this.playhead, this.net.rulesVersion===7,
+    );
+    this.visionCache = { revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, events, tiles: visible };
     return visible;
   }
 
@@ -630,7 +740,7 @@ export class Game {
   }
 
   selectedViews(): EntityView[] {
-    return this.entities().filter(e => e.id && this.selection.has(idKey(e.id)));
+    return this.entities().filter(e => !e.remembered && e.id && this.selection.has(idKey(e.id)));
   }
 
   selectViews(views: EntityView[]): void {
@@ -858,7 +968,7 @@ export class Game {
       if (this.mode.kind === 'launch') {
         const mode=this.mode;
         for(const v of this.entities().filter(v=>this.ownSelectable(v)&&this.types.get(v.type_key)?.silo&&mode.silos.some(id=>idKey(id)===idKey(v.id)))) {
-          const plan=siloPlan(this,v);plan.launches.push({type_key:mode.type_key,target:tile});setSiloPlan(this,v,plan);
+          queueLaunches(this,v,mode.type_key,tile,e.shiftKey || mode.batch ? 5 : 1);
         }
         this.mode={kind:'none'};this.updateMode();return;
       }
@@ -913,9 +1023,9 @@ export class Game {
       const moved = Math.hypot(drag.x1 - drag.x0, drag.y1 - drag.y0) > 4;
       if (!e.shiftKey) this.selection.clear();
       this.recalledGroup = null;
-      const views = this.entities().filter(v => v.id && (moved ? v.x >= rect.min.x && v.x <= rect.max.x && v.y >= rect.min.y && v.y <= rect.max.y : Math.round(v.x) === a.x && Math.round(v.y) === a.y));
+      const views = this.entities().filter(v => !v.remembered && v.id && (moved ? v.x >= rect.min.x && v.x <= rect.max.x && v.y >= rect.min.y && v.y <= rect.max.y : Math.round(v.x) === a.x && Math.round(v.y) === a.y));
       const own = views.filter(v => this.ownSelectable(v));
-      for (const v of moved ? own : views.slice(0, 1)) {
+      for (const v of moved ? (this.fullVision ? views : own) : views.slice(0, 1)) {
         const key = idKey(v.id);
         if (e.shiftKey && this.selection.has(key) && !moved) this.selection.delete(key);
         else this.selection.add(key);
@@ -993,7 +1103,7 @@ export class Game {
   }
 
   entityAt(tile: Tile): EntityView | undefined {
-    return this.entities().find(v => Math.round(v.x) === tile.x && Math.round(v.y) === tile.y);
+    return this.entities().find(v => !v.remembered && Math.round(v.x) === tile.x && Math.round(v.y) === tile.y);
   }
 
   applyTileMode(tile: Tile): void {
@@ -1030,7 +1140,7 @@ export class Game {
   }
   validPlacement(tile: Tile, factory: boolean): boolean {
     const terrain = this.terrain;
-    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t) && !this.exact?.state.blueprints.some(b => b.tile.x === t.x && b.tile.y === t.y) && !this.draft.commands.some(c => c.command.kind === 'place_blueprints' && c.command.tiles.some(b => b.x === t.x && b.y === t.y));
+    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t) && !this.exact?.state.blueprints.some(b => this.canInspectPlan(b.owner) && b.tile.x === t.x && b.tile.y === t.y) && !this.draft.commands.some(c => c.command.kind === 'place_blueprints' && c.command.tiles.some(b => b.x === t.x && b.y === t.y));
     const offsets = { n: [0,-1], e: [1,0], s: [0,1], w: [-1,0] };
     const [dx,dy] = offsets[this.renderer.outputDirection];
     return clear(tile) && (!factory || clear({ x: tile.x + dx, y: tile.y + dy }));
@@ -1238,7 +1348,7 @@ export class Game {
     const text = (() => {
       switch (this.mode.kind) {
         case 'none': return '';
-        case 'launch': return `Target ${missileName(this.mode.type_key)}: click the map · unlimited range · Esc cancels`;
+        case 'launch': return `Target ${missileName(this.mode.type_key)}: click the map · Shift-click queues five · Esc cancels`;
         case 'attack': return 'Attack-move: click a destination tile (Esc cancels)';
         case 'support': return 'Support: click one of your units';
         case 'area': return `${this.mode.order === 'mine' ? 'Mine' : 'Construct'}: drag a rectangle`;
@@ -1259,12 +1369,17 @@ export class Game {
 
   updateTop(): void {
     const waiting=this.committed.includes(this.player??-1)&&this.committed.length<this.config.player_count&&!this.progress&&!this.preview&&!this.finished&&this.phase?.revision===this.latest;
-    $('turn-banner').hidden=!waiting;
+    const othersWaiting=!this.spectator && !waiting && !this.committed.includes(this.player!) && this.committed.length>0 && this.committed.length<this.config.player_count && !this.finished && !this.preview && !this.progress && this.phase?.revision===this.latest;
+    $('turn-banner').hidden=!waiting && !othersWaiting;
+    $('turn-banner').dataset.other=String(othersWaiting);
     $('turn-banner').textContent=`TURN COMMITTED · Waiting for ${this.config.player_count-this.committed.length} player${this.config.player_count-this.committed.length===1?'':'s'} · Uncommit to edit your moves`;
 
+    if(othersWaiting)$('turn-banner').textContent=this.committed.map(p=>this.name(p)).join(', ')+(this.committed.length===1?' is':' are')+' waiting for your turn';
     const rev = this.rev();
-    const phase = this.viewingPreview ? 'Simulating · preview (read-only)' : this.replayErrors.has(this.current) ? `Replay unavailable: ${/mismatch/i.test(this.replayErrors.get(this.current)!) ? 'local replay mismatch' : 'loading failed'}` : this.current !== this.latest ? `Historical round ${this.experience?.rounds.get(this.current)?.round ?? '…'} (read-only)` : this.finished ? this.finished : this.committed.length >= this.config.player_count ? `Round ${this.round}: simulating…` : this.committed.includes(this.player ?? -1) ? `Round ${this.round}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${this.round}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
-    $('top-phase').textContent = `${this.spectator ? 'Spectator' : this.name(this.player!)} · ${phase} · revision ${this.current}`;
+    const planningRound = practice ? this.latest + 1 : this.round;
+    const historicalRound = practice ? this.current : this.experience?.rounds.get(this.current)?.round ?? '…';
+    const phase = this.viewingPreview ? 'Simulating · preview (read-only)' : this.replayErrors.has(this.current) ? `Replay unavailable: ${/mismatch/i.test(this.replayErrors.get(this.current)!) ? 'local replay mismatch' : 'loading failed'}` : this.current !== this.latest ? `Historical round ${historicalRound} (read-only)` : this.finished ? this.finished : this.committed.length >= this.config.player_count ? `Round ${planningRound}: simulating…` : this.committed.includes(this.player ?? -1) ? `Round ${planningRound}: committed, waiting` : this.phase && this.phase.revision === this.current ? `Round ${planningRound}: planning` : this.progress ? `Simulating ${this.progress.tick}/${this.progress.end}` : 'Simulating…';
+    $('top-phase').textContent = `${practice ? 'Practice · ' : ''}${this.spectator ? 'Spectator' : this.name(this.player!)} · ${phase} · revision ${this.current}`;
     $('top-tick').innerHTML = `tick <b>${Math.floor(this.playhead)}</b> / ${rev?.outcome.terminal_state_tick ?? 0} · editable ${this.editableFrom}–${this.availableThrough}`;
     if(this.viewingPreview) $('top-tick').textContent=`tick ${Math.floor(this.playhead)} · available 0–${this.preview!.through_tick} / ${this.preview!.end_tick}`;
     const sample = this.sampleAt(this.playhead);
@@ -1291,7 +1406,7 @@ export class Game {
 
   updatePanels(): void {
     if (this.draftRestored) {
-      if (this.draft.commands.length) sessionStorage.setItem(this.draftKey, JSON.stringify({round: this.round, draft: this.draft}));
+      if (!practice && this.draft.commands.length) sessionStorage.setItem(this.draftKey, JSON.stringify({round: this.round, draft: this.draft}));
       else sessionStorage.removeItem(this.draftKey);
     }
     updateRematch(this);
@@ -1374,9 +1489,16 @@ export class Game {
         if(t.silo)values.push(['Auto range',`${t.silo.auto_range} tiles`],['Launch range','Unlimited']);
         if(t.self_repair)values.push(['Repair',`${t.self_repair.rate*t.self_repair.hp_per_matter} HP / tick · ${t.self_repair.hp_per_matter} HP / matter`]);
         if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
-        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}const details=document.createElement('details');details.className='selection-info';details.innerHTML='<summary>Unit info</summary>';details.append(title,stats);body.append(details);if(!t.production){const order=document.createElement('div');order.className='unit-order';order.textContent=`HP ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)} · ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order);}
+        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}const details=document.createElement('details');details.className='selection-info';details.innerHTML='<summary>Unit info</summary>';details.append(title,stats);body.append(details);
+        if (!t.production) {
+          const order = document.createElement('div');
+          order.className = 'unit-order';
+          order.textContent = `HP ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)}`;
+          if (this.canInspectPlan(v.owner)) order.textContent += ` · ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;
+          body.append(order);
+        }
       } else {const label=document.createElement('strong');label.textContent=`${views.length} units selected`;body.append(label);}
-      const eligible=views.filter(v=>this.priorityEligible(v));
+      const eligible=views.filter(v=>this.canInspectPlan(v.owner) && this.priorityEligible(v));
       const priorities=new Set(eligible.map(v=>this.effectivePriority(v)));
       const priority=document.createElement('div');priority.id='selection-priority';priority.className='selection-value';
       priority.dataset.value=priorities.size===1?[...priorities][0]:'mixed';
@@ -1388,10 +1510,10 @@ export class Game {
       select.value=priority.dataset.value;select.disabled=!this.canStage().ok||!eligible.some(v=>this.ownSelectable(v));select.onchange=()=>this.setSelectionPriority(select.value as Priority);
       label.append(select);priority.append(label);body.insertBefore(priority,icons.nextSibling);
       if(views.length>1){
-        const orders=views.map(v=>this.effectiveOrder(v)??{kind:'idle'} as Order);
+        const orders=views.filter(v=>this.canInspectPlan(v.owner)).map(v=>this.effectiveOrder(v)??{kind:'idle'} as Order);
         const summary=document.createElement('div');summary.id='selection-orders';summary.className='selection-value';
-        summary.textContent=`Orders: ${new Set(orders.map(o=>JSON.stringify(o))).size===1?orderLabel(orders[0]):'Mixed'}`;body.insertBefore(summary,priority.nextSibling);
-        const factories=views.filter(v=>!!this.types.get(v.type_key)?.production);
+        summary.textContent=`Orders: ${new Set(orders.map(o=>JSON.stringify(o))).size===1?orderLabel(orders[0]):'Mixed'}`;if(orders.length)body.insertBefore(summary,priority.nextSibling);
+        const factories=views.filter(v=>this.canInspectPlan(v.owner) && !!this.types.get(v.type_key)?.production);
         if(factories.length>1){const loops=new Set(factories.map(v=>factoryPlan(this,v).loop));const loop=document.createElement('div');loop.className='selection-value';loop.textContent=`Loop new items: ${loops.size>1?'Mixed':[...loops][0]?'On':'Off'}`;body.insertBefore(loop,summary.nextSibling);}
       }
       const groups=this.experience.groups();
@@ -1412,6 +1534,16 @@ export class Game {
       }));
       helpers.append(button);
     }
+    const matching=document.createElement('button');
+    matching.textContent='All matching';
+    matching.setAttribute('aria-label','Select all matching');
+    matching.title='Select every visible unit or building with the same owner and type as your selection';
+    matching.disabled=!views.length;
+    matching.onclick=()=>{
+      const types=new Set(views.map(v=>v.owner+':'+v.type_key));
+      this.selectViews(this.entities().filter(v=>!v.remembered && types.has(v.owner+':'+v.type_key)));
+    };
+    helpers.append(matching);
     body.prepend(helpers);
     updateOrderWarnings(this);
     // Draft panel.
@@ -1428,6 +1560,10 @@ export class Game {
       list.append(li);
     });
     $('draft-title').textContent = `Plan${this.draft.tick !== null ? ` · tick ${this.draft.tick}` : ''} · ${this.draft.commands.length} changes`;
+    const reset=$<HTMLButtonElement>('clear-future');
+    reset.disabled=!this.canStage().ok || this.draft.commands.some(d=>d.command.kind==='clear_future_orders');
+    reset.hidden=this.spectator || !!this.finished || this.current!==this.latest;
+    reset.onclick=()=>this.stage({kind:'clear_future_orders'});
     const commit = $<HTMLButtonElement>('commit');
     const canCommit = this.net.connected && !this.spectator && !!this.phase && this.phase.revision === this.current && !this.committed.includes(this.player ?? -1) && !this.finished;
     const commitTick = this.draft.tick ?? Math.floor(this.playhead);
@@ -1474,6 +1610,7 @@ function describe(c: DraftCommand): string {
     case 'place_blueprints': return `place ${cmd.type_key} at ${cmd.tiles.map(t => `${t.x},${t.y}`).join(' ')}`;
     case 'edit_production': return `queue ${cmd.edit.kind}${'items' in cmd.edit ? ` ${cmd.edit.items.join(',')}` : ''} × ${cmd.factories.length}`;
     case 'set_queue_loop': return `loop ${cmd.enabled ? 'on' : 'off'} × ${cmd.factories.length}`;
+    case 'clear_future_orders': return 'Clear all my previously scheduled orders after this tick';
     case 'set_silo_plan': return `Silo launches: ${cmd.plan.launches.length} queued · automatic ${cmd.plan.automatic?'on':'off'}`;
     case 'set_stored_order': return `stored ${cmd.order.kind} × ${cmd.factories.length}`;
     case 'configure_blueprints': return `Blueprint settings: ${cmd.settings.queue.length} queued · ${cmd.settings.priority} · loop ${cmd.settings.loop_enabled?'on':'off'} · ${cmd.settings.order.kind.replace('_',' ')}`;

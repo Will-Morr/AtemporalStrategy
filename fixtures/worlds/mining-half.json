@@ -10,8 +10,8 @@
       "schema_version": 2,
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
-      "config_hash": "56dad7730072f5fa8294e24892c9d33f9600657cf187654ec6b1181c0c9600a8",
-      "content_hash": "bb80eee21b65d9638e453d0b98284d9108cc7c9d220fc46e2f39a243bd5933e6"
+      "config_hash": "175b27c55b58525a12ce60e4e187dcc9a4e5772cc9db7657982c8837fd61ba48",
+      "content_hash": "c2aeb7553cc4536bfd173255d1be9ebf5e9071cf7029eb609fe4f64d4fdf89d5"
     },
     "config": {
       "schema_version": 2,
@@ -27,7 +27,7 @@
         "rules": {
           "victory_rule": {
             "kind": "fixed_target",
-            "points": 5.0
+            "points": 3.0
           },
           "tie_policy": "continue_until_unique",
           "draw_scoring": "none",
@@ -65,7 +65,7 @@
             "neighbors": "four",
             "cooldown": 6
           },
-          "vision": 5.0,
+          "vision": 8.0,
           "weapon": null,
           "mining": null,
           "construction": null,

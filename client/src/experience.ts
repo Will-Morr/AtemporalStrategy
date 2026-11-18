@@ -1,3 +1,5 @@
+import {TimelineReview} from './timeline-review';
+import {practice} from './practice';
 import {guideUrl} from './session';
 import {siloPanel} from './silo';
 import { scoreboard } from './scoreboard';
@@ -16,6 +18,7 @@ const metrics = ['bank', 'mined', 'spend', 'army', 'infrastructure', 'attrition'
 
 /** Inspection and draft projections; all outcomes come from published server results. */
 export class Experience {
+  review: TimelineReview;
   rounds = new Map<number, Round>();
   turns = new Map<number, AcceptedTurn[]>();
   stats = new Map<number, StatsSample[]>();
@@ -57,6 +60,9 @@ export class Experience {
     planning.append(button('Discard all uncommitted changes', () => g.clearDraft()));
     planning.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
     const guide = document.createElement('a'); guide.href = guideUrl; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
+    const info=document.createElement('details');info.id='game-info';const infoTitle=document.createElement('summary');infoTitle.textContent='Game info';info.append(infoTitle);
+    const patch=document.createElement('a');patch.href=guideUrl+'#patch-notes';patch.target='_blank';patch.rel='noopener';patch.textContent='Patch notes ↗';info.append(patch);
+    $('top').append(info);
     const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
     planning.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
     toolbar.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))for(const menu of Array.from(toolbar.querySelectorAll('details')))menu.open=false;});
@@ -68,8 +74,9 @@ export class Experience {
     const queue = document.createElement('div'); queue.id = 'queue'; $('timeline-wrap').append(queue);
     const preview = document.createElement('div'); preview.id = 'lock-preview'; const diagnostics=document.createElement('details');diagnostics.innerHTML='<summary>Future-order details</summary>';diagnostics.append(preview);toolbar.querySelector('.planning')!.append(diagnostics);
     const replay = document.createElement('details'); replay.id = 'replay';
-    replay.innerHTML = '<summary>Rounds, inputs and rewrite results</summary><label>Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
+    replay.innerHTML = '<summary>Previous timelines &amp; plans</summary><label>Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
     $('game').append(replay);
+    this.review = new TimelineReview(g,replay);
     replay.addEventListener('toggle',()=>{if(replay.open)this.loadComparison();});
     $('return-live').onclick = () => { if(g.preview){g.current=g.preview.revision;g.view={t0:0,t1:g.preview.end_tick};g.seek(g.playhead);}else void this.selectRound(g.latest); };
     ($('round-picker') as HTMLSelectElement).onchange = e => void this.selectRound(Number((e.target as HTMLSelectElement).value));
@@ -143,9 +150,11 @@ export class Experience {
     const parent=this.rounds.get(this.g.current)?.parent_revision;
     if(parent!==null && parent!==undefined)void this.loadRound(parent);
   }
+  private roundSelection = 0;
   async selectRound(revision: number): Promise<void> {
+    const request = ++this.roundSelection;
     await this.loadRound(revision);
-    if (!this.g.revisions.has(revision)) return;
+    if (request !== this.roundSelection || !this.g.revisions.has(revision)) return;
     const old = this.g.rev();
     if (old && !this.g.viewingPreview && old.revision !== revision) { old.samples.clear();old.events=[];old.chunks.clear(); }
     this.g.playing = false; this.g.current = revision; this.g.exact = null;
@@ -156,7 +165,7 @@ export class Experience {
   }
   groups(through = this.g.draft.commands.length): ControlGroupState[] {
     const g = this.g;
-    const groups = structuredClone(g.exact?.revision === g.current && g.exact.tick === Math.floor(g.playhead) ? g.exact.state.control_groups : []);
+    const groups = structuredClone(g.exact?.revision === g.current && g.exact.tick === Math.floor(g.playhead) ? g.exact.state.control_groups.filter(group => g.canInspectPlan(group.id.owner)) : []);
     if (g.draft.tick !== Math.floor(g.playhead) || g.current !== g.latest) return groups;
     for (const d of g.draft.commands.slice(0,through)) {
       const c = d.command;
@@ -189,8 +198,9 @@ export class Experience {
     if(root.dataset.signature===signature)return;root.dataset.signature=signature;root.replaceChildren();
     const heading=document.createElement('div');heading.className='scoreboard-heading';
     const title=document.createElement('strong');title.textContent='TIMELINE WINS';
-    const goal=document.createElement('span');goal.textContent=`${data.goal} · ${g.viewingPreview?'result pending':`after round ${data.round}`}`;heading.append(title,goal);root.append(heading);
-    root.title=`Current match totals after round ${data.round}. Scrubbing past ticks does not change these totals.${g.viewingPreview?' The running timeline has not scored yet.':''}`;
+    const round=practice ? g.latest : data.round;
+    const goal=document.createElement('span');goal.textContent=`${data.goal} · ${g.viewingPreview?'result pending':`after round ${round}`}`;heading.append(title,goal);root.append(heading);
+    root.title=`Current match totals after round ${round}. Scrubbing past ticks does not change these totals.${g.viewingPreview?' The running timeline has not scored yet.':''}`;
     const players=document.createElement('div');players.className='scoreboard-players';
     for(const row of data.rows){
       const card=document.createElement('div');card.className='score-player';card.dataset.player=String(row.player);card.dataset.wins=row.wins===null?'pending':String(row.wins);card.dataset.status=row.winner?'winner':row.leading?'leading':'neutral';card.style.setProperty('--player-color',g.color(row.player));
@@ -205,6 +215,7 @@ export class Experience {
   }
   update(): void {
     const g = this.g;
+    this.review.update();
     this.updateScoreboard();
     this.actions();
     const policy = document.querySelector<HTMLButtonElement>('#actions [data-key="o"]');
@@ -229,13 +240,14 @@ export class Experience {
     $('lock-preview').textContent = this.lockPreview();
     const picker = $('round-picker') as HTMLSelectElement;
     const options = [...this.rounds.values()].sort((a,b) => a.revision-b.revision);
-    if (picker.options.length !== options.length) { picker.replaceChildren(); for (const r of options) picker.add(new Option(r.round === 0 ? 'Opening' : `Round ${r.round} · revision ${r.revision}`,String(r.revision))); }
+    if (picker.options.length !== options.length) { picker.replaceChildren(); for (const r of options) picker.add(new Option(r.round === 0 ? 'Opening' : practice ? `Practice round ${r.revision}` : `Round ${r.round} · revision ${r.revision}`,String(r.revision))); }
     picker.value = String(g.current);
     const r = this.rounds.get(g.current);
     if (!r) return;
-    $('round-summary').textContent = `Round ${r.round} · simulation ${r.sim_duration_ms} ms · committed thinking ${r.time_totals.map(t => `${g.name(t.player_id)} ${(t.total_ms/1000).toFixed(1)}s`).join(', ')}${r.timed ? ` · finalized losses: ${r.timed.timed_lost_players.join(', ') || 'none'}` : ''}`;
+    $('round-summary').textContent = `Round ${practice ? r.revision : r.round} · simulation ${r.sim_duration_ms} ms · committed thinking ${r.time_totals.map(t => `${g.name(t.player_id)} ${(t.total_ms/1000).toFixed(1)}s`).join(', ')}${r.timed ? ` · finalized losses: ${r.timed.timed_lost_players.join(', ') || 'none'}` : ''}`;
     const inputs = $('accepted-inputs'); inputs.replaceChildren();
     for (const turn of this.turns.get(g.current) ?? []) {
+      if (!g.fullVision && turn.player !== g.player) continue;
       const row = document.createElement('div');
       row.append(button(`R${turn.round} ${g.name(turn.player)} @${turn.tick} (${turn.duration_ms} ms)`, () => g.seek(turn.tick)));
       for (const c of turn.commands) {
@@ -278,9 +290,26 @@ export class Experience {
   }
   private siloProductionOpen=new Set<string>();
   queue(): void {
-    const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && v.owner===g.player);
-    const signature=JSON.stringify([g.canStage().ok,views.map(v=>[v.id,v.lifecycle,factoryPlan(g,v)])]);
+    const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && g.canInspectPlan(v.owner));
+    const signature=JSON.stringify([g.canStage().ok,g.fullVision,g.current===g.latest,views.map(v=>[v.id,v.lifecycle,!!v.exact,factoryPlan(g,v)])]);
     if(root.dataset.plan===signature)return;root.dataset.plan=signature;root.replaceChildren();this.focusDelete=null;
+    if (views.length && (g.fullVision || g.current !== g.latest)) {
+      for (const v of views) {
+        const card=document.createElement('section');card.className='factory-plan review-queue';
+        const title=document.createElement('strong');title.textContent=`${g.name(v.owner)} · ${v.type_key} at ${Math.round(v.x)}, ${Math.round(v.y)}`;card.append(title);
+        if (!v.exact && !v.blueprint) card.append('Pause at a tick to inspect its queue.');
+        else {
+          const plan=factoryPlan(g,v);
+          for (const line of [
+            plan.active ? `Building ${plan.active.type_key} · ${Math.round(plan.active.paid_matter)} matter paid` : 'No active production',
+            'Queue · '+(plan.pending.map(i=>i.type+(i.loop?' ↻':'')).join(' → ')||'empty'),
+            g.types.get(v.type_key)?.silo ? 'Launch plan · '+(plan.silo.launches.map(i=>i.type_key).join(' → ')||'empty') : 'New units · '+orderLabel(plan.order)
+          ]) { const item=document.createElement('div');item.textContent=line;card.append(item); }
+        }
+        root.append(card);
+      }
+      return;
+    }
     const enabled=g.canStage().ok;
     const factories=views.filter(v=>!g.types.get(v.type_key)?.silo);
     const silos=views.filter(v=>g.types.get(v.type_key)?.silo);

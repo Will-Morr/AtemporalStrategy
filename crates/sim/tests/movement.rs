@@ -343,3 +343,27 @@ fn tread_vehicles_alternate_axes_without_diagonal_steps() {
         }
     }
 }
+
+#[test]
+fn rules_seven_keeps_fixed_tread_axis_precedence() {
+    let mut w = World::new(&["......."; 7]);
+    let id = w.spawn_with(0, "tank", 3, 3, attack_move(5, 5));
+    let mut request = w.request();
+    request.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 7".into();
+    let mut sim = Sim::new(&request).unwrap();
+    let mut path = vec![entity(&sim.state, &id).tile];
+    for _ in 0..request.end_tick_exclusive {
+        sim.step(&mut |_| {}).unwrap();
+        let current = entity(&sim.state, &id).tile;
+        if Some(&current) != path.last() {
+            path.push(current);
+        }
+        if current == tile(5, 5) {
+            break;
+        }
+    }
+    assert_eq!(
+        path,
+        vec![tile(3, 3), tile(4, 3), tile(5, 3), tile(5, 4), tile(5, 5)]
+    );
+}
