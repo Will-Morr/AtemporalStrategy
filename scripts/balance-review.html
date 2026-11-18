@@ -108,7 +108,7 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
     <p id="subtitle">Mirrored combat trials</p>
   </div>
   <div class="controls">
-    <label>Rules<select id="rules"><option value="12">Rules 12</option><option value="9">Rules 9 · historical</option><option value="8">Rules 8 · historical</option></select></label>
+    <label>Dataset<select id="rules"><option value="grunt-patch">Grunt balance patch</option><option value="12">Rules 12 · pre-patch</option><option value="9">Rules 9 · historical</option><option value="8">Rules 8 · historical</option></select></label>
     <label>Mode<select id="mode"><option value="army">Army · 600 matter</option><option value="3">Factory · 3 matter/tick</option><option value="6">Factory · 6 matter/tick</option></select></label>
     <label>Arena<select id="arena"><option value="open">Open</option><option value="choke">Choke</option><option value="straight">Straight corridor</option><option value="snake">Winding corridor</option></select></label>
   </div>
@@ -137,7 +137,7 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
   <p class="survival-method">Each cell is the row roster’s mean against the column opponent. Each surviving unit contributes cost × remaining HP fraction. Self-play counts both sides. Both axes use mean against all recorded opponents, highest first.</p>
   <div id="survival-exports" class="survival-exports" hidden>
     <a id="survival-png" download>Download PNG</a>
-    <a href="rules12/survival-charts.pdf" download>Download all charts as PDF</a>
+    <a id="survival-pdf" download>Download all charts as PDF</a>
   </div>
 </section>
 <div id="results" class="grids" hidden>
@@ -186,6 +186,23 @@ const unitCodes = {artillery: 'A', grinder: 'R', grunt: 'G', scout: 'S', tank: '
 const rosterCode = roster => roster.map(unit => unitCodes[unit] ?? unit).join('');
 const cache = new Map();
 const controls = [byId('rules'), byId('mode'), byId('arena')];
+const datasets = {
+  'grunt-patch': {version: 12, directory: 'grunt-patch/', title: 'Grunt balance patch'},
+  '12': {version: 12, directory: 'rules12/', title: 'Rules 12 · pre-patch'},
+  '9': {version: 9, directory: '', title: 'Rules 9'},
+  '8': {version: 8, directory: '', title: 'Rules 8'},
+};
+// Factory sweeps override production rates, so their effective content hash differs.
+const contentHashes = {
+  'grunt-patch': {
+    army: '71347572c52e0626ae53f70080dfabe52936ac1fe031d82724d8605b00e93718',
+    factory: 'c48a3ee0b52d2e547af76998c0f241d610c683da9958bd7fff050196314c80ab',
+  },
+  '12': {
+    army: 'a8da7078e2f636421a3cf02f05d1691cb94b8f3f876757b01f85a58b6e02af59',
+    factory: '0f436b56b3b9b3fe2a1b0e3fc09f138fac5ec17af4b603058c3f8891c44f1b7d',
+  },
+};
 const arenas = {open: 'Open', choke: 'Choke', straight: 'Straight corridor', snake: 'Winding corridor'};
 let dataset;
 let comparisonVersion = 0;
@@ -288,10 +305,16 @@ function renderSurvival(rules, mode, arena) {
     ? 'linear-gradient(to right,' + viridis.map(rgb => 'rgb(' + rgb.join(',') + ')').join(',') + ')'
     : 'rgb(' + viridis[0].join(',') + ')';
   byId('survival-max').textContent = format(max);
-  byId('survival-context').textContent = 'Rules ' + rules + ' · ' +
+  const {directory, title} = datasets[rules];
+  byId('survival-context').textContent = title + ' · ' +
     controls[1].selectedOptions[0].textContent + ' · ' + arenas[arena];
-  byId('survival-exports').hidden = rules !== '12';
-  byId('survival-png').href = sweepFile(rules, mode, arena).replace(/\.jsonl$/, '.png');
+  byId('survival-exports').hidden = !directory;
+  const chart = byId('survival-png');
+  const bundle = byId('survival-pdf');
+  chart.href = sweepFile(rules, mode, arena).replace(/\.jsonl$/, '.png');
+  chart.download = directory.replace('/', '-') + chart.href.split('/').at(-1);
+  bundle.href = directory + 'survival-charts.pdf';
+  bundle.download = directory.replace('/', '-') + 'survival-charts.pdf';
 
   byId('roster-key').replaceChildren(...dataset.pure.map(roster => {
     const item = element('li');
@@ -499,7 +522,7 @@ function renderMixes() {
 function sweepFile(rules, mode, arena) {
   if (rules === '8') return mode === '6' ? 'factory6.jsonl' : 'factory.jsonl';
   const file = mode === 'army' ? 'army-' + arena + '.jsonl' : 'factory-' + arena + '-' + mode + '.jsonl';
-  return rules === '12' ? 'rules12/' + file : file;
+  return datasets[rules].directory + file;
 }
 
 async function loadSweep(rules, mode, arena) {
@@ -509,8 +532,12 @@ async function loadSweep(rules, mode, arena) {
   const {meta} = data;
   const expectedMode = mode === 'army' ? 'army' : 'factory';
   const settingMatches = expectedMode === 'army' ? meta.army_budget === 600 : meta.income_per_tick === Number(mode);
-  if (String(meta.sim_rules_version) !== rules || meta.mode !== expectedMode || meta.arena !== arena || !settingMatches) {
+  if (meta.sim_rules_version !== datasets[rules].version || meta.mode !== expectedMode || meta.arena !== arena || !settingMatches) {
     throw new Error(file + ' does not match the selected rules, mode or arena.');
+  }
+  const expectedHash = contentHashes[rules]?.[expectedMode];
+  if (expectedHash && meta.effective_content_hash !== expectedHash) {
+    throw new Error(file + ' does not match the selected content.');
   }
   if ((arena === 'straight' || arena === 'snake') &&
       (!Array.isArray(meta.map_rows) || meta.map_rows.length !== meta.map_height ||
@@ -616,7 +643,7 @@ async function changeDataset(fallback = false) {
     let [rules, mode, arena] = controls.map(control => control.value);
     let next = await loadSweep(rules, mode, arena);
     if (!next && fallback) {
-      for (const candidate of [['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
+      for (const candidate of [['12', mode, arena], ['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
         next = await loadSweep(...candidate);
         if (next) {
           [rules, mode, arena] = candidate;
@@ -626,7 +653,7 @@ async function changeDataset(fallback = false) {
     }
     if (version !== requestVersion) return;
     if (!next) {
-      status.textContent = 'This sweep is unavailable. Choose another arena, mode, or rules version.';
+      status.textContent = 'This sweep is unavailable. Choose another arena, mode, or dataset.';
       return;
     }
     setControls(rules, mode, arena);
@@ -635,7 +662,14 @@ async function changeDataset(fallback = false) {
     const economy = meta.mode === 'army'
       ? 'Army · ' + format(meta.army_budget) + ' matter per side'
       : 'Factory · ' + format(meta.income_per_tick) + ' matter per side per tick';
-    byId('subtitle').textContent = 'Rules ' + meta.sim_rules_version + ' · ' + economy + ' · ' + meta.ticks + ' ticks max · ' + count + ' displayed trials';
+    const subtitle = byId('subtitle');
+    const hash = meta.effective_content_hash;
+    subtitle.textContent = 'Rules ' + meta.sim_rules_version + ' · ' + economy + ' · ' + meta.ticks + ' ticks max · ' + count + ' displayed trials';
+    if (hash) {
+      const contentIdentity = element('span', ' · Content hash ' + hash.slice(0, 12));
+      contentIdentity.title = hash;
+      subtitle.append(contentIdentity);
+    }
     const previous = selectors.map(select => select.value);
     const defaults = ['grunt', 'tank'];
     selectors.forEach((select, i) => {
@@ -673,7 +707,7 @@ const query = new URLSearchParams(location.search);
 const requestedRules = query.get('rules');
 const requestedMode = query.get('mode');
 const requestedArena = query.get('arena');
-setControls(['8', '9', '12'].includes(requestedRules) ? requestedRules : '12',
+setControls(Object.hasOwn(datasets, requestedRules) ? requestedRules : 'grunt-patch',
   ['army', '3', '6'].includes(requestedMode) ? requestedMode : 'army',
   Object.hasOwn(arenas, requestedArena) ? requestedArena : 'snake');
 void changeDataset(!requestedRules && !requestedMode && !requestedArena);

@@ -64,8 +64,14 @@ for path in docs/balance-data/survival-rules12/*.jsonl.gz; do
   name=$(basename "$path" .gz)
   gzip -dc "$path" > "artifacts/balance/review/rules12/$name"
 done
+mkdir -p artifacts/balance/review/grunt-patch
+for path in docs/balance-data/grunt-balance-patch/*.jsonl.gz; do
+  name=$(basename "$path" .gz)
+  gzip -dc "$path" > "artifacts/balance/review/grunt-patch/$name"
+done
 # Generate the downloadable images and combined PDF (requires Matplotlib).
 python3 scripts/summarize-balance.py docs/balance-data/survival-rules12 --heatmap artifacts/balance/review/rules12/survival-charts.pdf
+python3 scripts/summarize-balance.py docs/balance-data/grunt-balance-patch --heatmap artifacts/balance/review/grunt-patch/survival-charts.pdf
 python3 -m http.server 8846 --bind 127.0.0.1 --directory artifacts/balance/review
 ```
 
@@ -82,6 +88,21 @@ To export an individual chart with Matplotlib installed, use:
 ```sh
 python3 scripts/summarize-balance.py docs/balance-data/survival-rules12/army-snake.jsonl.gz --heatmap army-snake.png
 ```
+
+### Grunt damage patch
+
+Before the patch, pure grunts won all 28 non-mirror trials on each army map and in the 6-matter/tick factories on open and choke. The patch reduces grunt damage per shot from 8 to 3. Grunts still cost 15 matter and deploy 40 units with the 600-matter army budget.
+
+The [patch archive](balance-data/grunt-balance-patch/) contains 2,700 trials across the same four maps and three economies as the [baseline](balance-data/survival-rules12/). The reviewer shows both sets. The highest win count for any roster was 27 of 28 in armies and 26 of 28 in factories. Artillery and some other rosters completed individual corridor factory panels without a loss because some opponents held to the 1,800-tick cutoff.
+
+| Arena | Army | Factory at 3 matter/tick | Factory at 6 matter/tick |
+| --- | ---: | ---: | ---: |
+| Open | 28 → 26 | 26 → 24 | 28 → 21 |
+| Choke | 28 → 14 | 26 → 23 | 28 → 8 |
+| Straight | 28 → 14 | 20 → 8 | 16 → 0 |
+| Snake | 28 → 17 | 20 → 8 | 19 → 1 |
+
+The table shows pure grunt wins out of 28 non-mirror trials before and after the patch. Pure tanks beat pure grunts from both seats on all four army maps. At 6 matter/tick, 18 straight-corridor pure grunt games and 17 snake-corridor pure grunt games ended at the cutoff with both bases standing.
 
 ## Calibrating corridor width
 

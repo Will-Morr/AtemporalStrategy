@@ -28,9 +28,9 @@ fn direct_fire_needs_line_of_sight_and_idle_units_hold() {
     let grunt = w.spawn(0, "grunt", 1, 1);
     let miner = w.spawn(1, "miner", 4, 1);
     let run = w.run();
-    assert_eq!(entity(&w.at(1), &miner).hp, 52.0);
+    assert_eq!(entity(&w.at(1), &miner).hp, 57.0);
     assert_eq!(run.attacks(&grunt)[..2], [0, 3]);
-    assert_eq!(run.destroyed(&miner), Some(21));
+    assert_eq!(run.destroyed(&miner), Some(57));
 
     let mut blocked = World::new(&[
         "..............",
@@ -126,7 +126,7 @@ fn idle_defender_holds_position_and_drops_targets_leaving_range() {
     assert_eq!(entity(&w.at(4), &grunt).engaged_target, Some(miner.clone()));
     assert_eq!(entity(&w.at(7), &grunt).engaged_target, None);
     let last = run.result.final_state.clone();
-    assert_eq!(entity(&last, &miner).hp, 44.0);
+    assert_eq!(entity(&last, &miner).hp, 54.0);
     assert_eq!(entity(&last, &miner).tile, tile(10, 1));
     assert_eq!(entity(&last, &grunt).tile, tile(1, 1));
 }
@@ -140,8 +140,8 @@ fn attack_move_pursues_within_vision_then_continues_to_destination() {
     let run = w.run();
     assert_eq!(
         run.attacks(&grunt).len(),
-        8,
-        "60 hp needs eight 8-damage shots"
+        20,
+        "60 hp needs twenty 3-damage shots"
     );
     assert!(run.destroyed(&miner).is_some());
     let last = run.result.final_state.clone();
@@ -217,7 +217,7 @@ fn walls_block_movement_until_destroyed() {
     let walls: Vec<EntityId> = (1..=3).map(|y| w.spawn(1, "wall", 4, y)).collect();
     let run = w.run();
     let first_fall = run.destroyed(&walls[1]).expect("the middle wall falls");
-    assert_eq!(first_fall, 54, "150 hp at 8 damage every 3 ticks");
+    assert_eq!(first_fall, 147, "150 hp at 3 damage every 3 ticks");
     assert_eq!(
         entity(&w.at(first_fall), &miner).tile,
         tile(1, 2),
@@ -229,7 +229,7 @@ fn walls_block_movement_until_destroyed() {
         tile(8, 2),
         "wall destruction invalidates fields"
     );
-    assert!(walls.iter().all(|id| !present(&last, id)));
+    assert!(!present(&last, &walls[1]), "the breach remains open");
     assert!(
         entity(&last, &grunt).tile.x <= 3,
         "idle grunt only yielded to allied traffic"

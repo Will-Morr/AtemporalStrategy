@@ -117,7 +117,7 @@
       },
       "vision": 5.0,
       "weapon": {
-        "damage": 8.0,
+        "damage": 3.0,
         "range": 3.0,
         "cooldown": 3,
         "indirect": false,

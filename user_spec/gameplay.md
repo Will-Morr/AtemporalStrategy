@@ -131,6 +131,8 @@ Artillery should retreat when an enemy unit is closer than its maximum weapon ra
 
 Maintain a reusable tool for direct one-on-one combat experiments on a small, minimal map. Both sides simply send every unit to attack the opposing base. Support a deployed army purchased with a maximum matter budget and a factory with effectively instant build capacity, a preselected repeating queue and a steady matter income per tick. Compare equal budgets or income across seats. Save outcomes, surviving units and surviving unit value, calculated as the sum of each unit’s matter cost times its remaining health fraction.
 
+Balance grunts so no single roster of one unit type or two evenly funded unit types beats every other option. Evaluate the change with mirrored army and factory matchups and refresh the balance reviewer when a patch improves the results.
+
 Factory experiments should compare each unit head-to-head and explore every two-unit combination for synergies. Exclude miners and constructors from all combat balance logs, including single and mixed rosters, comparisons, and exports. Allocate equal matter to each unit type in a mixture and interleave their production over time. Keep long-running experiments suitable for background execution with bounded CPU usage.
 
 For each map, show all single-unit and two-unit rosters against each other in a color-coded chart. Each cell gives the row roster’s average health-weighted surviving matter against the column opponent. Count a destroyed force as zero. Sort both axes by average surviving matter. Fit the full width of the comparison chart on screen.
