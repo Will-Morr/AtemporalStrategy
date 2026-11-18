@@ -14,7 +14,7 @@ taskset -c 0 nice -n 15 "$lab" factory --income 3 --ticks 900 --output artifacts
 python3 scripts/summarize-balance.py artifacts/balance/factory.jsonl --csv artifacts/balance/factory.csv
 ```
 
-The default sweep excludes miners and includes the other mobile factory recipes, every two-type mix among them, and matches between mixed queues. With shipped content there are six pure queues, 15 two-type queues and 441 seat assignments per arena and economy. Each distinct matchup runs in both seats. Each self-match needs one run because both seats already use the same queue. The default open map is 31×15 with no ore. Factory income starts at tick zero from an empty bank. A funded unit can finish in one simulation tick. The engine still has one output tile and can deliver at most one unit per factory per tick. At the baseline income, even a single grunt takes five ticks to fund.
+The sweep uses artillery, grinders, grunts, scouts and tanks, with five pure queues, ten two-type queues and 225 seat assignments per arena and economy. The miner and constructor are excluded from every matchup, including mixed queues. Each distinct matchup runs in both seats. Each self-match needs one run because both seats already use the same queue. The default open map is 31×15 with no ore. Factory income starts at tick zero from an empty bank. A funded unit can finish in one simulation tick. The engine still has one output tile and can deliver at most one unit per factory per tick. At the baseline income, even a single grunt takes five ticks to fund.
 
 Each finished trial is flushed to the JSONL file. Restart the same command to resume. The header pins the effective game content, engine rules version, experiment settings and expected trial count. Use a new file for a changed configuration. For a specific matchup or a different map, use a separate output file.
 
@@ -34,7 +34,7 @@ The equal allocation applies over a complete queue cycle. A 15-matter grunt and 
 
 ## Reference runs
 
-The historical open-map reference sweeps included miners and used the player-timeline branch’s rules 8 at commit `0ef5125` with a 900-tick limit. The integrated dev simulator uses rules 9, which also includes alternating tread movement. The corridor calibration below includes fresh rules 9 baselines. Each income setting produced 784 trials across the 28 rosters, including 759 base kills and 25 timeouts. The compressed JSONL includes every trial and can be passed directly to the summarizer. [3 matter/tick data](balance-data/open-factory-income3-rules8.jsonl.gz) · [6 matter/tick data](balance-data/open-factory-income6-rules8.jsonl.gz)
+The historical open-map reference sweeps used the player-timeline branch’s rules 8 at commit `0ef5125` with a 900-tick limit. The archives retain the 225 trials between combat rosters at each income. At 3 matter/tick there were 215 base kills and 10 timeouts. At 6 matter/tick there were 223 base kills and two timeouts. The compressed JSONL can be passed directly to the summarizer. [3 matter/tick data](balance-data/open-factory-income3-rules8.jsonl.gz) · [6 matter/tick data](balance-data/open-factory-income6-rules8.jsonl.gz)
 
 | Matchup | At 3 matter/tick | At 6 matter/tick |
 | --- | --- | --- |
@@ -42,9 +42,9 @@ The historical open-map reference sweeps included miners and used the player-tim
 | Artillery + tank vs. tank | Mix won at ticks 596 and 649 | Mix won at ticks 351 and 378 |
 | Grunt vs. artillery + tank | Grunt won twice at tick 107 | Grunt won at ticks 111 and 114 |
 
-At 3 matter/tick, tanks won all 12 fights against other pure queues and retained 80.1% of the total matter they spent in those fights, health-adjusted. Grunts won 10 of 12. Their wins averaged 108 ticks, versus 265 for tanks. In both artillery–tank wins against pure tanks, the mix kept its base at full health and finished with 460 or 520 health-weighted matter. In both losses to grunts it had zero surviving unit matter. These results illustrate the trade between a strong established force and how quickly the first defenders arrive.
+At 3 matter/tick, tanks won all eight fights against other pure queues and retained 72.3% of the total matter they spent in those fights, health-adjusted. Grunts won six of eight. Their wins averaged 111 ticks, versus 287 for tanks. In both artillery–tank wins against pure tanks, the mix kept its base at full health and finished with 460 or 520 health-weighted matter. In both losses to grunts it had zero surviving unit matter. These results illustrate the trade between a strong established force and how quickly the first defenders arrive.
 
-Doubling income reversed both grunt–tank fights and both artillery–tank pure-unit fights. Grunts then swept all six other pure opponents in both seats. A per-unit ranking on this map depends on the production economy. Utility-only queues expose another limit of the exercise: the attack-move controller gives miners and constructors no economic work.
+Doubling income reversed both grunt–tank fights and both artillery–tank pure-unit fights. Grunts then swept all four other pure opponents in both seats. The production economy can change the unit rankings even on the same map.
 
 ## Local review page
 
@@ -69,13 +69,13 @@ python3 scripts/summarize-balance.py docs/balance-data/survival-rules12 --heatma
 python3 -m http.server 8846 --bind 127.0.0.1 --directory artifacts/balance/review
 ```
 
-The review was checked in Chromium at desktop and phone widths. Selecting a matrix cell opens its seat results, selecting a mix opens its matchup, and switching income preserves the selected rosters. The table scrolls horizontally on a phone. Screenshots and the interaction trace from the local verification are in `artifacts/balance/`.
+The review was checked in Chromium at desktop and phone widths. Selecting a matrix cell opens its seat results, selecting a mix opens its matchup, and switching income preserves the selected rosters. The survival chart fits the available width. On narrow screens, it uses abbreviated roster labels and color-only cells. Select a cell to read its exact value and both roster names. The fit check covered viewport widths from 320 to 1,920 pixels. Screenshots and browser traces are in `artifacts/ui/combat-chart-fit/`.
 
 ### Surviving matter by matchup
 
-The rules-12 chart uses all 21 rosters (six singles and fifteen pairs) for each arena and economy. Rows are the measured force and columns its opponent. Count only surviving units, multiplying each unit’s cost by its remaining health fraction. A wipeout contributes zero even if the base survives. A cell averages the two starting seats, including both forces in the single mirror duel on the diagonal. Each opponent has equal weight in the roster average used to sort both axes. Colors run from zero to the highest cell on the selected chart.
+The rules-12 chart uses all 15 combat rosters (five singles and ten pairs) for each arena and economy. Rows are the measured force and columns its opponent. Count only surviving units, multiplying each unit’s cost by its remaining health fraction. A wipeout contributes zero even if the base survives. A cell averages the two starting seats, including both forces in the single mirror duel on the diagonal. Each opponent has equal weight in the roster average used to sort both axes. Colors run from zero to the highest cell on the selected chart.
 
-Each of the [twelve datasets](balance-data/survival-rules12/) contains 441 trials. Survivors are measured at base destruction or tick 1,800, whichever comes first. Both sides can retain troops at the cutoff. Factory forces accumulate spending while a duel lasts, so a long fight can produce a larger surviving army. The army setting uses a fixed 600-matter starting budget.
+Each of the [twelve datasets](balance-data/survival-rules12/) contains 225 trials. Survivors are measured at base destruction or tick 1,800, whichever comes first. Both sides can retain troops at the cutoff. Factory forces accumulate spending while a duel lasts, so a long fight can produce a larger surviving army. The army setting uses a fixed 600-matter starting budget.
 
 To export an individual chart with Matplotlib installed, use:
 
@@ -98,18 +98,18 @@ Three tiles represents a narrow passage that occurs regularly in generated play.
 
 The snake has two hairpin turns, three traverses across the center, and one three-tile-wide passage between its bases. Closing any traverse disconnects them. Its straight control uses the same corridor width, identical starting formations in 6×7 staging rooms, and the same 66-step shortest cardinal path. The open and single-choke maps are shorter, at 26 steps. Cardinal distance controls for tread travel distance; eight-direction units can take different lines through turns. Bends also change sight lines, traffic and the space between opposing formations.
 
-The rules 9 experiment ran **5,292 duels**: 441 seat assignments × four geometries × three economies. The 21 rosters are six pure queues and all 15 two-unit mixes. Miners were excluded; constructors were included. The endpoint is a destroyed base or a 900-tick timeout. Each table entry counts trials that reached the time limit with both bases standing, out of 441 in that cell. [All trial records](balance-data/corridors-rules9/)
+The rules 9 corridor archives contain **2,700 combat duels** across four geometries and three economies, each with 225 seat assignments. Rules 9 includes alternating tread movement. The endpoint is a destroyed base or a 900-tick timeout. Each table entry counts trials that reached the time limit with both bases standing, out of 225 in that cell. [All trial records](balance-data/corridors-rules9/)
 
 | Economy | Open | Single choke | Straight corridor | Snake |
 | --- | ---: | ---: | ---: | ---: |
-| 600-matter starting army | 12 | 11 | 4 | 3 |
-| Factory, 3 matter/tick | 14 | 14 | 39 | 52 |
-| Factory, 6 matter/tick | 3 | 18 | 96 | 129 |
+| 600-matter starting army | 3 | 2 | 0 | 1 |
+| Factory, 3 matter/tick | 12 | 12 | 34 | 42 |
+| Factory, 6 matter/tick | 2 | 8 | 50 | 67 |
 
 - **Artillery vs. grinder** shows a winner reversal caused by the corridor layout. At 3 matter/tick, grinders won both straight duels at tick 620. Artillery won both snake duels, at ticks 808 and 825. Both comparisons finished within the same limit.
 - **Grunts** won every 600-matter army duel against the other armed rosters on both long maps (28/28 per map). Factory results depended on geometry and income. At 6 matter/tick they beat pure tanks on open ground in both seats. On both long corridors all four matchups reached tick 900. Extending the limit to 1,800 let tanks win all four, at ticks 1,014 and 1,022 in the snake and 1,178 and 1,477 in the straight.
 - **Artillery + tank vs. tank** initially timed out in both snake duels at both incomes. With 1,800 ticks the mixed queue won all four. The 900-tick counts describe a time limit, and a longer firefight can still have a decisive winner.
-- Comparing the snake directly to the length-matched straight, among the 420 seat assignments with distinct opposing rosters, the army result changed in 35 cases (31 outright winner reversals). Factory results changed in 51 cases at income 3 (18 outright reversals) and 49 at income 6 (4 outright reversals). The remaining changes involved a timeout on one geometry. These are paired deterministic matchups on fixed layouts.
+- Comparing the snake directly to the length-matched straight, among the 210 seat assignments with distinct opposing rosters, the army result changed in 16 cases (15 outright winner reversals). Factory results changed in 39 cases at income 3 (11 outright reversals) and 31 at income 6 (four outright reversals). The remaining changes involved a timeout on one geometry. These are paired deterministic matchups on fixed layouts.
 
 For the long-horizon checks, both seats were run for each combination of straight or snake, income 3 or 6, and grunt, grinder or artillery+tank versus tank. One invocation follows.
 

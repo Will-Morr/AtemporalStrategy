@@ -31,34 +31,34 @@ p,.muted{color:var(--muted);font-size:.9rem}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;text-align:left}
 th,td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:.83rem}
 thead th{color:var(--muted);font-weight:600}
-.matrix th{white-space:nowrap}
-.matrix td{padding:4px;text-align:center}
+.matrix{table-layout:fixed}
+.matrix th{padding-inline:1px;text-align:center}
+.matrix td{padding:2px;text-align:center}
 button,select{font:inherit;color:inherit}
 button{cursor:pointer}
 button:focus-visible,select:focus-visible,.scroll:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
-.cell{width:100%;min-width:55px;padding:7px 2px;border:1px solid transparent;border-radius:5px;background:#354138;color:#f4f5ee;font-weight:650;white-space:nowrap}
+.cell{width:100%;padding:7px 0;font-size:clamp(.62rem,1.45vw,.83rem);border:1px solid transparent;border-radius:5px;background:#354138;color:#f4f5ee;font-weight:650;white-space:nowrap}
 .cell.win{background:#395633;color:#e5f8d4}
 .cell.loss{background:#543a31;color:#ffe2d3}
 .cell[aria-pressed="true"]{border-color:var(--lime)}
 .cell:hover,.text-button:hover{filter:brightness(1.2)}
 #survival{scroll-margin-top:12px}
-.survival-tools{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;margin:12px 0}
+.survival-tools{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:5px 12px;margin:8px 0}
 .survival-legend{min-width:180px;color:var(--muted);font-size:.8rem}
 .scale{height:10px;border-radius:3px;margin:4px 0}
 .scale-labels{display:flex;justify-content:space-between;gap:16px;font-variant-numeric:tabular-nums}
-.survival-exports{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.83rem}
+.survival-exports{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.83rem}
 .survival-exports a,.survival-selection a{color:var(--lime)}
+.survival-method{margin-top:12px}
 .survival-selection{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;margin:4px 0 10px;font-size:.83rem}
-.survival-scroll{max-height:78vh;border:1px solid var(--line);border-radius:6px}
-.survival-matrix{border-collapse:separate;border-spacing:0}
-.survival-matrix thead th{position:sticky;top:0;z-index:2;background:var(--panel);vertical-align:bottom;text-align:center}
-.survival-matrix .row-label{position:sticky;left:0;z-index:1;background:var(--panel);text-align:left;white-space:nowrap;border-right:1px solid var(--line)}
-.survival-matrix thead .row-label{z-index:3}
-.survival-matrix .mean{white-space:nowrap;text-align:right;color:var(--muted);border-right:1px solid var(--line)}
-.survival-matrix th,.survival-matrix td{font-size:.77rem;padding:3px}
-.survival-matrix th.row-label,.survival-matrix .mean{padding-inline:8px}
-.survival-matrix thead th{padding-block:8px}
-.survival-cell{width:100%;min-width:60px;min-height:29px;padding:3px;border:1px solid transparent;border-radius:3px;font-size:inherit;font-weight:650;font-variant-numeric:tabular-nums}
+.roster-key{display:flex;flex-wrap:wrap;gap:2px 14px;margin:0 0 9px;padding:0;list-style:none;color:var(--muted);font-size:.8rem}
+.roster-key strong{color:#eff2ea}
+.survival-matrix{table-layout:fixed;border-collapse:separate;border-spacing:0}
+.survival-matrix th,.survival-matrix td{padding:1px;text-align:center;border:0;font-size:clamp(.64rem,1.35vw,.82rem)}
+.survival-matrix thead th{padding-block:4px}
+.survival-matrix .row-label,.survival-matrix .mean{width:3.1rem;white-space:nowrap}
+.survival-matrix .mean{color:var(--muted)}
+.survival-cell{display:block;width:100%;height:clamp(13px,3.15svh,32px);padding:0;border:0;border-radius:3px;font-size:inherit;font-weight:650;font-variant-numeric:tabular-nums}
 .survival-cell.missing{background:repeating-linear-gradient(135deg,#202a24 0 4px,#29352d 4px 8px);color:var(--muted)}
 .survival-cell:is(:hover,:focus-visible,[aria-pressed="true"]){position:relative;outline:2px solid #fff;outline-offset:-2px}
 .pickers,.sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
@@ -80,6 +80,20 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
 .status{margin-bottom:14px}
 .status:empty{display:none}
 [hidden]{display:none!important}
+@media(max-width:690px){
+  .survival-value{display:none}
+  .survival-tools p,.survival-selection p{font-size:.8rem}
+  .survival-matrix .row-label,.survival-matrix .mean{width:2.1rem}
+  .survival-matrix th,.survival-matrix td{font-size:clamp(.55rem,2.25vw,.72rem)}
+}
+@media(max-width:480px) and (max-height:700px){
+  #survival{scroll-margin-top:4px}
+  #survival .section-head{margin-bottom:5px}
+  #survival-context{font-size:.75rem}
+  .survival-tools{gap:3px 12px;margin-block:4px}
+  .survival-tools .survival-note{font-size:.72rem}
+  .survival-cell{height:clamp(13px,2.6svh,20px)}
+}
 @media(max-width:900px){.grids{grid-template-columns:1fr;gap:0}}
 @media(max-width:480px){main{width:calc(100% - 24px)}header{padding-top:22px}.panel{padding:12px}th,td{padding-inline:5px}}
 </style>
@@ -105,25 +119,24 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
 </section>
 <section class="panel" id="survival" hidden>
   <div class="section-head"><h2>Surviving matter by matchup</h2><p id="survival-context"></p></div>
-  <p>Each cell is the row roster’s mean against the column opponent. Each surviving unit contributes cost × remaining HP fraction. Self-play counts both sides. Both axes use mean against all recorded opponents, highest first.</p>
   <div class="survival-tools">
     <div class="survival-legend">
       <span>HP-weighted surviving matter</span>
       <div id="survival-scale" class="scale" aria-hidden="true"></div>
       <div class="scale-labels"><span>0</span><span id="survival-max"></span></div>
     </div>
-    <p>0 = no surviving units · — = no recorded trial</p>
-    <div id="survival-exports" class="survival-exports" hidden>
-      <a id="survival-png" download>Download PNG</a>
-      <a href="rules12/survival-charts.pdf" download>Download all charts as PDF</a>
-    </div>
+    <p class="survival-note">0 = no surviving units · — = no recorded trial</p>
   </div>
   <div class="survival-selection">
     <p id="survival-readout"></p>
     <a href="#matchup-panel">Open selected matchup</a>
   </div>
-  <div class="scroll survival-scroll" tabindex="0" aria-label="Scrollable surviving matter chart">
-    <table class="survival-matrix" aria-label="Surviving matter by roster and opponent" id="survival-matrix"></table>
+  <ul class="roster-key" id="roster-key" aria-label="Roster abbreviations"></ul>
+  <table class="survival-matrix" aria-label="Surviving matter by roster and opponent" aria-describedby="roster-key" id="survival-matrix"></table>
+  <p class="survival-method">Each cell is the row roster’s mean against the column opponent. Each surviving unit contributes cost × remaining HP fraction. Self-play counts both sides. Both axes use mean against all recorded opponents, highest first.</p>
+  <div id="survival-exports" class="survival-exports" hidden>
+    <a id="survival-png" download>Download PNG</a>
+    <a href="rules12/survival-charts.pdf" download>Download all charts as PDF</a>
   </div>
 </section>
 <div id="results" class="grids" hidden>
@@ -132,9 +145,7 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
       <h2>Pure matchups</h2>
       <p>Wins / draws / losses for the row unit</p>
     </div>
-    <div class="scroll" tabindex="0" aria-label="Pure-unit matchup matrix">
-      <table class="matrix" aria-label="Pure-unit matchup matrix" id="matrix"></table>
-    </div>
+    <table class="matrix" aria-label="Pure-unit matchup matrix" aria-describedby="roster-key" id="matrix"></table>
   </section>
   <section class="panel" id="matchup-panel">
     <div class="section-head"><h2>Inspect matchup</h2></div>
@@ -169,6 +180,9 @@ const format = value => number.format(value);
 const signed = value => (value > 0 ? '+' : '') + format(value);
 const key = roster => roster.join('+');
 const name = roster => roster.map(unit => unit.replaceAll('_', ' ').replace(/^./, first => first.toUpperCase())).join(' + ');
+const excludedUnits = new Set(['miner', 'constructor']);
+const unitCodes = {artillery: 'A', grinder: 'R', grunt: 'G', scout: 'S', tank: 'T'};
+const rosterCode = roster => roster.map(unit => unitCodes[unit] ?? unit).join('');
 const cache = new Map();
 const controls = [byId('rules'), byId('mode'), byId('arena')];
 const arenas = {open: 'Open', choke: 'Choke', straight: 'Straight corridor', snake: 'Winding corridor'};
@@ -207,7 +221,7 @@ async function read(file) {
   if (meta.kind !== 'metadata' || meta.schema_version !== 1 || trials.some(trial => trial.kind !== 'trial')) {
     throw new Error('Unrecognized sweep format');
   }
-  const visibleRosters = meta.rosters.filter(roster => !roster.includes('miner'));
+  const visibleRosters = meta.rosters.filter(roster => !roster.some(unit => excludedUnits.has(unit)));
   const rosters = new Map(visibleRosters.map(roster => [key(roster), roster]));
   const groups = new Map();
   let count = 0;
@@ -278,16 +292,22 @@ function renderSurvival(rules, mode, arena) {
   byId('survival-exports').hidden = rules !== '12';
   byId('survival-png').href = sweepFile(rules, mode, arena).replace(/\.jsonl$/, '.png');
 
+  byId('roster-key').replaceChildren(...dataset.pure.map(roster => {
+    const item = element('li');
+    item.append(element('strong', rosterCode(roster)), ' ' + name(roster));
+    return item;
+  }));
   const table = byId('survival-matrix');
   const head = element('thead');
   const headings = element('tr');
-  for (const [label, className] of [
-    ['Roster ↓ / Opponent →', 'row-label'], ['Mean', 'mean'],
-    ...rows.map(({a}) => [name(dataset.rosters.get(a)), '']),
-  ]) {
-    const heading = element('th', label, className);
-    heading.scope = 'col';
-    headings.append(heading);
+  const rowLabel = element('th', '↓ / →', 'row-label');
+  rowLabel.scope = 'col';
+  rowLabel.setAttribute('aria-label', 'Roster down, opponent across');
+  const meanLabel = element('th', 'Mean', 'mean');
+  meanLabel.scope = 'col';
+  headings.append(rowLabel, meanLabel);
+  for (const {a} of rows) {
+    headings.append(rosterHeading(dataset.rosters.get(a), 'col'));
   }
   head.append(headings);
 
@@ -296,8 +316,7 @@ function renderSurvival(rules, mode, arena) {
   for (const {a, cells, mean, values} of rows) {
     const aName = name(dataset.rosters.get(a));
     const line = element('tr');
-    const heading = element('th', aName, 'row-label');
-    heading.scope = 'row';
+    const heading = rosterHeading(dataset.rosters.get(a), 'row', 'row-label');
     const meanCell = element('td', mean === null ? '—' : format(mean), 'mean');
     meanCell.title = values.length + ' of ' + rosters.length + ' opponents recorded';
     line.append(heading, meanCell);
@@ -307,7 +326,8 @@ function renderSurvival(rules, mode, arena) {
       const detail = aName + ' vs ' + name(dataset.rosters.get(b)) + ' · ' +
         (value === null ? 'No recorded trial' : format(value) + ' surviving matter · ' +
           trials + (trials === 1 ? ' seat result' : ' seat results'));
-      const button = element('button', value === null ? '—' : format(value), 'survival-cell');
+      const button = element('button', undefined, 'survival-cell');
+      button.append(value === null ? '—' : element('span', format(value), 'survival-value'));
       button.type = 'button';
       button.dataset.pair = a + '/' + b;
       button.title = detail;
@@ -351,23 +371,28 @@ function selectMatch(a, b, jump) {
   }
 }
 
+function rosterHeading(roster, scope, className) {
+  const label = name(roster);
+  const heading = element('th', rosterCode(roster), className);
+  heading.scope = scope;
+  heading.title = label;
+  heading.setAttribute('aria-label', label);
+  return heading;
+}
+
 function renderMatrix() {
   const table = byId('matrix');
   const head = element('thead');
   const headings = element('tr');
   headings.append(element('th', 'Unit'));
   for (const unit of dataset.pure) {
-    const heading = element('th', name(unit));
-    heading.scope = 'col';
-    headings.append(heading);
+    headings.append(rosterHeading(unit, 'col'));
   }
   head.append(headings);
   const body = element('tbody');
   for (const a of dataset.pure) {
     const row = element('tr');
-    const heading = element('th', name(a));
-    heading.scope = 'row';
-    row.append(heading);
+    row.append(rosterHeading(a, 'row'));
     for (const b of dataset.pure) {
       const results = matches(key(a), key(b));
       const wins = results.filter(trial => trial.winner === 'a').length;
@@ -397,12 +422,13 @@ function renderSide(roster, result, letter) {
     element('p', 'HP-weighted surviving matter'),
     element('p', format(result.base_hp) + ' base HP · ' + format(result.unit_spend) + ' matter spent'),
   );
-  if (!result.survivors.length) {
+  const survivors = result.survivors.filter(unit => !excludedUnits.has(unit.type_key));
+  if (!survivors.length) {
     side.append(element('p', 'No surviving units'));
     return side;
   }
   const units = element('ul', undefined, 'units');
-  for (const unit of result.survivors) {
+  for (const unit of survivors) {
     const item = element('li');
     item.append(element('span', unit.count + ' × ' + name([unit.type_key])), element('span', format(unit.health_weighted_matter) + ' matter'));
     units.append(item);

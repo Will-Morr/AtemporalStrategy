@@ -11,6 +11,9 @@ from pathlib import Path
 from statistics import mean
 
 
+NONCOMBAT_UNITS = frozenset({"miner", "constructor"})
+
+
 @dataclass
 class Duel:
     wins: int = 0
@@ -51,11 +54,14 @@ def read_results(path):
         meta = json.loads(next(source))
         if meta.get("kind") != "metadata" or meta.get("schema_version") != 1:
             raise ValueError("Expected a balance_sweep version 1 metadata record")
+        meta["rosters"] = [r for r in meta["rosters"] if NONCOMBAT_UNITS.isdisjoint(r)]
         for line in source:
             trial = json.loads(line)
             if trial["kind"] != "trial":
                 raise ValueError("Expected a trial record")
             a, b = tuple(trial["a"]), tuple(trial["b"])
+            if not NONCOMBAT_UNITS.isdisjoint(a) or not NONCOMBAT_UNITS.isdisjoint(b):
+                continue
             identity = (a, b, trial["a_seat"])
             if identity in seats:
                 raise ValueError(f"Duplicate trial {identity}")
@@ -189,7 +195,7 @@ def surviving_matter_figure(meta, pairs):
     from matplotlib.colors import Normalize
     from matplotlib.ticker import MaxNLocator
 
-    rosters = [tuple(r) for r in meta["rosters"] if "miner" not in r]
+    rosters = [tuple(r) for r in meta["rosters"]]
     def value(roster, opponent):
         duel = pairs.get((roster, opponent))
         return duel.remaining / duel.count if duel and duel.count else float("nan")

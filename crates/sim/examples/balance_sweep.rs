@@ -17,10 +17,10 @@ const BASE_Y: u16 = HEIGHT / 2;
 
 const USAGE: &str = "balance_sweep <army|factory> [--budget MATTER] [--income MATTER_PER_TICK]
               [--ticks N] [--arena open|choke|snake|straight] [--content PATH]
-              [--armed-only] [--include-miners]
+              [--armed-only]
               [--a UNIT[+UNIT...] --b UNIT[+UNIT...]] [--output PATH]
 Without --a and --b, run every pure and two-unit roster against each other, including self-play.
-Default pairings omit miners. Use --include-miners or name miners in an explicit matchup.
+Combat rosters exclude miners and constructors, including in explicit matchups.
 Without --output, write JSONL to stdout. A matching output file resumes completed trials.";
 
 type Roster = Vec<TypeKey>;
@@ -189,7 +189,6 @@ struct Options {
     income_per_tick: f64,
     army_budget: f64,
     armed_only: bool,
-    include_miners: bool,
     content: Option<PathBuf>,
     output: Option<PathBuf>,
     a: Option<Roster>,
@@ -209,7 +208,6 @@ impl Options {
             income_per_tick: 3.0,
             army_budget: 600.0,
             armed_only: false,
-            include_miners: false,
             content: None,
             output: None,
             a: None,
@@ -222,8 +220,7 @@ impl Options {
                     continue;
                 }
                 "--include-miners" => {
-                    options.include_miners = true;
-                    continue;
+                    return Err("combat rosters exclude miners and constructors".into());
                 }
                 _ => {}
             }
@@ -304,6 +301,9 @@ fn factory_roster(content: &Content, armed_only: bool) -> Result<Roster> {
         .ok_or("factory lacks production")?;
     let mut keys = Vec::new();
     for key in &production.recipes {
+        if matches!(key.as_str(), "miner" | "constructor") {
+            continue;
+        }
         let def = definition(content, key);
         if def.kind == TypeKind::Unit
             && def.movement.is_some()
@@ -343,17 +343,9 @@ fn trials(options: &Options, units: &Roster) -> Result<(Vec<Roster>, Vec<TrialKe
         }
         pairs.push((a.clone(), b.clone()));
     } else {
-        let eligible: Vec<_> = units
-            .iter()
-            .filter(|key| options.include_miners || key.as_str() != "miner")
-            .cloned()
-            .collect();
-        if eligible.is_empty() {
-            return Err("no eligible default pairing units; try --include-miners".into());
-        }
-        rosters.extend(eligible.iter().map(|key| vec![key.clone()]));
-        for (i, first) in eligible.iter().enumerate() {
-            for second in &eligible[i + 1..] {
+        rosters.extend(units.iter().map(|key| vec![key.clone()]));
+        for (i, first) in units.iter().enumerate() {
+            for second in &units[i + 1..] {
                 rosters.push(vec![first.clone(), second.clone()]);
             }
         }
@@ -705,6 +697,26 @@ struct PriorTrial {
     #[serde(flatten)]
     key: TrialKey,
     final_hash: String,
+    a_result: PriorSeat,
+    b_result: PriorSeat,
+}
+
+#[derive(Deserialize)]
+struct PriorSeat {
+    survivors: Vec<PriorSurvivor>,
+}
+
+impl PriorSeat {
+    fn matches(&self, roster: &Roster) -> bool {
+        self.survivors
+            .iter()
+            .all(|survivor| roster.contains(&survivor.type_key))
+    }
+}
+
+#[derive(Deserialize)]
+struct PriorSurvivor {
+    type_key: TypeKey,
 }
 
 fn open_results(
@@ -738,6 +750,8 @@ fn open_results(
             if prior.kind != "trial"
                 || prior.final_hash.len() != 64
                 || !expected.contains(&prior.key)
+                || !prior.a_result.matches(&prior.key.a)
+                || !prior.b_result.matches(&prior.key.b)
                 || !completed.insert(prior.key)
             {
                 return Err(format!("{} has an invalid or duplicate trial", path.display()).into());
@@ -838,39 +852,38 @@ mod tests {
     }
 
     #[test]
-    fn default_pairings_omit_miners_and_preserve_other_rosters() {
+    fn default_pairings_only_use_combat_rosters() {
         let units = factory_roster(&content(), false).unwrap();
-        let options = Options::parse(["factory"].map(str::to_owned).into_iter()).unwrap();
-        let (rosters, keys) = trials(&options, &units).unwrap();
-        assert_eq!(rosters.len(), 21);
-        assert_eq!(keys.len(), 441);
-        assert!(
-            rosters
-                .iter()
-                .all(|roster| roster.iter().all(|unit| unit != "miner"))
-        );
-        assert!(rosters.iter().any(|roster| roster == &["constructor"]));
+        assert_eq!(units, ["artillery", "grinder", "grunt", "scout", "tank"]);
+        for mode in ["army", "factory"] {
+            let options = Options::parse([mode].map(str::to_owned).into_iter()).unwrap();
+            let (rosters, keys) = trials(&options, &units).unwrap();
+            assert_eq!(rosters.len(), 15);
+            assert_eq!(keys.len(), 225);
+            assert!(rosters.iter().flatten().all(|key| units.contains(key)));
+            assert!(
+                keys.iter()
+                    .all(|key| rosters.contains(&key.a) && rosters.contains(&key.b))
+            );
+        }
+    }
 
-        let full = Options::parse(
-            ["factory", "--include-miners"]
-                .map(str::to_owned)
-                .into_iter(),
-        )
-        .unwrap();
-        let (rosters, keys) = trials(&full, &units).unwrap();
-        assert_eq!(rosters.len(), 28);
-        assert_eq!(keys.len(), 784);
-        assert!(rosters.iter().any(|roster| roster == &["grunt", "miner"]));
-
-        let explicit = Options::parse(
-            ["factory", "--a", "miner", "--b", "tank"]
-                .map(str::to_owned)
-                .into_iter(),
-        )
-        .unwrap();
-        let (rosters, keys) = trials(&explicit, &units).unwrap();
-        assert_eq!(rosters, [vec!["miner"], vec!["tank"]]);
-        assert_eq!(keys.len(), 2);
+    #[test]
+    fn rejects_utility_units_in_explicit_rosters() {
+        let units = factory_roster(&content(), false).unwrap();
+        for mode in ["army", "factory"] {
+            assert!(
+                Options::parse([mode, "--include-miners"].map(str::to_owned).into_iter()).is_err()
+            );
+            for roster in ["miner", "constructor", "grunt+miner", "constructor+tank"] {
+                for (a, b) in [(roster, "tank"), ("tank", roster)] {
+                    let options =
+                        Options::parse([mode, "--a", a, "--b", b].map(str::to_owned).into_iter())
+                            .unwrap();
+                    assert!(trials(&options, &units).is_err());
+                }
+            }
+        }
     }
 
     #[test]
@@ -973,7 +986,7 @@ mod tests {
                 "--ticks",
                 "29",
                 "--a",
-                "grunt+constructor",
+                "grunt+scout",
                 "--b",
                 "tank",
             ]
@@ -992,9 +1005,9 @@ mod tests {
             assert_eq!(result.a_result.unit_spend, 70.0);
             assert_eq!(result.a_result.bank, 17.0);
             assert_eq!(result.a_result.health_weighted_unit_matter, 70.0);
-            assert_eq!(result.a_result.survivors[0].type_key, "constructor");
-            assert_eq!(result.a_result.survivors[0].count, 1);
-            assert_eq!(result.a_result.survivors[1].type_key, "grunt");
+            assert_eq!(result.a_result.survivors[0].type_key, "grunt");
+            assert_eq!(result.a_result.survivors[0].count, 2);
+            assert_eq!(result.a_result.survivors[1].type_key, "scout");
             assert_eq!(result.a_result.survivors[1].count, 2);
             assert_eq!(result.b_result.unit_spend, 0.0);
             assert_eq!(result.b_result.bank, 87.0);
@@ -1004,9 +1017,11 @@ mod tests {
     #[test]
     fn army_reports_deployment_spend() {
         let options = Options::parse(
-            ["army", "--budget", "613", "--a", "tank", "--b", "miner"]
-                .map(str::to_owned)
-                .into_iter(),
+            [
+                "army", "--ticks", "1", "--budget", "613", "--a", "tank", "--b", "grunt",
+            ]
+            .map(str::to_owned)
+            .into_iter(),
         )
         .unwrap();
         let content = content();
@@ -1015,9 +1030,8 @@ mod tests {
         let world = arena(&options, content, &options.arena.rows());
         for key in keys {
             let result = trial(&options, &world, key).unwrap();
-            assert_eq!(result.winner, Some("a"));
-            assert_eq!(result.stop, "base_destroyed");
-            assert_eq!(result.b_result.base_hp, 0.0);
+            assert_eq!(result.winner, None);
+            assert_eq!(result.stop, "horizon");
             assert_eq!(result.a_result.unit_spend, 600.0);
             assert_eq!(result.b_result.unit_spend, 600.0);
             assert_eq!(result.a_result.bank, 13.0);
