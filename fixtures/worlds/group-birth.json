@@ -11,7 +11,7 @@
       "sim_build": "tiny-world-contract-v2",
       "target": "x86_64-unknown-linux-gnu",
       "config_hash": "062935071c828e8640da3e73cd7fb049553548129955fafe21f03f5376283270",
-      "content_hash": "c2aeb7553cc4536bfd173255d1be9ebf5e9071cf7029eb609fe4f64d4fdf89d5"
+      "content_hash": "124ec790a527d304b60ee4c79ca1baac67090239d29b2ee63b240983431328a4"
     },
     "config": {
       "schema_version": 2,
@@ -312,7 +312,7 @@
           "provides_build_ability": false,
           "movement": {
             "neighbors": "four",
-            "cooldown": 4
+            "cooldown": 6
           },
           "vision": 5.0,
           "weapon": null,

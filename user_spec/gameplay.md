@@ -133,6 +133,8 @@ Maintain a reusable tool for direct one-on-one combat experiments on a small, mi
 
 Balance grunts so no single roster of one unit type or two evenly funded unit types beats every other option. Evaluate the change with mirrored army and factory matchups and refresh the balance reviewer when a patch improves the results.
 
+Artillery and tanks should move at similar speeds. Pure artillery should beat tanks, while the faster grunts and grinders should be able to close on and beat massed artillery.
+
 Factory experiments should compare each unit head-to-head and explore every two-unit combination for synergies. Exclude miners and constructors from all combat balance logs, including single and mixed rosters, comparisons, and exports. Allocate equal matter to each unit type in a mixture and interleave their production over time. Keep long-running experiments suitable for background execution with bounded CPU usage.
 
 For each map, show all single-unit and two-unit rosters against each other in a color-coded chart. Each cell gives the row roster’s average health-weighted surviving matter against the column opponent. Count a destroyed force as zero. Sort both axes by average surviving matter. Fit the full width of the comparison chart on screen.

@@ -108,7 +108,13 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
     <p id="subtitle">Mirrored combat trials</p>
   </div>
   <div class="controls">
-    <label>Dataset<select id="rules"><option value="grunt-patch">Grunt balance patch</option><option value="12">Rules 12 · pre-patch</option><option value="9">Rules 9 · historical</option><option value="8">Rules 8 · historical</option></select></label>
+    <label>Dataset<select id="rules">
+      <option value="artillery-tank-mobility">Artillery and tank mobility</option>
+      <option value="grunt-patch">Grunt balance patch · previous</option>
+      <option value="12">Rules 12 · pre-patch</option>
+      <option value="9">Rules 9 · historical</option>
+      <option value="8">Rules 8 · historical</option>
+    </select></label>
     <label>Mode<select id="mode"><option value="army">Army · 600 matter</option><option value="3">Factory · 3 matter/tick</option><option value="6">Factory · 6 matter/tick</option></select></label>
     <label>Arena<select id="arena"><option value="open">Open</option><option value="choke">Choke</option><option value="straight">Straight corridor</option><option value="snake">Winding corridor</option></select></label>
   </div>
@@ -187,13 +193,18 @@ const rosterCode = roster => roster.map(unit => unitCodes[unit] ?? unit).join(''
 const cache = new Map();
 const controls = [byId('rules'), byId('mode'), byId('arena')];
 const datasets = {
-  'grunt-patch': {version: 12, directory: 'grunt-patch/', title: 'Grunt balance patch'},
+  'artillery-tank-mobility': {version: 12, directory: 'artillery-tank-mobility/', title: 'Artillery and tank mobility'},
+  'grunt-patch': {version: 12, directory: 'grunt-patch/', title: 'Grunt balance patch · previous'},
   '12': {version: 12, directory: 'rules12/', title: 'Rules 12 · pre-patch'},
   '9': {version: 9, directory: '', title: 'Rules 9'},
   '8': {version: 8, directory: '', title: 'Rules 8'},
 };
 // Factory sweeps override production rates, so their effective content hash differs.
 const contentHashes = {
+  'artillery-tank-mobility': {
+    army: 'ba15189b1463f78e435de18303de940fea79508bfb58def4751618237c1b39f3',
+    factory: 'dce3099d41d18b52c09f338723fc048af6becc7bfbfa9a33117980c1addbdb67',
+  },
   'grunt-patch': {
     army: '71347572c52e0626ae53f70080dfabe52936ac1fe031d82724d8605b00e93718',
     factory: 'c48a3ee0b52d2e547af76998c0f241d610c683da9958bd7fff050196314c80ab',
@@ -643,7 +654,7 @@ async function changeDataset(fallback = false) {
     let [rules, mode, arena] = controls.map(control => control.value);
     let next = await loadSweep(rules, mode, arena);
     if (!next && fallback) {
-      for (const candidate of [['12', mode, arena], ['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
+      for (const candidate of [['grunt-patch', mode, arena], ['12', mode, arena], ['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
         next = await loadSweep(...candidate);
         if (next) {
           [rules, mode, arena] = candidate;
@@ -707,7 +718,7 @@ const query = new URLSearchParams(location.search);
 const requestedRules = query.get('rules');
 const requestedMode = query.get('mode');
 const requestedArena = query.get('arena');
-setControls(Object.hasOwn(datasets, requestedRules) ? requestedRules : 'grunt-patch',
+setControls(Object.hasOwn(datasets, requestedRules) ? requestedRules : 'artillery-tank-mobility',
   ['army', '3', '6'].includes(requestedMode) ? requestedMode : 'army',
   Object.hasOwn(arenas, requestedArena) ? requestedArena : 'snake');
 void changeDataset(!requestedRules && !requestedMode && !requestedArena);

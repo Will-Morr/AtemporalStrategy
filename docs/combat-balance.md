@@ -104,6 +104,26 @@ The [patch archive](balance-data/grunt-balance-patch/) contains 2,700 trials acr
 
 The table shows pure grunt wins out of 28 non-mirror trials before and after the patch. Pure tanks beat pure grunts from both seats on all four army maps. At 6 matter/tick, 18 straight-corridor pure grunt games and 17 snake-corridor pure grunt games ended at the cutoff with both bases standing.
 
+### Artillery and tank mobility
+
+The tank movement cooldown increases from four to six ticks, matching artillery. Grunts and grinders still take one step every two ticks. The [mobility patch archive](balance-data/artillery-tank-mobility/) repeats all 2,700 trials on the four arenas. The strongest roster in any panel won 26 of its 28 non-mirror trials.
+
+| Pure matchup | Army wins out of 8 | Factory wins out of 16 |
+| --- | ---: | ---: |
+| Artillery over tank | 3 → 8 | 14 → 14 |
+| Grunt over artillery | 8 → 8 | 8 → 8 |
+| Grinder over artillery | 8 → 8 | 4 → 4 |
+
+The arrows compare the grunt damage patch with the mobility patch. Grunts beat artillery in both seats on open and choke at both factory incomes. Grinders beat artillery in both seats on open and choke at 3 matter/tick. Both straight and snake corridors still give factory artillery room to build up against those faster units.
+
+Both 6-matter/tick snake artillery–tank duels reached the 1,800-tick matrix cutoff. Artillery held over eleven times as much health-weighted surviving unit matter in each seat. A separate run with a 3,600-tick cap ended in artillery wins at ticks 2,778 and 2,660, with full base health in both seats.
+
+```sh
+taskset -c 0 nice -n 15 "$lab" factory --arena snake --income 6 --ticks 3600 --a artillery --b tank
+```
+
+The [extended snake duel log](balance-data/artillery-tank-snake-3600.jsonl.gz) records both seats through base destruction.
+
 ## Calibrating corridor width
 
 Run `cargo run --release --locked -p atemporal-sim --example corridor_widths` to measure the shipped generator on 32 default two-player 48×48 maps (seeds 0–31). For each tile the tool finds the largest axis-aligned square of walkable terrain containing it. This gives a consistent width even when a route hugs one wall, though diagonal passages can measure narrower. The sample skips spawn and center clearings and treats widths of eight tiles or more as rooms.

@@ -185,7 +185,7 @@
       "provides_build_ability": false,
       "movement": {
         "neighbors": "four",
-        "cooldown": 4
+        "cooldown": 6
       },
       "vision": 5.0,
       "weapon": {
