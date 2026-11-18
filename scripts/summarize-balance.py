@@ -181,16 +181,104 @@ def write_csv(path, pairs):
                         f"{d.score:.6f}", f"{d.survivor_margin / d.count:.6f}"])
 
 
+def surviving_matter_figure(meta, pairs):
+    """Create a printable matchup chart from the same directed seat observations as the CSV."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+    from matplotlib.ticker import MaxNLocator
+
+    rosters = [tuple(r) for r in meta["rosters"] if "miner" not in r]
+    def value(roster, opponent):
+        duel = pairs.get((roster, opponent))
+        return duel.remaining / duel.count if duel and duel.count else float("nan")
+
+    means = {}
+    for roster in rosters:
+        observed = [value(roster, opp) for opp in rosters if (roster, opp) in pairs]
+        means[roster] = mean(observed) if observed else float("-inf")
+    rosters.sort(key=lambda r: (-means[r], "+".join(r)))
+    values = np.ma.masked_invalid([[value(r, opp) for opp in rosters] for r in rosters])
+    if not values.count():
+        raise ValueError("No matchup observations to plot")
+    maximum = float(values.max())
+    cmap = plt.get_cmap("viridis").with_extremes(bad="#d4d7da")
+    norm = Normalize(0, maximum or 1)
+    figure = plt.figure(figsize=(15.5, 15))
+    ax = figure.add_axes((.207, .085, .747, .736))
+    ax.imshow(values, cmap=cmap, norm=norm, interpolation="nearest", aspect="auto")
+    labels = [" + ".join(unit.title() for unit in roster) for roster in rosters]
+    positions = range(len(labels))
+    ax.set_xticks(positions, labels=labels, rotation=60, ha="left", rotation_mode="anchor", fontsize=9)
+    ax.set_yticks(positions, labels=labels, fontsize=10)
+    ax.xaxis.tick_top()
+    ax.tick_params(axis="both", length=0, pad=5)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    for (i, j), v in np.ndenumerate(values.data):
+        if not np.isfinite(v):
+            label, ink = "—", "#28333b"
+        else:
+            r, g, b, _ = cmap(norm(v))
+            ink = "#131820" if .2126*r+.7152*g+.0722*b > .52 else "white"
+            label = "0" if v == 0 else "<1" if v < 1 else f"{v:,.0f}"
+        ax.text(j, i, label, ha="center", va="center", fontsize=8, color=ink)
+    arena = {"snake":"Winding corridor", "straight":"Straight corridor", "choke":"Choke", "open":"Open"}[meta["arena"]]
+    economy = (f"Army · {meta['army_budget']:g} matter per side" if meta["mode"] == "army"
+               else f"Factory · {meta['income_per_tick']:g} matter per side per tick")
+    figure.text(.025,.975, f"{arena}  /  {economy}", fontsize=19, weight="bold")
+    figure.text(.025,.948, "Average surviving matter of the row roster against the column opponent", fontsize=14)
+    figure.text(.025,.927, f"Rules {meta['sim_rules_version']}   ·   Base destruction or tick {meta['ticks']:,}   ·   Both axes ordered by average survival", fontsize=10)
+    color_ax = figure.add_axes((.21,.044,.40,.012))
+    bar = figure.colorbar(ScalarMappable(norm=norm, cmap=cmap), cax=color_ax, orientation="horizontal")
+    bar.outline.set_visible(False)
+    if maximum:
+        bar.locator = MaxNLocator(nbins=6)
+        bar.update_ticks()
+    else:
+        bar.set_ticks([0])
+    figure.text(.63,.047,"Matter remaining, adjusted for unit health", fontsize=11)
+    figure.text(.21,.014,"Cells average both seats. A wiped-out force contributes 0. Values are rounded for display.", fontsize=10)
+    return figure
+
+
+def save_heatmap_bundle(directory, output):
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    if output.suffix.lower() != ".pdf":
+        raise ValueError("Choose a PDF for the chart collection")
+    paths = sorted(directory.glob("*.jsonl.gz"))
+    if not paths:
+        raise ValueError("No compressed sweep files found")
+    with PdfPages(output, metadata={"Title": "Average surviving matter by matchup"}) as pdf:
+        for path in paths:
+            meta, pairs, _, _ = read_results(path)
+            figure = surviving_matter_figure(meta, pairs)
+            figure.savefig(output.parent / (path.name.removesuffix(".jsonl.gz") + ".png"), dpi=160)
+            pdf.savefig(figure)
+            plt.close(figure)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("results", type=Path)
     parser.add_argument("--csv", type=Path, help="write all directed matchups, including mixes")
+    parser.add_argument("--heatmap", type=Path, help="export a health-weighted surviving matter heatmap (PNG or PDF, requires matplotlib)")
     parser.add_argument("--baseline", type=Path, help="compare the same roster and seat matchups from another run")
     args = parser.parse_args()
     try:
+        if args.results.is_dir():
+            if not args.heatmap or args.csv or args.baseline:
+                parser.error("Use a sweep directory with --heatmap collection.pdf")
+            save_heatmap_bundle(args.results, args.heatmap)
+            sys.exit(0)
         current = read_results(args.results)
         metadata, matchups, completed, _ = current
         report(metadata, matchups, completed)
+        if args.heatmap:
+            surviving_matter_figure(metadata, matchups).savefig(args.heatmap, dpi=160)
         if args.baseline:
             compare(read_results(args.baseline), current)
         if args.csv:

@@ -9,7 +9,7 @@
 :root{font:16px/1.5 system-ui,sans-serif;color:#eff2ea;background:#141a17;--panel:#1c2520;--line:#37443c;--muted:#b5c1b6;--lime:#d5ef9e;--warm:#f1bc9e}
 *{box-sizing:border-box}
 body{margin:0}
-main{width:min(1200px,100% - 40px);margin:0 auto 60px}
+main{width:min(1700px,100% - 40px);margin:0 auto 60px}
 header{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:end;padding:38px 0 24px;border-bottom:1px solid var(--line);margin-bottom:24px}
 .brand{color:var(--lime);font-size:.82rem;font-weight:750;letter-spacing:.15em;text-transform:uppercase}
 h1,h2,h3,p{margin:0}
@@ -41,6 +41,26 @@ button:focus-visible,select:focus-visible,.scroll:focus-visible{outline:2px soli
 .cell.loss{background:#543a31;color:#ffe2d3}
 .cell[aria-pressed="true"]{border-color:var(--lime)}
 .cell:hover,.text-button:hover{filter:brightness(1.2)}
+#survival{scroll-margin-top:12px}
+.survival-tools{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;margin:12px 0}
+.survival-legend{min-width:180px;color:var(--muted);font-size:.8rem}
+.scale{height:10px;border-radius:3px;margin:4px 0}
+.scale-labels{display:flex;justify-content:space-between;gap:16px;font-variant-numeric:tabular-nums}
+.survival-exports{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.83rem}
+.survival-exports a,.survival-selection a{color:var(--lime)}
+.survival-selection{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px;margin:4px 0 10px;font-size:.83rem}
+.survival-scroll{max-height:78vh;border:1px solid var(--line);border-radius:6px}
+.survival-matrix{border-collapse:separate;border-spacing:0}
+.survival-matrix thead th{position:sticky;top:0;z-index:2;background:var(--panel);vertical-align:bottom;text-align:center}
+.survival-matrix .row-label{position:sticky;left:0;z-index:1;background:var(--panel);text-align:left;white-space:nowrap;border-right:1px solid var(--line)}
+.survival-matrix thead .row-label{z-index:3}
+.survival-matrix .mean{white-space:nowrap;text-align:right;color:var(--muted);border-right:1px solid var(--line)}
+.survival-matrix th,.survival-matrix td{font-size:.77rem;padding:3px}
+.survival-matrix th.row-label,.survival-matrix .mean{padding-inline:8px}
+.survival-matrix thead th{padding-block:8px}
+.survival-cell{width:100%;min-width:60px;min-height:29px;padding:3px;border:1px solid transparent;border-radius:3px;font-size:inherit;font-weight:650;font-variant-numeric:tabular-nums}
+.survival-cell.missing{background:repeating-linear-gradient(135deg,#202a24 0 4px,#29352d 4px 8px);color:var(--muted)}
+.survival-cell:is(:hover,:focus-visible,[aria-pressed="true"]){position:relative;outline:2px solid #fff;outline-offset:-2px}
 .pickers,.sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .pickers{margin-bottom:14px}
 .pickers label{display:grid;gap:5px;color:var(--muted);font-size:.85rem}
@@ -70,10 +90,10 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
   <div>
     <p class="brand">Atemporal</p>
     <h1>Combat Balance Lab</h1>
-    <p id="subtitle">Mirrored factory duels</p>
+    <p id="subtitle">Mirrored combat trials</p>
   </div>
   <div class="controls">
-    <label>Rules<select id="rules"><option value="9">Rules 9</option><option value="8">Rules 8 · historical</option></select></label>
+    <label>Rules<select id="rules"><option value="12">Rules 12</option><option value="9">Rules 9 · historical</option><option value="8">Rules 8 · historical</option></select></label>
     <label>Mode<select id="mode"><option value="army">Army · 600 matter</option><option value="3">Factory · 3 matter/tick</option><option value="6">Factory · 6 matter/tick</option></select></label>
     <label>Arena<select id="arena"><option value="open">Open</option><option value="choke">Choke</option><option value="straight">Straight corridor</option><option value="snake">Winding corridor</option></select></label>
   </div>
@@ -82,6 +102,29 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
 <section class="panel" id="arena-panel" hidden>
   <div><h2 id="arena-title">Arena</h2><p id="arena-caption"></p></div>
   <canvas id="arena-map" role="img"></canvas>
+</section>
+<section class="panel" id="survival" hidden>
+  <div class="section-head"><h2>Surviving matter by matchup</h2><p id="survival-context"></p></div>
+  <p>Each cell is the row roster’s mean against the column opponent. Each surviving unit contributes cost × remaining HP fraction. Self-play counts both sides. Both axes use mean against all recorded opponents, highest first.</p>
+  <div class="survival-tools">
+    <div class="survival-legend">
+      <span>HP-weighted surviving matter</span>
+      <div id="survival-scale" class="scale" aria-hidden="true"></div>
+      <div class="scale-labels"><span>0</span><span id="survival-max"></span></div>
+    </div>
+    <p>0 = no surviving units · — = no recorded trial</p>
+    <div id="survival-exports" class="survival-exports" hidden>
+      <a id="survival-png" download>Download PNG</a>
+      <a href="rules12/survival-charts.pdf" download>Download all charts as PDF</a>
+    </div>
+  </div>
+  <div class="survival-selection">
+    <p id="survival-readout"></p>
+    <a href="#matchup-panel">Open selected matchup</a>
+  </div>
+  <div class="scroll survival-scroll" tabindex="0" aria-label="Scrollable surviving matter chart">
+    <table class="survival-matrix" aria-label="Surviving matter by roster and opponent" id="survival-matrix"></table>
+  </div>
 </section>
 <div id="results" class="grids" hidden>
   <section class="panel">
@@ -120,6 +163,7 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
 const byId = id => document.getElementById(id);
 const status = byId('status');
 const selectors = [byId('roster-a'), byId('roster-b')];
+const viridis = [[68, 1, 84], [71, 44, 122], [59, 82, 139], [44, 113, 142], [33, 145, 140], [40, 174, 128], [94, 201, 98], [173, 220, 48], [253, 231, 37]];
 const number = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
 const format = value => number.format(value);
 const signed = value => (value > 0 ? '+' : '') + format(value);
@@ -185,6 +229,113 @@ async function read(file) {
 
 function matches(a, b) {
   return dataset.groups.get(a + '/' + b) || [];
+}
+
+function survivingMatter(a, b) {
+  const trials = matches(a, b);
+  if (!trials.length) return null;
+  const selfPlay = a === b;
+  return trials.reduce((sum, trial) => sum + trial.first.health_weighted_unit_matter +
+    (selfPlay ? trial.second.health_weighted_unit_matter : 0), 0) / (trials.length * (selfPlay ? 2 : 1));
+}
+
+function survivalColor(value, max) {
+  const position = (max ? value / max : 0) * (viridis.length - 1);
+  const index = Math.floor(position);
+  const next = viridis[index + 1] ?? viridis[index];
+  return viridis[index].map((component, i) => Math.round(component + (next[i] - component) * (position - index)));
+}
+
+function survivalTextColor(rgb) {
+  const [r, g, b] = rgb.map(component => {
+    const channel = component / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return r * 0.2126 + g * 0.7152 + b * 0.0722 > 0.179 ? '#000' : '#fff';
+}
+
+function renderSurvival(rules, mode, arena) {
+  const rosters = [...dataset.rosters.keys()];
+  const rows = rosters.map(a => {
+    const cells = new Map(rosters.map(b => [b, survivingMatter(a, b)]));
+    const values = [...cells.values()].filter(value => value !== null);
+    const mean = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    return {a, cells, mean, values};
+  });
+  rows.sort((left, right) => {
+    const difference = (right.mean ?? -1) - (left.mean ?? -1);
+    return difference || (left.a < right.a ? -1 : Number(left.a > right.a));
+  });
+
+  const max = Math.max(0, ...rows.flatMap(row => row.values));
+  const scale = byId('survival-scale');
+  scale.style.background = max
+    ? 'linear-gradient(to right,' + viridis.map(rgb => 'rgb(' + rgb.join(',') + ')').join(',') + ')'
+    : 'rgb(' + viridis[0].join(',') + ')';
+  byId('survival-max').textContent = format(max);
+  byId('survival-context').textContent = 'Rules ' + rules + ' · ' +
+    controls[1].selectedOptions[0].textContent + ' · ' + arenas[arena];
+  byId('survival-exports').hidden = rules !== '12';
+  byId('survival-png').href = sweepFile(rules, mode, arena).replace(/\.jsonl$/, '.png');
+
+  const table = byId('survival-matrix');
+  const head = element('thead');
+  const headings = element('tr');
+  for (const [label, className] of [
+    ['Roster ↓ / Opponent →', 'row-label'], ['Mean', 'mean'],
+    ...rows.map(({a}) => [name(dataset.rosters.get(a)), '']),
+  ]) {
+    const heading = element('th', label, className);
+    heading.scope = 'col';
+    headings.append(heading);
+  }
+  head.append(headings);
+
+  const body = element('tbody');
+  const readout = byId('survival-readout');
+  for (const {a, cells, mean, values} of rows) {
+    const aName = name(dataset.rosters.get(a));
+    const line = element('tr');
+    const heading = element('th', aName, 'row-label');
+    heading.scope = 'row';
+    const meanCell = element('td', mean === null ? '—' : format(mean), 'mean');
+    meanCell.title = values.length + ' of ' + rosters.length + ' opponents recorded';
+    line.append(heading, meanCell);
+    for (const {a: b} of rows) {
+      const value = cells.get(b);
+      const trials = matches(a, b).length * (a === b ? 2 : 1);
+      const detail = aName + ' vs ' + name(dataset.rosters.get(b)) + ' · ' +
+        (value === null ? 'No recorded trial' : format(value) + ' surviving matter · ' +
+          trials + (trials === 1 ? ' seat result' : ' seat results'));
+      const button = element('button', value === null ? '—' : format(value), 'survival-cell');
+      button.type = 'button';
+      button.dataset.pair = a + '/' + b;
+      button.title = detail;
+      button.setAttribute('aria-label', detail);
+      if (value === null) {
+        button.classList.add('missing');
+      } else {
+        const rgb = survivalColor(value, max);
+        button.style.backgroundColor = 'rgb(' + rgb.join(',') + ')';
+        button.style.color = survivalTextColor(rgb);
+      }
+      button.addEventListener('mouseenter', () => { readout.textContent = detail; });
+      button.addEventListener('focus', () => { readout.textContent = detail; });
+      button.addEventListener('mouseleave', showSelectedSurvival);
+      button.addEventListener('blur', showSelectedSurvival);
+      button.addEventListener('click', () => selectMatch(a, b, false));
+      const cell = element('td');
+      cell.append(button);
+      line.append(cell);
+    }
+    body.append(line);
+  }
+  table.replaceChildren(head, body);
+}
+
+function showSelectedSurvival() {
+  const selected = byId('survival-matrix').querySelector('[aria-pressed="true"]');
+  byId('survival-readout').textContent = selected?.title ?? '';
 }
 
 function score(trials) {
@@ -262,9 +413,10 @@ function renderSide(roster, result, letter) {
 
 function showMatchup() {
   const [a, b] = selectors.map(select => select.value);
-  for (const cell of byId('matrix').querySelectorAll('button')) {
+  for (const cell of document.querySelectorAll('#matrix button, #survival-matrix button')) {
     cell.setAttribute('aria-pressed', String(cell.dataset.pair === a + '/' + b));
   }
+  showSelectedSurvival();
   const list = byId('matchups');
   const trials = [...matches(a, b)].sort((left, right) => left.seat - right.seat);
   list.replaceChildren();
@@ -319,7 +471,8 @@ function renderMixes() {
 
 function sweepFile(rules, mode, arena) {
   if (rules === '8') return mode === '6' ? 'factory6.jsonl' : 'factory.jsonl';
-  return mode === 'army' ? 'army-' + arena + '.jsonl' : 'factory-' + arena + '-' + mode + '.jsonl';
+  const file = mode === 'army' ? 'army-' + arena + '.jsonl' : 'factory-' + arena + '-' + mode + '.jsonl';
+  return rules === '12' ? 'rules12/' + file : file;
 }
 
 async function loadSweep(rules, mode, arena) {
@@ -423,17 +576,20 @@ async function showComparison(a, b) {
   }));
 }
 
+let pendingSurvivalAnchor = location.hash === '#survival';
+
 async function changeDataset(fallback = false) {
   const version = ++requestVersion;
   ++comparisonVersion;
   status.textContent = 'Loading sweep…';
   byId('results').hidden = true;
+  byId('survival').hidden = true;
   byId('arena-panel').hidden = true;
   try {
     let [rules, mode, arena] = controls.map(control => control.value);
     let next = await loadSweep(rules, mode, arena);
     if (!next && fallback) {
-      for (const candidate of [['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
+      for (const candidate of [['9', 'army', 'snake'], ['9', '3', 'open'], ['8', '3', 'open'], ['8', '6', 'open']]) {
         next = await loadSweep(...candidate);
         if (next) {
           [rules, mode, arena] = candidate;
@@ -464,12 +620,18 @@ async function changeDataset(fallback = false) {
       select.value = [previous[i], defaults[i], rosters.keys().next().value].find(value => rosters.has(value));
     });
     drawArena(meta);
+    renderSurvival(rules, mode, arena);
     renderMatrix();
     byId('mix-title').textContent = meta.mode === 'army' ? 'Mixed army lift' : 'Mixed queue lift';
     byId('mix-panel').hidden = ![...rosters.values()].some(roster => roster.length === 2);
     renderMixes();
     showMatchup();
     byId('results').hidden = false;
+    byId('survival').hidden = false;
+    if (pendingSurvivalAnchor) {
+      byId('survival').scrollIntoView();
+      pendingSurvivalAnchor = false;
+    }
     status.textContent = loadedCount === meta.expected_trials ? '' : loadedCount + ' of ' + meta.expected_trials + ' recorded trials available';
   } catch (error) {
     if (version === requestVersion) status.textContent = 'Could not load the sweep. ' + error.message;
@@ -481,12 +643,13 @@ for (const control of controls) control.addEventListener('change', () => {
   void changeDataset();
 });
 const query = new URLSearchParams(location.search);
+const requestedRules = query.get('rules');
 const requestedMode = query.get('mode');
 const requestedArena = query.get('arena');
-setControls('9',
+setControls(['8', '9', '12'].includes(requestedRules) ? requestedRules : '12',
   ['army', '3', '6'].includes(requestedMode) ? requestedMode : 'army',
   Object.hasOwn(arenas, requestedArena) ? requestedArena : 'snake');
-void changeDataset(true);
+void changeDataset(!requestedRules && !requestedMode && !requestedArena);
 </script>
 </body>
 </html>

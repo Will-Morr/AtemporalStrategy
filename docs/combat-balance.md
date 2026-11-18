@@ -59,10 +59,29 @@ for path in docs/balance-data/corridors-rules9/*.jsonl.gz; do
   name=$(basename "$path" .gz)
   gzip -dc "$path" > "artifacts/balance/review/$name"
 done
+mkdir -p artifacts/balance/review/rules12
+for path in docs/balance-data/survival-rules12/*.jsonl.gz; do
+  name=$(basename "$path" .gz)
+  gzip -dc "$path" > "artifacts/balance/review/rules12/$name"
+done
+# Generate the downloadable images and combined PDF (requires Matplotlib).
+python3 scripts/summarize-balance.py docs/balance-data/survival-rules12 --heatmap artifacts/balance/review/rules12/survival-charts.pdf
 python3 -m http.server 8846 --bind 127.0.0.1 --directory artifacts/balance/review
 ```
 
 The review was checked in Chromium at desktop and phone widths. Selecting a matrix cell opens its seat results, selecting a mix opens its matchup, and switching income preserves the selected rosters. The table scrolls horizontally on a phone. Screenshots and the interaction trace from the local verification are in `artifacts/balance/`.
+
+### Surviving matter by matchup
+
+The rules-12 chart uses all 21 rosters (six singles and fifteen pairs) for each arena and economy. Rows are the measured force and columns its opponent. Count only surviving units, multiplying each unit’s cost by its remaining health fraction. A wipeout contributes zero even if the base survives. A cell averages the two starting seats, including both forces in the single mirror duel on the diagonal. Each opponent has equal weight in the roster average used to sort both axes. Colors run from zero to the highest cell on the selected chart.
+
+Each of the [twelve datasets](balance-data/survival-rules12/) contains 441 trials. Survivors are measured at base destruction or tick 1,800, whichever comes first. Both sides can retain troops at the cutoff. Factory forces accumulate spending while a duel lasts, so a long fight can produce a larger surviving army. The army setting uses a fixed 600-matter starting budget.
+
+To export an individual chart with Matplotlib installed, use:
+
+```sh
+python3 scripts/summarize-balance.py docs/balance-data/survival-rules12/army-snake.jsonl.gz --heatmap army-snake.png
+```
 
 ## Calibrating corridor width
 
