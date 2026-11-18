@@ -77,11 +77,26 @@ The seeded `replay_opponent` evaluator accepts a Tactical profile for each seat.
 The first search uses two passes over the number of grunts produced by Tactical's first combat factory before its tank loop. It checks the current center plus and minus six grunts, then plus and minus two around the winning center. Each candidate plays the frozen eight-grunt incumbent in both seats on the same training map. The sum of candidate-minus-incumbent scoreboard points at the two-round cap ranks candidates. The held-out maps receive only the best changed candidate, with the regular first-to-three victory condition and an outer six-round cap. This design uses one training seed block and two held-out blocks. The thresholds, seed budget and single-opponent pool are experimental choices. A longer run across specialists and recorded player plans is still needed to establish general strength.
 
 ```sh
-cargo build --release -p atemporal-server --example replay_opponent
+taskset -c 0 nice -n 15 cargo build -j1 --release -p atemporal-server --example replay_opponent
 taskset -c 0 nice -n 15 python3 scripts/tune-tactical.py --output tactical-first-pass.jsonl
 ```
 
 The evaluator also accepts stand-alone profiles for manual comparisons. Pass `--self-play ROUND_CAP BOT_PARAMS_JSON OPPONENT_PARAMS_JSON` after the existing seed, style and seat arguments. A Tactical profile contains `opening_grunts`, `fresh_entry_ticks` and `rally_distance_band`. The latter two retain their defaults of 600 ticks and 8 route tiles in this search. This run leaves the release profile unchanged for independent review.
+
+### First run on rules 11
+
+The [match log](balance-data/tactical-self-play-rules11.jsonl) records 12 seeded games on one immutable evaluator binary. It used the code at `33e21cd` and one simulation thread. The games took 257.3 CPU seconds in total. All drafts passed validation.
+
+On training seed 42, candidates with 2 and 14 opening grunts in iteration 1 and 6 and 10 in iteration 2 all scored 0–0 in both seats by the two-round cap. The incumbent's opening draft stayed identical at each seat across all four comparisons. Each challenger emitted a distinct opening draft at each seat. Both iterations kept eight grunts as the search center. The diagnostic holdout selected two grunts because it was the first of four equally scored challengers.
+
+| Held-out seed | Challenger seat | Score, challenger first | Termination |
+| --- | --- | --- | --- |
+| 113 | 0 | 3–0 | Challenger win |
+| 113 | 1 | 1–0 | Round cap |
+| 907 | 0 | 1–3 | Incumbent win |
+| 907 | 1 | 0–3 | Incumbent win |
+
+The challenger went 1–2 in completed held-out matches and had a combined scoreboard margin of −1 including the capped game. The training screen supplied no ranking signal and the two held-out map blocks supplied no basis to replace the incumbent. Tactical 2.0 keeps its eight-grunt opening.
 
 ## Simple win
 
