@@ -148,6 +148,12 @@ In 600-matter army duels, artillery beat tanks, tanks beat grinders, and both fa
 
 The two high-income corridors still favor artillery in surviving matter. On the winding map at 6 matter/tick, 105 of 210 non-mirror games reached the cutoff, down from 126. Artillery destroyed the tank factory in 12 of 16 standard factory duels. Extending the four winding-map cutoffs produced four more artillery wins, at ticks 2,165 and 2,431 at income 3 and 3,871 and 3,847 at income 6. Income also changes how reinforcements arrive. At the intermediate income of 5 on the straight corridor, both grunt–artillery games reached tick 3,600 with both bases standing and artillery holding over 17,700 surviving matter in each seat. The [extended duel logs](balance-data/artillery-factory-checks/) record these outcomes.
 
+### Artillery + grunt in factory combat
+
+The factory rework’s comparison chart ranks artillery + grunt in the top three for average surviving matter in all eight factory settings. It leads that measure on open ground at income 6. Its strongest base-kill result is the straight corridor at income 3 (22 wins, six losses). Across 224 non-mirror factory trials it finished seventh of 15 rosters by base kills, with 106 wins, 58 losses and 60 cutoffs. Pure grinders beat it from both seats on all four maps at both incomes, and in all eight corresponding deployed-army trials.
+
+On the winding corridor at income 6, pure grinders destroyed its factory at tick 210 from either seat. All 26 other trials reached tick 1,800 with both factories at full health. Artillery + grunt led in surviving matter in 22 of those 26. The [7,200-tick follow-ups](balance-data/artillery-grunt-checks/) tested three of those opponents from both seats. Artillery + grunt eventually destroyed both grinder + grunt factories (ticks 5,030 and 5,352). Against pure grunts and against artillery + tank, both bases still had full health at tick 7,200 in both seats. At that point artillery + grunt led pure grunts in surviving matter and trailed artillery + tank in both seats.
+
 ## Calibrating corridor width
 
 Run `cargo run --release --locked -p atemporal-sim --example corridor_widths` to measure the shipped generator on 32 default two-player 48×48 maps (seeds 0–31). For each tile the tool finds the largest axis-aligned square of walkable terrain containing it. This gives a consistent width even when a route hugs one wall, though diagonal passages can measure narrower. The sample skips spawn and center clearings and treats widths of eight tiles or more as rooms.
