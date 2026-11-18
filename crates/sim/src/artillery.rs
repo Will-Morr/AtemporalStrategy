@@ -4,6 +4,8 @@ use crate::world::{DIRS, NONE, RESERVED, Sim};
 use crate::{EntityId, Lifecycle, PlayerId, Tile};
 use std::collections::{BTreeMap, VecDeque};
 
+pub(crate) mod terrain_corner;
+
 const LOOKAHEAD: i32 = 6;
 const FIELD_WIDTH: usize = (2 * LOOKAHEAD + 1) as usize;
 const FIELD_CELLS: usize = FIELD_WIDTH * FIELD_WIDTH;
@@ -38,6 +40,12 @@ pub(crate) struct RetreatState {
 }
 
 impl Sim {
+    /// Static row-major corner costs for the map, with zero for rock cells.
+    /// Older rules scored corners from the live board and have no static field.
+    pub fn artillery_corner_costs(&self) -> Option<&[i32]> {
+        self.terrain_corner_scores.as_deref()
+    }
+
     pub fn set_artillery_retreat_diagnostics(&mut self, enabled: bool) {
         self.retreat.diagnostics = enabled;
         self.retreat.last.clear();
@@ -193,6 +201,9 @@ impl Sim {
                 .filter_map(move |&(dx, dy, _)| self.offset(tile, dx, dy).filter(|&n| walkable(n)))
         };
         let corner_cost = |tile| {
+            if let Some(scores) = &self.terrain_corner_scores {
+                return scores[self.idx(tile)];
+            }
             let mut exits = 0;
             let mut escape_arms = 0;
             for next in neighbors(tile) {
@@ -263,7 +274,7 @@ impl Sim {
             for y in 0..self.state.terrain.height {
                 for x in 0..self.state.terrain.width {
                     let tile = Tile { x, y };
-                    if walkable(tile) {
+                    if self.terrain_corner_scores.is_some() && self.floor(tile) || walkable(tile) {
                         let reachable = from.x.abs_diff(x) <= LOOKAHEAD as u16
                             && from.y.abs_diff(y) <= LOOKAHEAD as u16
                             && visited[field_index(tile)];

@@ -23,6 +23,7 @@ pub struct Sim {
     pub content: Content,
     pub state: WorldState,
     pub(crate) legacy_rules: bool,
+    pub(crate) terrain_corner_scores: Option<std::sync::Arc<[i32]>>,
     pub(crate) artillery_retreat_margin: f64,
     pub(crate) artillery_retreat_enabled: bool,
     pub(crate) retreat: crate::artillery::RetreatState,
@@ -120,6 +121,10 @@ impl Sim {
         }
         let mut sim = Self {
             legacy_rules: request.fingerprint.sim_build.ends_with(" rules 7"),
+            terrain_corner_scores: (![" rules 7", " rules 9", " rules 10", " rules 11"]
+                .iter()
+                .any(|suffix| request.fingerprint.sim_build.ends_with(suffix)))
+            .then(|| crate::artillery::terrain_corner::cached(&state.terrain)),
             artillery_retreat_margin: if request.fingerprint.sim_build.ends_with(" rules 10") {
                 1.0
             } else {

@@ -125,7 +125,7 @@ Tanks and artillery use orthogonal tread movement, never diagonal steps. Tread p
 
 ## Artillery retreat
 
-Artillery should retreat when an enemy unit is closer than its maximum weapon range minus two tiles, giving more artillery room to fire together. It should seek lower combined danger using a map of distance-based threat from enemies and a penalty for tight corners and dead ends, so it can kite without routinely trapping itself. Provide gameplay review frames with adjacent corner, enemy-threat and combined fields, plus a full-map overlay of the retreats planned by all units.
+Artillery should retreat when an enemy unit is closer than its maximum weapon range minus two tiles, giving more artillery room to fire together. It should seek lower combined danger using a map of distance-based threat from enemies and a penalty for tight corners and dead ends, so it can kite without routinely trapping itself. Compute a static, map-wide corner field up front from the terrain, capturing the shape of extended dead ends as well as small pockets. Artillery should reuse this field for retreat pathing. Units, buildings and changes in fog do not alter that field. Use current sightings for threat and current occupancy for legal movement. Provide gameplay review frames with adjacent corner, enemy-threat and combined fields, plus a full-map overlay of the retreats planned by all units.
 
 ## Balance experiments
 

@@ -84,7 +84,7 @@ canvas{display:block;background:#25262b;border:1px solid #526171;width:100%;heig
   <div class="heat-grid">
     <section class="panel">
       <h2>Artillery corner cost</h2>
-      <canvas id="corner" role="img" aria-label="Corner cost for the selected artillery"></canvas>
+      <canvas id="corner" role="img" aria-label="Scenario terrain corner cost"></canvas>
       <div class="legend"><span id="corner-min">—</span><div class="ramp" id="corner-ramp"></div><span id="corner-max">—</span></div>
       <p class="legend-note" id="corner-note"></p>
     </section>
@@ -121,7 +121,7 @@ const number = new Intl.NumberFormat(undefined,{maximumFractionDigits:2});
 const key = id => JSON.stringify(id);
 const coord = tile => '(' + tile.x + ', ' + tile.y + ')';
 const sameTile = (a,b) => a && b && a.x === b.x && a.y === b.y;
-let data, scene, frame, selected, focusTile, playing, layerData = {};
+let data, scene, frame, selected, focusTile, playing, staticCorner, layerData = {};
 
 function paintTerrain(ctx, rows) {
   for (const [y,row] of rows.entries()) {
@@ -295,16 +295,38 @@ function canvasContext(canvas, limit) {
   return ctx;
 }
 
+function layer(entries) {
+  const values = new Map();
+  let min = Infinity, max = -Infinity;
+  for (const entry of entries) {
+    if (!Number.isFinite(entry.value)) continue;
+    values.set(coord(entry.tile),entry);
+    min = Math.min(min,entry.value);
+    max = Math.max(max,entry.value);
+  }
+  return {values,min:values.size ? min : null,max:values.size ? max : null};
+}
+
+function terrainCorner(scenario) {
+  const costs = scenario.terrain_corner_costs;
+  if (!costs) return null;
+  const width = scenario.map_rows[0].length;
+  const entries = [];
+  for (const [y,row] of scenario.map_rows.entries()) {
+    for (let x=0;x<width;x++) {
+      if (row[x] !== '#') entries.push({tile:{x,y},value:costs[y*width+x]});
+    }
+  }
+  return layer(entries);
+}
+
 function buildLayers(plan) {
   const scores = plan?.scores ?? [];
-  layerData = Object.fromEntries(fieldNames.map(name=>{
-    const values = new Map();
-    for (const score of scores) {
-      if (Number.isFinite(score[name])) values.set(coord(score.tile),{tile:score.tile,value:score[name],reachable:score.reachable});
-    }
-    const points = [...values.values()].map(entry=>entry.value);
-    return [name,{values,min:points.length ? Math.min(...points) : null,max:points.length ? Math.max(...points) : null}];
-  }));
+  layerData = Object.fromEntries(fieldNames.map(name=>[name,
+    name === 'corner' && staticCorner ? staticCorner : layer(scores.map(score=>({
+      tile:score.tile,value:score[name],reachable:score.reachable,
+    }))),
+  ]));
 }
 
 const fmt = value => value === null || value === undefined ? '—' : number.format(value);
@@ -316,13 +338,15 @@ function paintLayers(unit, plan) {
     for (const {tile,value,reachable} of values.values()) {
       ctx.fillStyle = colorFor(name,value,min,max);
       ctx.fillRect(tile.x*tileSize,tile.y*tileSize,tileSize,tileSize);
-      if (reachable === false) {
+      if (name !== 'corner' && reachable === false) {
         ctx.fillStyle='#0a141d99';
         ctx.fillRect(tile.x*tileSize+tileSize*.5-2,tile.y*tileSize+tileSize*.5-2,4,4);
       }
     }
-    if (unit) outline(ctx,unit.tile,'#ffdf83',1.5);
-    for (const tile of plan?.threats ?? []) threatMarker(ctx,tile);
+    if (name !== 'corner') {
+      if (unit) outline(ctx,unit.tile,'#ffdf83',1.5);
+      for (const tile of plan?.threats ?? []) threatMarker(ctx,tile);
+    }
     if (focusTile) outline(ctx,focusTile,'#fff',2);
     $(name+'-min').textContent = fmt(min);
     $(name+'-max').textContent = fmt(max);
@@ -383,24 +407,30 @@ function labelUnit(unit, index) {
 
 function reflectUnits(artillery) {
   const control = $('unit');
-  control.replaceChildren(...artillery.map((unit,index)=>{
+  control.replaceChildren(new Option('None',''),...artillery.map((unit,index)=>{
     const option = new Option(labelUnit(unit,index),key(unit.id));
     return option;
   }));
-  if (!artillery.some(unit=>key(unit.id)===selected)) {
+  if (selected !== null && !artillery.some(unit=>key(unit.id)===selected)) {
     selected = [frame.selected_unit_id,frame.retreats[0]?.unit_id,artillery[0]?.id]
       .filter(id=>id!==undefined)
       .map(key).find(id=>artillery.some(unit=>key(unit.id)===id)) ?? '';
   }
-  control.value = selected;
+  control.value = selected ?? '';
   control.disabled = artillery.length === 0;
 }
 
 function updatePanels(unit, plan, retreatPlans, artillery) {
+  $('threat-note').textContent = plan
+    ? 'Pink diamonds mark the visible threats used in scoring.'
+    : 'Available when the selected artillery has a recorded retreat decision.';
+  $('combined-note').textContent = plan
+    ? 'Corner cost + enemy threat. Lower is better. Dotted tiles are outside the endpoint search. The step decision also charges travel and first-tile occupancy.'
+    : 'Available when the selected artillery has a recorded retreat decision.';
   $('selection').textContent = unit
     ? labelUnit(unit,artillery.indexOf(unit)) + ' · ' + coord(unit.tile) + ' · ' + fmt(unit.hp) + '/' + fmt(unit.max_hp) + ' HP' +
       (plan ? ' · ' + plan.threats.length + ' visible threat tiles' : ' · no retreat score at this tick')
-    : 'No artillery at this tick.';
+    : artillery.length ? 'No artillery selected.' : 'No artillery at this tick.';
   const events = frame.events.map(item=>item.event);
   const list = $('decisions');
   list.replaceChildren(...retreatPlans.map((retreat,index)=>{
@@ -479,11 +509,16 @@ function firstResolvedRetreat(scene) {
 function pickScenario(index, requestedTick) {
   stopPlayback();
   scene = data.scenarios[index];
+  staticCorner = terrainCorner(scene);
   selected = undefined;
   focusTile = undefined;
   $('frame').max = scene.frames.length-1;
   $('frame').disabled = scene.frames.length === 1;
   $('play').disabled = scene.frames.length === 1;
+  $('corner').setAttribute('aria-label',staticCorner ? 'Scenario terrain corner cost' : 'Historical corner cost for the selected artillery');
+  $('corner-note').textContent = staticCorner
+    ? 'Walls and short escape routes raise this static cost. Units and buildings do not change it. Dark tiles are walls.'
+    : 'Historical per-gun recording. Gray floor has no recorded score for the selected gun at this tick.';
   $('provenance').textContent = 'Simulation rules ' + data.sim_rules_version +
     (scene.map_seed == null ? ' · controlled map' : ' · generated map seed ' + scene.map_seed) +
     (scene.setup ? ' · ' + scene.setup : '');
@@ -524,7 +559,7 @@ $('game').onclick = event=>{
 };
 $('scenario').onchange = ()=>pickScenario(Number($('scenario').value));
 $('unit').onchange = ()=>{
-  selected = $('unit').value;
+  selected = $('unit').value || null;
   render();
 };
 $('frame').oninput = ()=>{
@@ -549,15 +584,13 @@ $('play').onclick = ()=>{
     if (Number($('frame').value)===scene.frames.length-1) stopPlayback();
   },300);
 };
-$('corner-note').textContent = 'Open exits and escape arms lower this cost. Gray floor has no recorded score.';
-$('threat-note').textContent = 'Threat contribution. Pink diamonds mark visible threats used in scoring.';
-$('combined-note').textContent = 'Corner cost + enemy threat. Lower is better. Dotted tiles are outside the endpoint search. The step decision also charges travel and first-tile occupancy.';
 fetch('frames.json').then(response=>{
   if (!response.ok) throw new Error('HTTP ' + response.status);
   return response.json();
 }).then(exported=>{
   if (exported.schema_version!==1 || !exported.scenarios?.length ||
-      exported.scenarios.some(item=>!item.frames?.length || !item.map_rows?.length)) {
+      exported.scenarios.some(item=>!item.frames?.length || !item.map_rows?.length ||
+        (item.terrain_corner_costs && item.terrain_corner_costs.length!==item.map_rows[0].length*item.map_rows.length))) {
     throw new Error('Unsupported or empty frame export');
   }
   data = exported;

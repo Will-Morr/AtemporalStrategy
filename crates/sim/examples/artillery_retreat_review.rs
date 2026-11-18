@@ -24,6 +24,8 @@ struct ScenarioReview {
     setup: &'static str,
     map_seed: Option<u64>,
     map_rows: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    terrain_corner_costs: Option<Vec<i32>>,
     ore: Vec<Ore>,
     actors: Vec<Actor>,
     frames: Vec<Frame>,
@@ -269,6 +271,7 @@ fn inspect_scenario(
     let mut request = world.request();
     request.fingerprint.sim_build = format!("retreat review rules {RULES_VERSION}");
     let mut sim = Sim::new(&request)?;
+    let terrain_corner_costs = sim.artillery_corner_costs().map(<[i32]>::to_vec);
     sim.set_artillery_retreat_diagnostics(true);
     let mut first_advance = None;
     let mut first_escape = None;
@@ -499,6 +502,7 @@ fn inspect_scenario(
         setup,
         map_seed,
         map_rows,
+        terrain_corner_costs,
         ore,
         actors,
         frames,
