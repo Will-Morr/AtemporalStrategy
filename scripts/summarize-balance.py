@@ -193,7 +193,7 @@ def surviving_matter_figure(meta, pairs):
     import numpy as np
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
-    from matplotlib.patches import Patch, Rectangle
+    from matplotlib.patches import Patch
     from matplotlib.ticker import MaxNLocator
 
     rosters = [tuple(r) for r in meta["rosters"]]
@@ -210,11 +210,11 @@ def surviving_matter_figure(meta, pairs):
     if not values.count():
         raise ValueError("No matchup observations to plot")
     maximum = float(values.max())
-    cmap = plt.get_cmap("viridis").with_extremes(bad="#d4d7da")
+    cmap = plt.get_cmap("viridis").with_extremes(bad="#d4d7da", under="black")
     norm = Normalize(0, maximum or 1)
     figure = plt.figure(figsize=(15.5, 15))
     ax = figure.add_axes((.207, .085, .747, .736))
-    ax.imshow(values, cmap=cmap, norm=norm, interpolation="nearest", aspect="auto")
+    ax.imshow(np.ma.where(values == 0, -1, values), cmap=cmap, norm=norm, interpolation="nearest", aspect="auto")
     labels = [" + ".join(unit.title() for unit in roster) for roster in rosters]
     positions = range(len(labels))
     ax.set_xticks(positions, labels=labels, rotation=60, ha="left", rotation_mode="anchor", fontsize=9)
@@ -227,9 +227,7 @@ def surviving_matter_figure(meta, pairs):
         if not np.isfinite(v):
             label, ink = "—", "#28333b"
         elif v == 0:
-            ax.add_patch(Rectangle((j-.5, i-.5), 1, 1, facecolor="#f3b8ad",
-                                   edgecolor="#d89588", hatch="//", linewidth=0))
-            label, ink = "0", "#40231d"
+            label, ink = "0", "white"
         else:
             r, g, b, _ = cmap(norm(v))
             ink = "#131820" if .2126*r+.7152*g+.0722*b > .52 else "white"
@@ -248,7 +246,7 @@ def surviving_matter_figure(meta, pairs):
         ticks = MaxNLocator(nbins=5).tick_values(0, maximum)
         bar.set_ticks([0, *(t for t in ticks if 0 < t < maximum * .92), maximum])
         bar.set_ticklabels(["Above 0", *(f"{t:,.3g}" for t in bar.get_ticks()[1:])])
-    figure.legend(handles=[Patch(facecolor="#f3b8ad", edgecolor="#d89588", hatch="//", label="0 · No surviving units"),
+    figure.legend(handles=[Patch(facecolor="black", label="0 · No surviving units"),
                            Patch(facecolor="#d4d7da", label="— · No recorded trial")],
                   loc="center left", bbox_to_anchor=(.64,.05), frameon=False, fontsize=10)
     figure.text(.21,.012,"Positive colors show HP-weighted surviving matter. Cells average both seats.", fontsize=10)
