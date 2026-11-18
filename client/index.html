@@ -149,6 +149,9 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 #roster li.open-slot{cursor:pointer}#roster li.open-slot:hover,#roster li.open-slot:focus-visible{outline:1px solid var(--accent)}
 #roster li span:nth-of-type(2){min-width:0;overflow-wrap:anywhere;flex:1}#top-phase{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #game-info{pointer-events:auto;position:relative;white-space:nowrap}#game-info[open]>a{position:absolute;top:100%;left:0;background:#172938;border:1px solid #61829c;border-radius:4px;padding:10px;z-index:16}
+#turn-banner-toggle{pointer-events:auto;color:inherit;background:transparent;border:1px solid currentColor;border-radius:4px;padding:4px 8px}
+#turn-banner[data-compact="true"]{left:auto;right:8px;padding:0;border-width:1px;font-size:13px}
+#turn-banner[data-compact="true"] button{border:none;padding:6px 10px}
 #turn-banner[data-other="true"]{background:#674316;border-color:#ffd387;color:#fff5d8}#clear-future{font-weight:700;background:#633434;border-color:#bc7971;padding:6px 10px}
 .review-tools{display:grid;gap:7px;margin:8px 0;padding:8px 0;border-block:1px solid var(--edge)}.review-tools [hidden],#practice-options[hidden]{display:none}.review-tools small{display:block;color:#c8c7c0}.review-command{display:block;width:100%;text-align:left;padding-left:6px;border-left:3px solid;margin:4px 0}.review-jumps{display:flex;gap:4px}#practice-options{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#tick-activity{max-height:10rem;overflow:auto}#tick-activity strong{color:#ffda70}.review-queue{display:grid;gap:4px}#exit-practice{pointer-events:auto}
 </style></head><body>
@@ -177,7 +180,7 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 <div id="ore-readout" role="status" hidden></div>
   <canvas id="map" tabindex="0" aria-label="Battlefield"></canvas>
   <div id="top"><span id="top-phase"></span><span id="top-tick"></span><span id="top-bank"></span><section id="scoreboard" aria-label="Match scoreboard" aria-live="polite"></section><span id="top-sim"></span><span id="top-exact"></span></div>
-  <div id="turn-banner" role="status" hidden></div><div id="order-warnings" role="status" hidden></div>
+  <div id="turn-banner" hidden><span id="turn-banner-message" role="status"></span> <button id="turn-banner-toggle" type="button" aria-controls="turn-banner-message" hidden>Minimize</button></div><div id="order-warnings" role="status" hidden></div>
   <div id="mode"></div><div id="outcome-banner" role="status"></div>
   <div id="result"></div>
   <div id="toast"></div>

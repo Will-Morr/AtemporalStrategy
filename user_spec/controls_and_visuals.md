@@ -123,7 +123,7 @@ Remove assistant-written promotional subtitles/taglines from page headers and di
 ## Timeline planning and battlefield feedback
 
 - Ground vision must respect walls, with a generous flood fill allowing limited sight around corners. Show previously seen buildings in gray while they are outside vision.
-- Add a button to expand a selection to all matching unit and building types. Show a prominent signal when another player has committed and is waiting for the viewer.
+- Add a button to expand a selection to all matching unit and building types. Show a prominent signal when another player has committed and is waiting for the viewer. Let the viewer minimize this notice to a small corner box and reopen it, including in bot games.
 - Let players stage a reset of all their future orders from the chosen tick. It takes effect on commit and supports draft undo.
 - Shift-click can queue identical missile launches. If a launch would never be supplied, append the missing missile to the silo’s production queue.
 - Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Include the substantial gameplay and balance changes in the November 18 entry. Publication is optional per commit. Roll minor changes into the next major release.

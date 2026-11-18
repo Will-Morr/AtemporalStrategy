@@ -125,9 +125,17 @@ export class Game {
   lastFrame = performance.now();
   lastTop = 0;
   planningSince = performance.now();
+  private waitingNoticeCompact = false;
 
   constructor(readonly net: Net, readonly config: MatchConfig, readonly session: Session, lobby: LobbyState) {
     this.profiles = lobby.slots;
+    const noticeKey = `atemporal-waiting-notice:${location.pathname}:${this.net.matchId}`;
+    try { this.waitingNoticeCompact = sessionStorage.getItem(noticeKey) === 'compact'; } catch {}
+    $('turn-banner-toggle').onclick = () => {
+      this.waitingNoticeCompact = !this.waitingNoticeCompact;
+      try { sessionStorage.setItem(noticeKey, this.waitingNoticeCompact ? 'compact' : 'expanded'); } catch {}
+      this.updateTop();
+    };
     this.renderer = new Renderer($('map'), $('minimap'), $('timeline'), this);
     $('game').classList.add('active');
     $('lobby').style.display = 'none';
@@ -1336,11 +1344,20 @@ export class Game {
   updateTop(): void {
     const waiting=this.committed.includes(this.player??-1)&&this.committed.length<this.config.player_count&&!this.progress&&!this.preview&&!this.finished&&this.phase?.revision===this.latest;
     const othersWaiting=!this.spectator && !waiting && !this.committed.includes(this.player!) && this.committed.length>0 && this.committed.length<this.config.player_count && !this.finished && !this.preview && !this.progress && this.phase?.revision===this.latest;
-    $('turn-banner').hidden=!waiting && !othersWaiting;
-    $('turn-banner').dataset.other=String(othersWaiting);
-    $('turn-banner').textContent=`TURN COMMITTED · Waiting for ${this.config.player_count-this.committed.length} player${this.config.player_count-this.committed.length===1?'':'s'} · Uncommit to edit your moves`;
-
-    if(othersWaiting)$('turn-banner').textContent=this.committed.map(p=>this.name(p)).join(', ')+(this.committed.length===1?' is':' are')+' waiting for your turn';
+    const banner = $('turn-banner'), message = $('turn-banner-message'), toggle = $('turn-banner-toggle');
+    const compact = othersWaiting && this.waitingNoticeCompact;
+    banner.hidden = !waiting && !othersWaiting;
+    banner.dataset.other = String(othersWaiting);
+    banner.dataset.compact = String(compact);
+    message.hidden = compact;
+    toggle.hidden = !othersWaiting;
+    toggle.setAttribute('aria-expanded', String(!compact));
+    toggle.textContent = compact ? 'Player waiting' : 'Minimize';
+    toggle.title = compact ? 'Show waiting notification' : 'Minimize waiting notification';
+    const remaining = this.config.player_count - this.committed.length;
+    message.textContent = othersWaiting
+      ? this.committed.map(p => this.name(p)).join(', ') + (this.committed.length === 1 ? ' is' : ' are') + ' waiting for your turn'
+      : `TURN COMMITTED · Waiting for ${remaining} player${remaining === 1 ? '' : 's'} · Uncommit to edit your moves`;
     const rev = this.rev();
     const planningRound = practice ? this.latest + 1 : this.round;
     const historicalRound = practice ? this.current : this.experience?.rounds.get(this.current)?.round ?? '…';
