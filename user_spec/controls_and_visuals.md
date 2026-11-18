@@ -126,7 +126,7 @@ Remove assistant-written promotional subtitles/taglines from page headers and di
 - Add a button to expand a selection to all matching unit and building types. Show a prominent signal when another player has committed and is waiting for the viewer.
 - Let players stage a reset of all their future orders from the chosen tick. It takes effect on commit and supports draft undo.
 - Shift-click can queue identical missile launches. If a launch would never be supplied, append the missing missile to the silo’s production queue.
-- Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Publication is optional per commit. Roll minor changes into the next major release.
+- Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Include the substantial gameplay and balance changes in the November 18 entry. Publication is optional per commit. Roll minor changes into the next major release.
 
 ## Timeline inspection and practice
 
