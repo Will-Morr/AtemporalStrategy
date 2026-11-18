@@ -6,6 +6,7 @@ version = 4
 name = "atemporal-bots"
 version = "0.1.0"
 dependencies = [
+ "atemporal-content",
  "atemporal-contracts",
  "atemporal-sim",
  "serde",

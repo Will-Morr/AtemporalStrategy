@@ -318,12 +318,10 @@ pub fn published_plan(input: &PolicyTimeline, style: Style) -> TurnDraft {
         content: input.content(),
         terrain: &input.timeline.terrain,
     };
-    let mut draft = plan_frame(frame, input.player(), style, rules, input.revision());
-    if style == Style::Tactical && input.config().control_limit != ControlLimit::SingleOrder {
-        tactical::target_observed_bases(input, frame, &mut draft);
-        tactical::search_stalemate(input, frame, &mut draft);
+    if style == Style::Tactical {
+        return tactical::plan(input, frame, rules);
     }
-    draft
+    plan_frame(frame, input.player(), style, rules, input.revision())
 }
 
 pub fn plan_frame(
@@ -332,6 +330,17 @@ pub fn plan_frame(
     style: Style,
     rules: FrameRules<'_>,
     revision: Revision,
+) -> TurnDraft {
+    plan_frame_with_rally(state, player, style, rules, revision, None)
+}
+
+fn plan_frame_with_rally(
+    state: &PlayerFrame,
+    player: PlayerId,
+    style: Style,
+    rules: FrameRules<'_>,
+    revision: Revision,
+    rally: Option<Tile>,
 ) -> TurnDraft {
     let FrameRules {
         config,
@@ -384,12 +393,15 @@ pub fn plan_frame(
             order: Order::Mine { area: area.clone() },
         });
     }
-    let target = state
-        .visible_entities
-        .iter()
-        .filter(|e| !allied(config, player, e.owner))
-        .min_by_key(|e| distance(e.tile, home))
-        .map(|e| e.tile)
+    let target = rally
+        .or_else(|| {
+            state
+                .visible_entities
+                .iter()
+                .filter(|e| !allied(config, player, e.owner))
+                .min_by_key(|e| distance(e.tile, home))
+                .map(|e| e.tile)
+        })
         .unwrap_or_else(|| {
             let desired = Tile {
                 x: terrain.width - 1 - home.x,

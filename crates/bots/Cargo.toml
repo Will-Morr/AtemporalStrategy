@@ -8,3 +8,6 @@ license.workspace = true
 atemporal-contracts.workspace = true
 atemporal-sim = { path = "../sim" }
 serde.workspace = true
+
+[dev-dependencies]
+atemporal-content.workspace = true

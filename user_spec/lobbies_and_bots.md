@@ -50,6 +50,8 @@ Review recent games actually played, find the bot’s failure modes, and impleme
 
 Bot policies must have the same information a player can learn during a match. They may process an entire published timeline in one pass, keep a database of exact sightings and compute statistical features before choosing a turn. They do not need to drive the browser or match a human's scrubbing speed. Fog of war applies before data reaches a policy, including historical queries and changes in vision from allies, walls, satellites and recon. A bot may remember the last place it saw a base after it leaves vision. Later hidden changes must not update that memory until the player could observe them.
 
+Tactical should use the published player timeline to direct troops and choose missile targets. It should remember where enemy units were observed coming from and use that evidence to estimate possible factory locations under fog.
+
 ## Execution constraints
 
 Proceed independently through implementation and verification without asking for further input. While the device is busy, keep builds and tests low priority and resource usage limited; use at most two CPU cores and run heavy checks sequentially. This temporarily supersedes the earlier six-core test allowance.
