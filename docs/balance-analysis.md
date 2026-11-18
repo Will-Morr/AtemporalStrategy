@@ -15,7 +15,7 @@ Both people revised early history. Six of the eighteen follow-up turns moved to 
 
 The first timeline illustrates the cost of an idle production line. Seat B mined 4,174 matter, spent zero on units and ended with 4,354 in the bank after placing factories without assigning construction. Adding the builder order at tick 1 in round two coincided with 2,608 unit spend and a stalemate. Both players changed their plans that round. Later results also favored spending capacity. In seven of the eight decisive timelines the winner mined more matter, and in all eight the winner spent more on units. These results include missiles in the engine's unit spending category. They describe that match and cannot isolate a causal effect.
 
-The repository also contains an anonymized six-turn human-versus-bot recording in commit `8d2cea5`. The human originally won 5–0 against the then-current bot. In the original first timeline the bot banked 37,554 matter while spending 160 on units. These are two independent matches and three human seat scripts. The November players are distinct, and the October fixture has no identity with which to deduplicate its participant.
+The repository also contains an [anonymized six-turn human-versus-bot recording](../fixtures/bots/sustained-pressure.json). The human originally won 5–0 against the then-current bot. In the original first timeline the bot banked 37,554 matter while spending 160 on units. These are two independent matches and three human seat scripts. The November players are distinct, and the October fixture has no identity with which to deduplicate its participant.
 
 ## Replaying the human opponents
 
@@ -72,8 +72,7 @@ node scripts/export-balance-replay.mjs "$REPLAY_PAGE_URL" /tmp/game-export
 cargo run --release -p atemporal-server --example replay_opponent -- /tmp/game-export tactical 0
 cargo run --release -p atemporal-server --example replay_opponent -- /tmp/game-export standard 1
 cargo run --release -p atemporal-server --example replay_opponent -- /tmp/game-export tactical 1 --frozen
-git show 8d2cea5:fixtures/bots/sustained-pressure.json > /tmp/october-game.json
-cargo run --release -p atemporal-server --example replay_opponent -- /tmp/october-game.json tactical 1
+cargo run --release -p atemporal-server --example replay_opponent -- fixtures/bots/sustained-pressure.json tactical 1
 cargo run --release -p atemporal-server --example replay_opponent -- seed:42 tactical 1
 ```
 
