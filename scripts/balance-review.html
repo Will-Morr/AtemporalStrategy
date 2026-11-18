@@ -31,6 +31,17 @@ p,.muted{color:var(--muted);font-size:.9rem}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;text-align:left}
 th,td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:.83rem}
 thead th{color:var(--muted);font-weight:600}
+.ranking-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.ranking-card{border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.ranking-card h3{margin-bottom:4px}
+.ranking-card th,.ranking-card td{padding:4px 6px}
+.ranking-card tbody th{font-weight:500}
+.ranking-card tr:last-child>*{border-bottom:0}
+.ranking-card :is(th,td):first-child{width:3rem}
+.ranking-card :is(th,td):last-child{text-align:right}
+.ranking-card td{color:var(--muted)}
+.ranking-card td:last-child{font-weight:700;color:var(--lime)}
+.ranking-card p{margin-top:6px}
 .matrix{table-layout:fixed}
 .matrix th{padding-inline:1px;text-align:center}
 .matrix td{padding:2px;text-align:center}
@@ -98,6 +109,8 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
   .survival-cell{height:clamp(13px,2.6svh,20px)}
 }
 @media(max-width:900px){.grids{grid-template-columns:1fr;gap:0}}
+@media(max-width:1120px){.ranking-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:540px){.ranking-grid{grid-template-columns:1fr}}
 @media(max-width:480px){main{width:calc(100% - 24px)}header{padding-top:22px}.panel{padding:12px}th,td{padding-inline:5px}}
 </style>
 </head>
@@ -126,6 +139,11 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
 <section class="panel" id="arena-panel" hidden>
   <div><h2 id="arena-title">Arena</h2><p id="arena-caption"></p></div>
   <canvas id="arena-map" role="img"></canvas>
+</section>
+<section class="panel" id="matchup-ranking" hidden>
+  <div class="section-head"><h2>Matchup wins</h2><p id="ranking-context"></p></div>
+  <p>One win per opponent when a roster wins more of the two mirrored trials than it loses. Trials that reach the tick limit with both bases standing count as draws. Tied matchups earn zero wins, and self-play is excluded.</p>
+  <div class="ranking-grid" id="ranking-grid"></div>
 </section>
 <section class="panel" id="survival" hidden>
   <div class="section-head"><h2>Surviving matter by matchup</h2><p id="survival-context"></p></div>
@@ -654,6 +672,79 @@ async function showComparison(a, b) {
   }));
 }
 
+function rankMatchups(data) {
+  const rosters = [...data.rosters.keys()];
+  if (rosters.length !== 15 || data.count !== rosters.length ** 2) return null;
+  const standings = [];
+  for (const roster of rosters) {
+    let wins = 0;
+    for (const opponent of rosters) {
+      const trials = data.groups.get(roster + '/' + opponent);
+      if (roster === opponent) {
+        if (trials?.length !== 1) return null;
+        continue;
+      }
+      if (trials?.length !== 2 || !trials.some(trial => trial.seat === 0) ||
+          !trials.some(trial => trial.seat === 1)) return null;
+      const netWins = trials.reduce((total, trial) =>
+        total + (trial.winner === 'a' ? 1 : trial.winner === 'b' ? -1 : 0), 0);
+      if (netWins > 0) wins++;
+    }
+    standings.push({roster: name(data.rosters.get(roster)), wins});
+  }
+  return standings.sort((a, b) => b.wins - a.wins || a.roster.localeCompare(b.roster));
+}
+
+async function showRankings(rules, mode, version) {
+  byId('ranking-context').textContent = datasets[rules].title + ' · ' +
+    controls[1].selectedOptions[0].textContent;
+  const cards = Object.entries(arenas).map(([arena, title]) => {
+    const card = element('article', undefined, 'ranking-card');
+    const heading = element('h3', title);
+    heading.id = 'ranking-' + arena;
+    const message = element('p', 'Loading…');
+    card.append(heading, message);
+    return {arena, card, heading, message};
+  });
+  byId('ranking-grid').replaceChildren(...cards.map(entry => entry.card));
+  byId('matchup-ranking').hidden = false;
+  await Promise.all(cards.map(async ({arena, card, heading, message}) => {
+    try {
+      const data = rules === '8' && arena !== 'open' ? null : await loadSweep(rules, mode, arena);
+      if (version !== requestVersion) return;
+      if (!data) {
+        message.textContent = 'No recorded sweep.';
+        return;
+      }
+      const standings = rankMatchups(data);
+      if (!standings) {
+        message.textContent = 'Ranking unavailable for an incomplete sweep.';
+        return;
+      }
+      const table = element('table');
+      table.setAttribute('aria-labelledby', heading.id);
+      const header = table.createTHead().insertRow();
+      for (const label of ['Rank', 'Roster', 'Wins']) {
+        const column = element('th', label);
+        column.scope = 'col';
+        header.append(column);
+      }
+      const body = table.createTBody();
+      let rank = 0;
+      for (const [index, {roster, wins}] of standings.entries()) {
+        if (wins !== standings[index - 1]?.wins) rank = index + 1;
+        const row = body.insertRow();
+        const label = element('th', roster);
+        label.scope = 'row';
+        row.append(element('td', String(rank)), label, element('td', String(wins)));
+      }
+      message.replaceWith(table);
+    } catch {
+      if (version === requestVersion) message.textContent = 'Could not load this sweep.';
+    }
+  }));
+}
+
 let pendingSurvivalAnchor = location.hash === '#survival';
 
 async function changeDataset(fallback = false) {
@@ -661,6 +752,7 @@ async function changeDataset(fallback = false) {
   ++comparisonVersion;
   status.textContent = 'Loading sweep…';
   byId('results').hidden = true;
+  byId('matchup-ranking').hidden = true;
   byId('survival').hidden = true;
   byId('arena-panel').hidden = true;
   try {
@@ -711,6 +803,7 @@ async function changeDataset(fallback = false) {
     byId('mix-panel').hidden = ![...rosters.values()].some(roster => roster.length === 2);
     renderMixes();
     showMatchup();
+    void showRankings(rules, mode, version);
     byId('results').hidden = false;
     byId('survival').hidden = false;
     if (pendingSurvivalAnchor) {

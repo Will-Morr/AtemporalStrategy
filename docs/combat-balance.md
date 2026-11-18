@@ -83,6 +83,8 @@ The review was checked in Chromium at desktop and phone widths. Selecting a matr
 
 For the artillery factory patch, the reviewer opens the winding-corridor factory chart at 6 matter/tick. Live Chromium checks loaded all four arenas and three economies, opened both seat results, preserved the selected rosters across income changes and opened all five historical datasets. The full chart fit at 390px; desktop and mobile screenshots, the trace and inspected PNG/PDF exports are in `artifacts/ui/artillery-factory-final/`. Exact zero is solid black across the reviewer and both export formats.
 
+The Matchup wins section shows the four arena standings side by side on desktop and stacks them at phone width. Live Chromium checks on loopback and WireGuard compared all 180 displayed standings against the archived trial outcomes across the three economies. Equal win totals shared a rank in every arena and economy. Rules 8 showed rankings for its recorded open sweep; the other three arenas showed their availability. A staged check removed one mirrored seat and verified that the incomplete arena showed a status message in place of standings. Inspected the 1,440px and 390px ranking screenshots and verified the survivor chart still renders an exact zero in solid black. Evidence is in `artifacts/ui/matchup-ranking/`.
+
 ### Surviving matter by matchup
 
 The rules-12 chart uses all 15 combat rosters (five singles and ten pairs) for each arena and economy. Rows are the measured force and columns its opponent. Count only surviving units, multiplying each unit’s cost by its remaining health fraction. A wipeout contributes zero even if the base survives. A cell averages the two starting seats, including both forces in the single mirror duel on the diagonal. Each opponent has equal weight in the roster average used to sort both axes. Colors run from zero to the highest cell on the selected chart.
@@ -153,6 +155,19 @@ The two high-income corridors still favor artillery in surviving matter. On the 
 The factory rework’s comparison chart ranks artillery + grunt in the top three for average surviving matter in all eight factory settings. It leads that measure on open ground at income 6. Its strongest base-kill result is the straight corridor at income 3 (22 wins, six losses). Across 224 non-mirror factory trials it finished seventh of 15 rosters by base kills, with 106 wins, 58 losses and 60 cutoffs. Pure grinders beat it from both seats on all four maps at both incomes, and in all eight corresponding deployed-army trials.
 
 On the winding corridor at income 6, pure grinders destroyed its factory at tick 210 from either seat. All 26 other trials reached tick 1,800 with both factories at full health. Artillery + grunt led in surviving matter in 22 of those 26. The [7,200-tick follow-ups](balance-data/artillery-grunt-checks/) tested three of those opponents from both seats. Artillery + grunt eventually destroyed both grinder + grunt factories (ticks 5,030 and 5,352). Against pure grunts and against artillery + tank, both bases still had full health at tick 7,200 in both seats. At that point artillery + grunt led pure grunts in surviving matter and trailed artillery + tank in both seats.
+
+### Release check: opponents beaten by map
+
+Each roster faces 14 other rosters twice, once from each seat. Count one matchup win when the roster wins more games than it loses against that opponent. A win and a cutoff count as a matchup win. Split wins and two cutoffs count as ties. Equal matchup totals share a rank.
+
+| Arena | Army, 600 matter | Factory, 3 matter/tick | Factory, 6 matter/tick |
+| --- | --- | --- | --- |
+| Open | Grunt and tank (13 each) | Grunt (12) | Grunt (11) |
+| Choke | Tank (13) | Grunt (12) | Grunt + tank (12) |
+| Straight corridor | Grinder (13) | Artillery + grunt (11) | Artillery + tank and grinder (10 each) |
+| Winding corridor | Grinder and tank (13 each) | Grinder and grinder + tank (10 each) | Grinder (10) |
+
+The [final price check](balance-data/grinder-price-115-check/) raised the grinder from 110 to 115 matter in 900 additional open and choke factory trials. Both incomes retained the same leaders, with grunt + tank joining grunt in first on the high-income open map. The four panels recorded 20 non-mirror cutoffs at both prices. The release keeps the 110-matter grinder.
 
 ## Calibrating corridor width
 
