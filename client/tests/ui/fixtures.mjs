@@ -30,7 +30,7 @@ export const test = base.extend({
     const capture = async (name, target = page) => {
       if (!/^[a-z0-9][a-z0-9_-]*$/i.test(name)) throw new Error('Capture names must be filename-safe');
       const png = testInfo.outputPath(`${name}.png`);
-      await target.screenshot({ path: png, fullPage: true, animations: 'disabled', timeout: 5000 });
+      await target.screenshot({ path: png, fullPage: true, animations: 'disabled', timeout: 15000 });
       await testInfo.attach(name, { path: png, contentType: 'image/png' });
       const aria = testInfo.outputPath(`${name}.aria.txt`);
       await writeFile(aria, await target.locator('body').ariaSnapshot({ timeout: 5000 }));

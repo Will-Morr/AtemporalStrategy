@@ -17,9 +17,11 @@ test('artillery silhouette and icons remain distinct from tanks at game zoom',as
   for(const unit of units){
     await tile(a,unit);await a.keyboard.press('f');
     const goal=await a.evaluate(v=>({x:v.x+3,y:v.y+3}),unit);await tile(a,goal);
-    await expect.poll(()=>a.evaluate(()=>window.atemporal.renderer.orderPreviews.routes.map(r=>r.rule))).toEqual(['four']);
-    const points=await a.evaluate(()=>window.atemporal.renderer.orderPreviews.routes[0].points);expect(points.length).toBeGreaterThan(2);
-    expect(points.slice(1).every((p,i)=>Math.abs(p.x-points[i].x)+Math.abs(p.y-points[i].y)===1)).toBe(true);
+    await expect.poll(()=>a.evaluate(()=>window.atemporal.renderer.orderPreviews.routes.map(({rule,goal,points})=>({
+      rule,goal,
+      hasMultipleSteps:points.length>2,
+      orthogonal:points.slice(1).every((p,i)=>Math.abs(p.x-points[i].x)+Math.abs(p.y-points[i].y)===1),
+    })))).toEqual([{rule:'four',goal,hasMultipleSteps:true,orthogonal:true}]);
     for(const scale of [26,8,2]){await a.evaluate(scale=>{const g=window.atemporal,r=g.renderer,v=g.selectedViews()[0];r.camera.scale=scale;r.centerOn(v.x,v.y);},scale);await review.capture(`${unit.type_key}-orthogonal-path-and-inset-target-${scale}`,a);}
   }
   // Review the authored SVG in the generated guide as well as battlefield canvas rendering.
