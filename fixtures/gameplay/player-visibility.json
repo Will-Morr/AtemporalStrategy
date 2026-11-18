@@ -1,0 +1,44 @@
+{
+  "terrain": [
+    "........",
+    "...#....",
+    "...#....",
+    "...#....",
+    "...#....",
+    "...#....",
+    "...#....",
+    "...#...."
+  ],
+  "multiplayer": {
+    "kind": "teams",
+    "assignments": [
+      {"player_id": 0, "team_id": "cyan"},
+      {"player_id": 1, "team_id": "cyan"},
+      {"player_id": 2, "team_id": "orange"},
+      {"player_id": 3, "team_id": "orange"}
+    ]
+  },
+  "observer_radii": {"miner": 5, "turret": 1, "satellite": 0.6},
+  "entities": [
+    {"type_key": "miner", "owner": 0, "lifecycle": "complete", "x": 2, "y": 4},
+    {"type_key": "turret", "owner": 1, "lifecycle": "complete", "x": 6, "y": 6},
+    {"type_key": "factory", "owner": 1, "lifecycle": "site", "x": 7, "y": 7},
+    {"type_key": "wall", "owner": 2, "lifecycle": "complete", "x": 3, "y": 0},
+    {"type_key": "silo", "owner": 2, "lifecycle": "complete", "x": 6, "y": 1},
+    {"type_key": "miner", "owner": 2, "lifecycle": "complete", "x": 4, "y": 4}
+  ],
+  "missiles": [
+    {"type_key": "satellite", "owner": 1, "launch_tick": 1, "impact_tick": 3, "origin": {"x": 5, "y": 1}, "target": {"x": 7, "y": 1}},
+    {"type_key": "satellite", "owner": 2, "launch_tick": 1, "impact_tick": 3, "origin": {"x": 7, "y": 4}, "target": {"x": 7, "y": 4}}
+  ],
+  "recon": [
+    {"owner": 1, "starts_at": 4, "expires_at": 5, "center": {"x": 6, "y": 1}, "radius": 0}
+  ],
+  "frames": [
+    {"tick": 1, "visible": ["3,4", "6,6", "5,6"], "hidden": ["4,4", "6,1", "5,1", "7,7"]},
+    {"tick": 2, "visible": ["3,4", "6,1", "5,6"], "hidden": ["4,4", "7,4", "7,7"]},
+    {"tick": 3, "visible": ["3,4", "7,1", "5,6"], "hidden": ["4,4", "6,1", "7,7"]},
+    {"tick": 4, "visible": ["3,4", "6,1", "5,6"], "hidden": ["4,4", "7,1", "7,7"]},
+    {"tick": 5, "visible": ["3,4", "6,6", "5,6"], "hidden": ["4,4", "6,1", "7,7"]}
+  ]
+}

@@ -12,25 +12,12 @@ fn read(path: &Path) -> serde_json::Value {
         .expect("spectator JSON")
 }
 
-fn bot_turn(
-    c: &Controller,
-    bot: PlayerId,
-    style: Style,
-    ledger: &[AcceptedTurn],
-    precedence: &[RoundPrecedence],
-) -> AcceptedTurn {
+fn bot_turn(c: &Controller, bot: PlayerId, style: Style) -> AcceptedTurn {
     let round = c.round;
-    let tick = bots::intervention(c, bot, style);
-    let at = c.revisions[&c.current]
-        .checkpoints
-        .range(..=tick)
-        .next_back()
-        .unwrap()
-        .1
-        .clone();
-    let prior = c.build_request(c.current, at, ledger.to_vec(), precedence.to_vec(), 0);
-    let state = reconstruct(&prior, tick).unwrap();
-    let draft = bots::published_plan(c, &state, bot, style);
+    let timeline = bots::published_timeline(c, bot).expect("published player timeline");
+    let draft = bots::published_plan(&timeline, style);
+    let tick = draft.tick;
+    let state = reconstruct(&c.exact_request(c.current, tick).unwrap(), tick).unwrap();
     let resolved = draft::resolve_local_references(&draft, round, bot).unwrap();
     if let Err(error) = c.validate_against_state(bot, &resolved, &state) {
         eprintln!("Round {round} bot passed after its draft was rejected: {error}");
@@ -128,7 +115,7 @@ fn main() {
     }) {
         if round > 0 {
             c.round = round;
-            let turn = bot_turn(&c, bot, style, &ledger, &precedence);
+            let turn = bot_turn(&c, bot, style);
             if frozen {
                 let recorded = recorded
                     .as_ref()
@@ -148,7 +135,7 @@ fn main() {
                         .find(|t| t.round == round && t.player != bot)
                         .expect("recorded human turn")
                         .clone(),
-                    None => bot_turn(&c, 1 - bot, Style::Standard, &ledger, &precedence),
+                    None => bot_turn(&c, 1 - bot, Style::Standard),
                 };
                 ledger.extend([turn, other]);
                 precedence.push(identity::round_precedence(round, 2).unwrap());
@@ -242,9 +229,20 @@ fn main() {
             score = Some(resolved);
         }
         data.outcome = Some(result.outcome);
+        data.final_hash = result.final_hash;
+        data.command_outcomes = result.command_outcomes;
+        data.score = score.clone();
+        data.precedence = precedence.clone();
         data.turns = ledger.clone();
-        c.current = round;
-        c.revisions.clear();
+        // Keep published ledgers, outcomes and the opening for historical analysis.
+        // Only the latest revision needs its checkpoint body for validation.
+        if round > 0 {
+            let previous = c.revisions.get_mut(&c.current).unwrap();
+            previous
+                .checkpoints
+                .retain(|tick, _| c.current == 0 && *tick == 0);
+        }
         c.revisions.insert(round, data);
+        c.current = round;
     }
 }

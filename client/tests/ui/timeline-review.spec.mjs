@@ -63,7 +63,14 @@ test('spectators inspect enemy production and branch an archived unfinished game
   await s.locator('#commit').click();await revision(s,1);
   await s.locator('#exit-practice').click();await s.locator('#spectate').click();await revision(s,1);
   await expect(a.locator('#commit')).toBeEnabled();
+  await b.goto(server.url);await revision(b,1);
+  expect(await b.evaluate(()=>window.atemporal.player)).toBe(1);
   await a.locator('#actions .planning>summary').click();await a.locator('#stop-archive').click();
+  await expect(b.locator('#new-game-menu')).toBeVisible();
+  await seek(b,153);await tile(b,spot);
+  await expect(b.locator('.review-queue')).toContainText('Queue · grunt');
+  await expect(b.locator('.review-queue button')).toHaveCount(0);
+  await review.capture('archived-player-inspects-enemy-factory-queue',b);
   await expect(s.locator('#new-game-menu')).toBeVisible();await s.getByRole('button',{name:'Try a different timeline'}).click();
   await s.selectOption('#practice-player','1');await s.locator('#start-practice').click();
   await revision(s,0);await expect(s.locator('#top-phase')).toContainText('Practice');

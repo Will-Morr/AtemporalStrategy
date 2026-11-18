@@ -2148,24 +2148,29 @@ impl Controller {
             .get(&0)
             .and_then(|g| g.checkpoints.get(&0))
             .ok_or("initial state missing")?;
-        let previous = data.parent.and_then(|p| self.revisions.get(&p));
-        let previous_boundary = previous
-            .and_then(|p| p.timed.as_ref())
-            .map_or(0, |t| t.boundary);
         let mut request = self.build_request(
             revision,
             initial.clone(),
             data.turns.clone(),
             data.precedence.clone(),
-            if revision == 0 {
-                self.practice_opening_min_end
-                    .unwrap_or_else(|| minimum_end_tick(&self.config, 0))
-            } else {
-                minimum_end_tick(&self.config, previous_boundary)
-            },
+            self.replay_minimum_end_tick(revision)?,
         );
         request.entity_dictionary = vec![];
         Ok(request)
+    }
+
+    pub(crate) fn replay_minimum_end_tick(&self, revision: Revision) -> Result<Tick> {
+        let data = self.revision(revision)?;
+        let parent = data.parent.and_then(|p| self.revisions.get(&p));
+        let boundary = parent
+            .and_then(|p| p.timed.as_ref())
+            .map_or(0, |t| t.boundary);
+        Ok(if revision == 0 {
+            self.practice_opening_min_end
+                .unwrap_or_else(|| minimum_end_tick(&self.config, 0))
+        } else {
+            minimum_end_tick(&self.config, boundary)
+        })
     }
 
     /// Make a revision's body resident: from `results/` when complete, otherwise by replaying the
@@ -2294,27 +2299,52 @@ pub fn collect_run(request: &SimRequest, data: &mut RevisionData, players: u8) -
     Ok(())
 }
 
+/// Reconstruct the inputs of one completed round without resuming or writing to the archive.
+pub fn archived_request(
+    loaded: &Loaded,
+    content: &Content,
+    revision: Revision,
+) -> Result<SimRequest> {
+    let config = &loaded.manifest.config;
+    let record = loaded
+        .rounds
+        .iter()
+        .find(|r| r.revision == revision)
+        .ok_or("revision is not published")?;
+    let parent = (record.round > 0)
+        .then(|| {
+            loaded
+                .rounds
+                .iter()
+                .find(|r| r.revision == record.parent_revision)
+        })
+        .flatten();
+    let previous_boundary = parent
+        .and_then(|r| r.timed.as_ref())
+        .map_or(0, |t| t.boundary);
+    let (turns, precedence) = ledger(loaded, record.round)?;
+    Ok(SimRequest {
+        schema_version: Version::default(),
+        job_id: format!("archive-{}", record.revision),
+        revision: record.revision,
+        fingerprint: loaded.manifest.fingerprint.clone(),
+        config: config.clone(),
+        content: content.clone(),
+        checkpoint: loaded.initial.clone(),
+        events: turns,
+        precedence,
+        end_tick_exclusive: config.max_tick,
+        minimum_end_tick: minimum_end_tick(config, previous_boundary),
+        entity_dictionary: vec![],
+    })
+}
+
 /// `--verify`: replay every recorded round from the initial state and compare final hashes.
 pub fn verify_archive(loaded: &Loaded, content: &Content) -> Result<bool> {
     let config = &loaded.manifest.config;
     let mut all_match = true;
-    let mut previous_boundary = 0;
     for record in &loaded.rounds {
-        let (turns, precedence) = ledger(loaded, record.round)?;
-        let request = SimRequest {
-            schema_version: Version::default(),
-            job_id: format!("verify-{}", record.revision),
-            revision: record.revision,
-            fingerprint: loaded.manifest.fingerprint.clone(),
-            config: config.clone(),
-            content: content.clone(),
-            checkpoint: loaded.initial.clone(),
-            events: turns,
-            precedence,
-            end_tick_exclusive: config.max_tick,
-            minimum_end_tick: minimum_end_tick(config, previous_boundary),
-            entity_dictionary: vec![],
-        };
+        let request = archived_request(loaded, content, record.revision)?;
         let started = Instant::now();
         let mut data = RevisionData::new(record.revision, record.round, None, 0);
         collect_run(&request, &mut data, config.player_count)?;
@@ -2332,7 +2362,6 @@ pub fn verify_archive(loaded: &Loaded, content: &Content) -> Result<bool> {
             started.elapsed(),
             &data.final_hash[..12.min(data.final_hash.len())]
         );
-        previous_boundary = record.timed.as_ref().map_or(0, |t| t.boundary);
     }
     Ok(all_match)
 }

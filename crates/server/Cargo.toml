@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 [dependencies]
+atemporal-bots = { path = "../bots" }
 atemporal-contracts.workspace = true
 atemporal-content = { workspace = true, features = ["guide"] }
 atemporal-sim = { path = "../sim" }

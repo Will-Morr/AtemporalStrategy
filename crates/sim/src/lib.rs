@@ -7,6 +7,7 @@ mod commands;
 mod fields;
 pub mod map;
 mod output;
+pub mod player_timeline;
 mod silo;
 mod tick;
 pub mod vision;
@@ -36,7 +37,18 @@ pub fn run_with_hook(
     emit: &mut dyn FnMut(Output),
     between_ticks: &mut dyn FnMut(),
 ) -> Result<RunResult> {
+    run_observed(request, cancel, emit, between_ticks, &mut |_, _| {})
+}
+
+fn run_observed(
+    request: &SimRequest,
+    cancel: &AtomicBool,
+    emit: &mut dyn FnMut(Output),
+    between_ticks: &mut dyn FnMut(),
+    observe: &mut dyn FnMut(&Sim, &[WorldEvent]),
+) -> Result<RunResult> {
     let mut sim = Sim::new(request)?;
+    observe(&sim, &[]);
     sim.emit_state_outputs(emit, true);
     loop {
         between_ticks();
@@ -47,7 +59,7 @@ pub fn run_with_hook(
         if tick >= request.end_tick_exclusive {
             return Ok(sim.finish(StopReason::AbsoluteHorizon, emit));
         }
-        sim.step(emit)?;
+        sim.step_observed(emit, observe)?;
         let now = sim.state.tick;
         // Simple win ends on the first resolved loss, regardless of remaining orders,
         // missiles, the optional decided cutoff or a requested minimum horizon.

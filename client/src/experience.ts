@@ -159,7 +159,7 @@ export class Experience {
   }
   groups(through = this.g.draft.commands.length): ControlGroupState[] {
     const g = this.g;
-    const groups = structuredClone(g.exact?.revision === g.current && g.exact.tick === Math.floor(g.playhead) ? g.exact.state.control_groups : []);
+    const groups = structuredClone(g.exact?.revision === g.current && g.exact.tick === Math.floor(g.playhead) ? g.exact.state.control_groups.filter(group => g.canInspectPlan(group.id.owner)) : []);
     if (g.draft.tick !== Math.floor(g.playhead) || g.current !== g.latest) return groups;
     for (const d of g.draft.commands.slice(0,through)) {
       const c = d.command;
@@ -284,7 +284,7 @@ export class Experience {
   }
   private siloProductionOpen=new Set<string>();
   queue(): void {
-    const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && (v.owner===g.player || g.fullVision || g.current!==g.latest && !g.viewingPreview));
+    const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && g.canInspectPlan(v.owner));
     const signature=JSON.stringify([g.canStage().ok,g.fullVision,g.current===g.latest,views.map(v=>[v.id,v.lifecycle,!!v.exact,factoryPlan(g,v)])]);
     if(root.dataset.plan===signature)return;root.dataset.plan=signature;root.replaceChildren();this.focusDelete=null;
     if (views.length && (g.fullVision || g.current !== g.latest)) {

@@ -1,13 +1,13 @@
 import {practice} from './practice';
-import {GroundVision, BuildingMemory} from './vision';
+import {GroundVision, BuildingMemory, playerSeesEntity, playerVisibility} from './vision';
 import {guideUrl} from './session';
 import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
-import {flightPosition, missileName, queueLaunches} from './silo';
+import {missileName, queueLaunches} from './silo';
 import { unitIcon } from './icons';
 import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type {
-  ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
+  Activity, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   TypeDefinition, WorldEvent, WorldState,
 } from './contracts.generated';
 import type { Net } from './net';
@@ -19,6 +19,16 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 const CHUNK = 1000;
 const RATES = [0.25, 0.5, 1, 2, 4, 8, 16];
 export const idKey = (id: EntityId): string => JSON.stringify(id);
+
+// Mirrors the exact-state activity projected by atemporal_sim::output::activity_of.
+function activityOf(entity: WorldState['entities'][number]): Activity {
+  const kind = entity.action.kind;
+  if (kind === 'mine') return 'mining';
+  if (kind === 'construct') return 'construction';
+  if (entity.engaged_target) return 'combat';
+  if ((kind === 'attack_move' || kind === 'support') && !entity.goal_settled) return 'movement';
+  return 'idle';
+}
 
 export interface RevisionView {
   revision: number;
@@ -127,10 +137,22 @@ export class Game {
   planningSince = performance.now();
 
   constructor(readonly net: Net, readonly config: MatchConfig, readonly session: Session, lobby: LobbyState) {
-    this.profiles = lobby.slots;
+    this.updateLobby(lobby);
     this.renderer = new Renderer($('map'), $('minimap'), $('timeline'), this);
     $('game').classList.add('active');
     $('lobby').style.display = 'none';
+  }
+
+  private updateLobby(lobby: LobbyState): void {
+    this.profiles = lobby.slots;
+    if (!lobby.available_teams.length) return;
+    const assignments = lobby.slots.flatMap(({slot, profile}) =>
+      profile?.team_id == null ? [] : [{player_id:slot, team_id:profile.team_id}],
+    );
+    if (assignments.length === this.config.player_count) {
+      this.config.multiplayer = {kind:'teams', assignments};
+      this.visionCache = null;
+    }
   }
 
   get player(): number | null {
@@ -140,6 +162,7 @@ export class Game {
     return this.session.slot === null;
   }
   get fullVision(): boolean { return this.spectator || this.finished !== null; }
+  canInspectPlan(owner: number): boolean { return this.fullVision || owner === this.player; }
   color(owner: number): string {
     const team = this.profiles[owner]?.profile?.team_id;
     if (team) { const first = this.profiles.find(s => s.profile?.team_id === team); if (first?.profile) return first.profile.color; }
@@ -182,11 +205,11 @@ export class Game {
       this.updatePanels();
     });
     this.net.on('lobby_updated', m => {
-      this.profiles = m.lobby.slots;
+      this.updateLobby(m.lobby);
       this.experience?.review.update();
     });
     this.net.on('welcome', m => {
-      this.profiles = m.lobby.slots;
+      this.updateLobby(m.lobby);
       if(m.phase==='finished'||m.phase==='archived'){this.finished=m.phase==='archived'?'Match archived.':'Match complete.';this.updatePanels();}
       this.net.send({kind:'get_replay_progress'});
     });
@@ -258,7 +281,11 @@ export class Game {
       while(this.previewCoverage.size>8){const old=this.previewCoverage.keys().next().value!;this.previewCoverage.delete(old);for(const t of rev.samples.keys())if(Math.floor(t/CHUNK)===old)rev.samples.delete(t);rev.events=rev.events.filter(e=>Math.floor(e.tick/CHUNK)!==old);}
       if(!this.terrain){this.terrain=m.snapshot.terrain;this.initialOre=m.snapshot.ore;this.renderer.fit();const own=m.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
       const changed=this.exact?.revision!==m.revision || this.exact.tick!==tick;
-      if(this.viewingPreview && Math.floor(this.playhead)===tick) this.exact={revision:m.revision,tick,state:m.snapshot};
+      if (!this.fullVision) this.recordBuildingSamples(rev, m.samples);
+      if(this.viewingPreview && Math.floor(this.playhead)===tick) {
+        this.exact={revision:m.revision,tick,state:m.snapshot};
+        if (!this.fullVision) this.recordExactBuildings(rev, m.snapshot);
+      }
       if(changed)this.updatePanels();else this.updatePreviewStatus();
     } catch(error) {
       // Publication or retry can expire an in-flight provisional query.
@@ -294,7 +321,10 @@ export class Game {
       const needsFit = !this.terrain;
       this.terrain = exact.snapshot.terrain;
       this.initialOre = exact.snapshot.ore;
-      if(this.current===m.revision && !this.viewingPreview)this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
+      if(this.current===m.revision && !this.viewingPreview) {
+        this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
+        if (!this.fullVision) this.recordExactBuildings(view, exact.snapshot);
+      }
       console.log(`initial exact state in ${Math.round(performance.now() - t0)} ms`);
       if(needsFit){this.renderer.fit();const own=exact.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
     }
@@ -378,6 +408,7 @@ export class Game {
         if (this.exactPending?.tick === tick && this.exactPending.revision === rev.revision) this.exactPending = null;
         if (Math.floor(this.playhead) === tick && this.current === rev.revision) {
           this.exact = { revision: rev.revision, tick, state: e.snapshot };
+          if (!this.fullVision) this.recordExactBuildings(rev, e.snapshot);
           if (this.player !== null && this.phase && this.phase.revision === rev.revision) this.net.send({ kind: 'planning_ready', round: this.phase.round, revision: rev.revision });
           this.updatePanels();
         }
@@ -390,31 +421,19 @@ export class Game {
       });
   }
 
+  private exactAtPlayhead(): WorldState | null {
+    const tick = Math.floor(this.playhead);
+    return this.exact?.revision === this.current && this.exact.tick === tick && (this.playhead === tick || !this.playing)
+      ? this.exact.state : null;
+  }
+
   /** Entities to draw at the playhead: exact state when available, otherwise interpolated samples. */
   rawEntities(): EntityView[] {
     const rev = this.rev();
     if (!rev) return [];
     const tick = this.playhead;
-    const whole = Math.floor(tick);
-    if (this.exact && this.exact.revision === rev.revision && this.exact.tick === whole && (tick === whole || !this.playing)) {
-      const dictionary = new Map(rev.dictionary.map((d, i) => [idKey(d.id), i]));
-      return this.exact.state.entities.map(e => ({
-        index: dictionary.get(idKey(e.id)) ?? -1,
-        id: e.id,
-        owner: e.owner,
-        type_key: e.type_key,
-        x: e.tile.x,
-        y: e.tile.y,
-        hp: e.hp,
-        maxHp: this.maxHp(e.type_key, e.lifecycle, e.paid_matter),
-        facing: e.last_move_direction,
-        lifecycle: e.lifecycle,
-        activity: e.action.kind === 'mine' ? 'mining' : e.action.kind === 'construct' ? 'construction' : e.engaged_target ? 'combat' : e.action.kind === 'idle' ? 'idle' : 'movement',
-        engaged: e.engaged_target ? (dictionary.get(idKey(e.engaged_target)) ?? null) : null,
-        exact: e,
-        silo: e.production?.silo,
-      }));
-    }
+    const exact = this.exactAtPlayhead();
+    if (exact) return this.exactEntities(rev, exact);
     const interval = this.config.snapshot_interval;
     const ta = Math.floor(tick / interval) * interval;
     const a = rev.samples.get(ta);
@@ -443,12 +462,34 @@ export class Game {
     });
   }
 
+  private exactEntities(rev:RevisionView, state:WorldState):EntityView[] {
+    const dictionary = new Map(rev.dictionary.map((d, i) => [idKey(d.id), i]));
+    return state.entities.map(e => ({
+      index: dictionary.get(idKey(e.id)) ?? -1,
+      id: e.id,
+      owner: e.owner,
+      type_key: e.type_key,
+      x: e.tile.x,
+      y: e.tile.y,
+      hp: e.hp,
+      maxHp: this.maxHp(e.type_key, e.lifecycle, e.paid_matter),
+      facing: e.last_move_direction,
+      lifecycle: e.lifecycle,
+      activity: activityOf(e),
+      engaged: e.engaged_target ? (dictionary.get(idKey(e.engaged_target)) ?? null) : null,
+      exact: e,
+      silo: e.production?.silo,
+    }));
+  }
+
   entities(): EntityView[] {
     const all = this.rawEntities();
     const visible = this.visibility(all);
-    const views = all.filter(e => this.fullVision || e.owner === this.player || visible.has(`${Math.floor(e.x)},${Math.floor(e.y)}`));
+    const views = all
+      .filter(e => this.fullVision || playerSeesEntity(this.player, visible, e))
+      .map(e => this.canInspectPlan(e.owner) ? e : {...e, exact:undefined, silo:undefined});
     if (this.exact?.revision === this.current && this.exact.tick === Math.floor(this.playhead)) {
-      for (const b of this.exact.state.blueprints) if (!b.site_id && (b.owner === this.player || this.fullVision)) {
+      for (const b of this.exact.state.blueprints) if (!b.site_id && this.canInspectPlan(b.owner)) {
         views.push({index:-1,id:b.id,owner:b.owner,type_key:b.type_key,x:b.tile.x,y:b.tile.y,hp:0,maxHp:1,facing:'n',lifecycle:'blueprint',activity:'idle',engaged:null,blueprint:{kind:'persistent',id:b.id},settings:b.settings ?? {queue:[],order:{kind:'idle'},priority:b.priority,loop_enabled:false}});
       }
     }
@@ -461,11 +502,9 @@ export class Game {
       });
     }
     const revision=this.rev();
-    if(!this.fullVision && revision && (all.length || this.exact?.tick===Math.floor(this.playhead))){
-      let memory=this.buildingMemory.get(revision);
-      if(!memory){memory=new BuildingMemory();this.buildingMemory.set(revision,memory);}
-      const buildings=views.filter(v=>v.owner!==this.player && v.lifecycle!=='blueprint' && this.types.get(v.type_key)?.kind==='structure');
-      views.push(...memory.observe(Math.floor(this.playhead),tile=>visible.has(tile),buildings));
+    if (!this.fullVision && revision && this.terrain) {
+      const memory = this.memoryFor(revision);
+      views.push(...memory.remembered(Math.floor(this.playhead), visible));
     }
     return views;
   }
@@ -512,69 +551,59 @@ export class Game {
     } catch(error){console.warn('Could not restore building sightings',error);}
     finally {history.busy=false;}
   }
-  private sampleGroundVision=new GroundVision();
-  private recordBuildingSamples(rev:RevisionView,samples:Sample[]):void {
-    const terrain=this.terrain!;
-    const team=this.profiles[this.player!]?.profile?.team_id;
-    const allied=(owner:number)=>owner===this.player || (!!team && this.profiles[owner]?.profile?.team_id===team);
+  private sampleGroundVision = new GroundVision();
+  private groundVision = new GroundVision();
+  private buildingMemory = new WeakMap<RevisionView,BuildingMemory>();
+
+  private memoryFor(rev:RevisionView):BuildingMemory {
     let memory=this.buildingMemory.get(rev);
-    if(!memory){memory=new BuildingMemory();this.buildingMemory.set(rev,memory);}
+    if(!memory){
+      const terrain=this.terrain!;
+      memory=new BuildingMemory(terrain.width,terrain.height);
+      this.buildingMemory.set(rev,memory);
+    }
+    return memory;
+  }
+
+  private recordExactBuildings(rev:RevisionView, state:WorldState):void {
+    const views = this.exactEntities(rev, state);
+    const visible = playerVisibility(this.sampleGroundVision, state.terrain, views,
+      {missiles:state.missiles??[], recon:state.recon??[]}, this.types, this.config.multiplayer,
+      this.player, state.tick, this.net.rulesVersion===7);
+    this.memoryFor(rev).observe(state.tick, visible, views.filter(v => this.otherBuilding(v)), true);
+  }
+
+  private otherBuilding(v:EntityView):boolean {
+    return v.owner !== this.player && this.types.get(v.type_key)?.kind==='structure';
+  }
+
+  private recordBuildingSamples(rev:RevisionView,samples:Sample[]):void {
+    const memory=this.memoryFor(rev);
     for(const sample of samples){
-      const buildings:EntityView[]=[], observers:{tile:Tile,radius:number,aerial:boolean}[]=[], walls:{type_key:string,x:number,y:number}[]=[];
-      for(const entity of sample.entities){
+      const views=sample.entities.flatMap(entity=>{
         const ref=rev.dictionary[entity.index];
-        if(!ref)continue;
-        const def=this.types.get(ref.type_key)!;
-        if(ref.type_key==='wall')walls.push({type_key:'wall',...entity.tile});
-        if(allied(ref.owner) && entity.lifecycle==='complete')observers.push({tile:entity.tile,radius:def.vision,aerial:false});
-        if(!allied(ref.owner) && def.kind==='structure')buildings.push({...ref,...entity,...entity.tile,maxHp:def.max_hp,engaged:null});
-      }
-      for(const flight of sample.missiles??[]){
-        const missile=this.types.get(flight.type_key)?.missile;
-        if(allied(flight.owner) && missile?.effect==='satellite' && flight.launch_tick<sample.tick && flight.impact_tick>=sample.tick)
-          observers.push({tile:flightPosition(flight,sample.tick),radius:missile.radius,aerial:true});
-      }
-      for(const zone of sample.recon??[])if(allied(zone.owner) && zone.starts_at<=sample.tick && zone.expires_at>sample.tick)
-        observers.push({tile:zone.center,radius:zone.radius,aerial:true});
-      this.sampleGroundVision.update(terrain,walls);
-      memory.observe(sample.tick,key=>{
-        const [x,y]=key.split(',').map(Number);
-        return observers.some(o=>(x-o.tile.x)**2+(y-o.tile.y)**2<=o.radius**2 &&
-          (o.aerial || this.net.rulesVersion===7 || this.sampleGroundVision.tiles(o.tile,o.radius).has(key)));
-      },buildings);
+        const def=ref && this.types.get(ref.type_key);
+        return def ? [{...ref,...entity,...entity.tile,maxHp:def.max_hp,engaged:null}] : [];
+      });
+      const visible = playerVisibility(this.sampleGroundVision, this.terrain!, views,
+        {missiles:sample.missiles??[], recon:sample.recon??[]}, this.types, this.config.multiplayer,
+        this.player, sample.tick, this.net.rulesVersion===7);
+      memory.observe(sample.tick, visible, views.filter(v => this.otherBuilding(v)));
     }
   }
-  private groundVision=new GroundVision();
-  private buildingMemory=new WeakMap<RevisionView,BuildingMemory>();
-  private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; tiles: Set<string> } | null = null;
+
+  private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; events: unknown; tiles: Set<string> } | null = null;
   visibility(all?: EntityView[]): Set<string> {
     const sample = this.rev()?.samples.get(Math.floor(this.playhead / this.config.snapshot_interval) * this.config.snapshot_interval);
     const nextSample = this.rev()?.samples.get((Math.floor(this.playhead / this.config.snapshot_interval) + 1) * this.config.snapshot_interval);
     const cached = this.visionCache;
-    if (cached && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample) return cached.tiles;
-    const visible = new Set<string>();
-    this.visionCache = { revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, tiles: visible };
-    if (this.fullVision || !this.terrain) return visible;
-    const team = this.profiles[this.player!]?.profile?.team_id;
-    const entities=all ?? this.rawEntities();
-    this.groundVision.update(this.terrain,entities);
-    for (const e of entities) {
-      if (e.lifecycle !== 'complete' || (e.owner !== this.player && (!team || this.profiles[e.owner]?.profile?.team_id !== team))) continue;
-      const radius = this.types.get(e.type_key)?.vision ?? 0;
-      if(this.net.rulesVersion===7){
-        for(let y=Math.max(0,Math.ceil(e.y-radius));y<=Math.min(this.terrain.height-1,Math.floor(e.y+radius));y++)
-          for(let x=Math.max(0,Math.ceil(e.x-radius));x<=Math.min(this.terrain.width-1,Math.floor(e.x+radius));x++)
-            if((x-e.x)**2+(y-e.y)**2<=radius**2)visible.add(x+','+y);
-      } else for(const tile of this.groundVision.tiles({x:e.x,y:e.y},radius))visible.add(tile);
-    }
-    const allied=(owner:number)=>owner===this.player || (!!team && this.profiles[owner]?.profile?.team_id===team);
-    const reveal=(center:Tile,radius:number)=>{
-      for(let y=Math.max(0,Math.ceil(center.y-radius));y<=Math.min(this.terrain!.height-1,Math.floor(center.y+radius));y++)
-        for(let x=Math.max(0,Math.ceil(center.x-radius));x<=Math.min(this.terrain!.width-1,Math.floor(center.x+radius));x++)if((x-center.x)**2+(y-center.y)**2<=radius**2)visible.add(`${x},${y}`);
-    };
-    const state=this.missileState();
-    for(const flight of state.missiles){const m=this.types.get(flight.type_key)?.missile;if(allied(flight.owner)&&m?.effect==='satellite')reveal(flightPosition(flight,this.playhead),m.radius);}
-    for(const zone of state.recon)if(allied(zone.owner)&&zone.starts_at<=this.playhead&&zone.expires_at>this.playhead)reveal(zone.center,zone.radius);
+    const events = this.rev()?.events;
+    if (cached && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample && cached.events === events) return cached.tiles;
+    const visible = this.fullVision || !this.terrain ? new Set<string>() : playerVisibility(
+      this.groundVision, this.terrain, all ?? this.rawEntities(), this.missileState(),
+      this.types, this.config.multiplayer, this.player, this.playhead, this.net.rulesVersion===7,
+    );
+    this.visionCache = { revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, events, tiles: visible };
     return visible;
   }
 
@@ -1106,7 +1135,7 @@ export class Game {
   }
   validPlacement(tile: Tile, factory: boolean): boolean {
     const terrain = this.terrain;
-    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t) && !this.exact?.state.blueprints.some(b => b.tile.x === t.x && b.tile.y === t.y) && !this.draft.commands.some(c => c.command.kind === 'place_blueprints' && c.command.tiles.some(b => b.x === t.x && b.y === t.y));
+    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t) && !this.exact?.state.blueprints.some(b => this.canInspectPlan(b.owner) && b.tile.x === t.x && b.tile.y === t.y) && !this.draft.commands.some(c => c.command.kind === 'place_blueprints' && c.command.tiles.some(b => b.x === t.x && b.y === t.y));
     const offsets = { n: [0,-1], e: [1,0], s: [0,1], w: [-1,0] };
     const [dx,dy] = offsets[this.renderer.outputDirection];
     return clear(tile) && (!factory || clear({ x: tile.x + dx, y: tile.y + dy }));
@@ -1455,9 +1484,16 @@ export class Game {
         if(t.silo)values.push(['Auto range',`${t.silo.auto_range} tiles`],['Launch range','Unlimited']);
         if(t.self_repair)values.push(['Repair',`${t.self_repair.rate*t.self_repair.hp_per_matter} HP / tick · ${t.self_repair.hp_per_matter} HP / matter`]);
         if(t.construction)values.push(['Build',`${t.construction.rate} / ${t.construction.cooldown} ticks`]);
-        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}const details=document.createElement('details');details.className='selection-info';details.innerHTML='<summary>Unit info</summary>';details.append(title,stats);body.append(details);if(!t.production){const order=document.createElement('div');order.className='unit-order';order.textContent=`HP ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)} · ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;body.append(order);}
+        for(const [label,value] of values){const item=document.createElement('span');item.textContent=`${label}: ${value}`;stats.append(item);}const details=document.createElement('details');details.className='selection-info';details.innerHTML='<summary>Unit info</summary>';details.append(title,stats);body.append(details);
+        if (!t.production) {
+          const order = document.createElement('div');
+          order.className = 'unit-order';
+          order.textContent = `HP ${v.hp.toFixed(0)}/${v.maxHp.toFixed(0)}`;
+          if (this.canInspectPlan(v.owner)) order.textContent += ` · ${orderLabel(this.effectiveOrder(v) ?? {kind:'idle'})}`;
+          body.append(order);
+        }
       } else {const label=document.createElement('strong');label.textContent=`${views.length} units selected`;body.append(label);}
-      const eligible=views.filter(v=>this.priorityEligible(v));
+      const eligible=views.filter(v=>this.canInspectPlan(v.owner) && this.priorityEligible(v));
       const priorities=new Set(eligible.map(v=>this.effectivePriority(v)));
       const priority=document.createElement('div');priority.id='selection-priority';priority.className='selection-value';
       priority.dataset.value=priorities.size===1?[...priorities][0]:'mixed';
@@ -1469,10 +1505,10 @@ export class Game {
       select.value=priority.dataset.value;select.disabled=!this.canStage().ok||!eligible.some(v=>this.ownSelectable(v));select.onchange=()=>this.setSelectionPriority(select.value as Priority);
       label.append(select);priority.append(label);body.insertBefore(priority,icons.nextSibling);
       if(views.length>1){
-        const orders=views.map(v=>this.effectiveOrder(v)??{kind:'idle'} as Order);
+        const orders=views.filter(v=>this.canInspectPlan(v.owner)).map(v=>this.effectiveOrder(v)??{kind:'idle'} as Order);
         const summary=document.createElement('div');summary.id='selection-orders';summary.className='selection-value';
-        summary.textContent=`Orders: ${new Set(orders.map(o=>JSON.stringify(o))).size===1?orderLabel(orders[0]):'Mixed'}`;body.insertBefore(summary,priority.nextSibling);
-        const factories=views.filter(v=>!!this.types.get(v.type_key)?.production);
+        summary.textContent=`Orders: ${new Set(orders.map(o=>JSON.stringify(o))).size===1?orderLabel(orders[0]):'Mixed'}`;if(orders.length)body.insertBefore(summary,priority.nextSibling);
+        const factories=views.filter(v=>this.canInspectPlan(v.owner) && !!this.types.get(v.type_key)?.production);
         if(factories.length>1){const loops=new Set(factories.map(v=>factoryPlan(this,v).loop));const loop=document.createElement('div');loop.className='selection-value';loop.textContent=`Loop new items: ${loops.size>1?'Mixed':[...loops][0]?'On':'Off'}`;body.insertBefore(loop,summary.nextSibling);}
       }
       const groups=this.experience.groups();

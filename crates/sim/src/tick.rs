@@ -43,6 +43,14 @@ struct Consumer {
 
 impl Sim {
     pub fn step(&mut self, emit: &mut dyn FnMut(Output)) -> Result<()> {
+        self.step_observed(emit, &mut |_, _| {})
+    }
+
+    pub(crate) fn step_observed(
+        &mut self,
+        emit: &mut dyn FnMut(Output),
+        observe: &mut dyn FnMut(&Sim, &[WorldEvent]),
+    ) -> Result<()> {
         let t = self.state.tick;
         self.progress = false;
         for a in &mut self.activity {
@@ -69,6 +77,7 @@ impl Sim {
             self.state.inactivity_deadline = t + 1 + self.config.stall_ticks;
         }
         self.state.tick = t + 1;
+        observe(self, &self.pending_events);
         self.emit_state_outputs(emit, false);
         Ok(())
     }

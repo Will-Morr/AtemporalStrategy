@@ -1,0 +1,10 @@
+[package]
+name = "atemporal-bots"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+atemporal-contracts.workspace = true
+atemporal-sim = { path = "../sim" }
+serde.workspace = true

@@ -1,5 +1,14 @@
-use super::*;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use super::{FrameRules, OwnEntity, PlayerFrame, PolicyTimeline, allied, append, distance, ore_at};
+use atemporal_contracts::{
+    BlueprintSettings, CardinalDirection, Command, DraftCommand, DraftItemRef, Lifecycle,
+    MissileLaunch, Order, PlayerId, Priority, ProductionEdit, Rect, SiloPlan, Terrain, TerrainCell,
+    Tile, TurnDraft, TypeKey, TypeKind,
+};
+use atemporal_sim::map;
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    sync::Arc,
+};
 
 pub(super) fn adjacent(t: Tile, direction: CardinalDirection, terrain: &Terrain) -> Option<Tile> {
     let (dx, dy) = match direction {
@@ -90,18 +99,22 @@ fn factory_queue(recipes: &[TypeKey], desired: usize) -> Option<(Vec<TypeKey>, V
 }
 
 fn opening_volley(
-    state: &WorldState,
+    state: &PlayerFrame,
     player: PlayerId,
-    config: &MatchConfig,
-    content: &Content,
+    rules: FrameRules<'_>,
     home: Tile,
     target: Tile,
     desired: usize,
 ) -> Option<Vec<MissileLaunch>> {
+    let FrameRules {
+        config,
+        content,
+        terrain,
+    } = rules;
     // Starting corners are public. Prefer a visible enemy structure; otherwise aim at
     // a hostile starting cluster, including the correct opposing corner in team games.
     let aim = state
-        .entities
+        .visible_entities
         .iter()
         .filter(|e| {
             !allied(config, player, e.owner)
@@ -132,16 +145,16 @@ fn opening_volley(
     let mut targets = [
         aim,
         Tile {
-            x: advance(aim.x, state.terrain.width, 5),
-            y: advance(aim.y, state.terrain.height, 5),
+            x: advance(aim.x, terrain.width, 5),
+            y: advance(aim.y, terrain.height, 5),
         },
         Tile {
-            x: advance(aim.x, state.terrain.width, 8),
+            x: advance(aim.x, terrain.width, 8),
             y: aim.y,
         },
         Tile {
             x: aim.x,
-            y: advance(aim.y, state.terrain.height, 8),
+            y: advance(aim.y, terrain.height, 8),
         },
     ];
     if desired == 2 {
@@ -151,9 +164,13 @@ fn opening_volley(
         .into_iter()
         .filter(|t| {
             !state
-                .entities
+                .visible_entities
                 .iter()
                 .any(|e| allied(config, player, e.owner) && distance(e.tile, *t) <= 16)
+                && !state
+                    .own_entities
+                    .iter()
+                    .any(|e| distance(e.tile, *t) <= 16)
         })
         .map(|target| MissileLaunch {
             type_key: "tac_nuke".into(),
@@ -166,16 +183,18 @@ fn opening_volley(
 /// An economic opening alone gives the first wave of fighters a mining rally. Open a second
 /// line with its own attack rally and build a silo away from the value concentrated at home.
 pub(super) fn develop(
-    state: &WorldState,
+    state: &PlayerFrame,
     player: PlayerId,
-    config: &MatchConfig,
-    content: &Content,
+    rules: FrameRules<'_>,
     home: Tile,
     target: Tile,
     commands: &mut Vec<DraftCommand>,
 ) {
+    let FrameRules {
+        content, terrain, ..
+    } = rules;
     if !state
-        .entities
+        .own_entities
         .iter()
         .any(|e| e.owner == player && e.type_key == "constructor")
     {
@@ -190,37 +209,38 @@ pub(super) fn develop(
         return;
     };
     let mut occupied: BTreeSet<_> = state
-        .entities
+        .own_entities
         .iter()
         .map(|e| e.tile)
-        .chain(state.blueprints.iter().map(|b| b.tile))
+        .chain(state.visible_entities.iter().map(|e| e.tile))
+        .chain(state.own_blueprints.iter().map(|b| b.tile))
         .collect();
-    occupied.extend(state.blueprints.iter().filter_map(|b| {
+    occupied.extend(state.own_blueprints.iter().filter_map(|b| {
         b.output_direction
-            .and_then(|d| adjacent(b.tile, d, &state.terrain))
+            .and_then(|d| adjacent(b.tile, d, terrain))
     }));
     occupied.extend(
         state
-            .entities
+            .own_entities
             .iter()
             .filter_map(|e| e.production.as_ref().map(|p| p.output_tile)),
     );
     let free = |tile: Tile, occupied: &BTreeSet<Tile>| {
-        let i = usize::from(tile.y) * usize::from(state.terrain.width) + usize::from(tile.x);
-        state.terrain.cells[i] == TerrainCell::Floor
-            && state.ore[i] == 0.
+        let i = usize::from(tile.y) * usize::from(terrain.width) + usize::from(tile.x);
+        terrain.cells[i] == TerrainCell::Floor
+            && ore_at(state, i) == 0.
             && !occupied.contains(&tile)
     };
-    let routes = route_lengths(&state.terrain, home);
+    let routes = route_lengths(terrain, home);
     let mut counts = BTreeMap::<String, usize>::new();
     for key in state
-        .entities
+        .own_entities
         .iter()
         .filter(|e| e.owner == player)
         .map(|e| &e.type_key)
         .chain(
             state
-                .blueprints
+                .own_blueprints
                 .iter()
                 .filter(|b| b.owner == player && b.site_id.is_none())
                 .map(|b| &b.type_key),
@@ -242,7 +262,7 @@ pub(super) fn develop(
                 if let Some(out) = output_directions
                     .as_ref()
                     .and_then(|d| d.get(i))
-                    .and_then(|d| adjacent(*tile, *d, &state.terrain))
+                    .and_then(|d| adjacent(*tile, *d, terrain))
                 {
                     occupied.insert(out);
                 }
@@ -250,7 +270,7 @@ pub(super) fn develop(
         }
     }
     for &(structure, desired, ideal) in EXPANSION {
-        if u32::from(ideal) > u32::from(state.terrain.width) * 3 / 4
+        if u32::from(ideal) > u32::from(terrain.width) * 3 / 4
             || !content.types.iter().any(|d| d.key == structure)
         {
             continue;
@@ -290,8 +310,7 @@ pub(super) fn develop(
             .filter(|(t, _)| {
                 free(**t, &occupied)
                     && (structure != "factory"
-                        || adjacent(**t, output, &state.terrain)
-                            .is_some_and(|out| free(out, &occupied)))
+                        || adjacent(**t, output, terrain).is_some_and(|out| free(out, &occupied)))
             })
             .min_by_key(|(t, steps)| (steps.abs_diff(ideal), distance(**t, direction), t.y, t.x))
             .map(|(t, _)| *t);
@@ -311,9 +330,7 @@ pub(super) fn develop(
             };
             (queue, flags, None)
         } else {
-            let Some(launches) =
-                opening_volley(state, player, config, content, home, target, desired)
-            else {
+            let Some(launches) = opening_volley(state, player, rules, home, target, desired) else {
                 continue;
             };
             let mut queue = vec!["tac_nuke".into(); launches.len()];
@@ -334,7 +351,7 @@ pub(super) fn develop(
         };
         occupied.insert(tile);
         if structure == "factory"
-            && let Some(out) = adjacent(tile, output, &state.terrain)
+            && let Some(out) = adjacent(tile, output, terrain)
         {
             occupied.insert(out);
         }
@@ -366,8 +383,8 @@ pub(super) fn develop(
                             area: Rect {
                                 min: Tile { x: 0, y: 0 },
                                 max: Tile {
-                                    x: state.terrain.width - 1,
-                                    y: state.terrain.height - 1,
+                                    x: terrain.width - 1,
+                                    y: terrain.height - 1,
                                 },
                             },
                         }
@@ -385,77 +402,110 @@ pub(super) fn develop(
     }
 }
 
-/// A human can scrub the published timeline before committing. Sample a few future frames
-/// through the same fog filter and direct the silo at observed static infrastructure.
+fn blast_tiles(center: Tile) -> impl Iterator<Item = Tile> {
+    (-4_i16..=4).flat_map(move |dx| {
+        (-4_i16..=4).filter_map(move |dy| {
+            if dx * dx + dy * dy > 16 {
+                return None;
+            }
+            Some(Tile {
+                x: center.x.checked_add_signed(dx)?,
+                y: center.y.checked_add_signed(dy)?,
+            })
+        })
+    })
+}
+
+/// Direct silos at infrastructure seen anywhere in the published timeline.
 pub(super) fn target_observed_bases(
-    c: &Controller,
-    view: &WorldState,
-    player: PlayerId,
+    input: &PolicyTimeline,
+    view: &PlayerFrame,
     draft: &mut TurnDraft,
 ) {
     let silos: Vec<_> = view
-        .entities
+        .own_entities
         .iter()
         .filter(|e| {
-            e.owner == player
-                && e.lifecycle == Lifecycle::Complete
+            e.lifecycle == Lifecycle::Complete
                 && e.production.as_ref().is_some_and(|p| p.silo.is_some())
         })
         .collect();
-    if silos.is_empty() {
+    let mut opening_plans = draft
+        .commands
+        .iter_mut()
+        .filter_map(|row| {
+            if let Command::ConfigureBlueprints { settings, .. } = &mut row.command {
+                settings.silo_plan.as_mut()
+            } else {
+                None
+            }
+        })
+        .peekable();
+    if silos.is_empty() && opening_plans.peek().is_none() {
         return;
     }
-    let checkpoints = &c.revisions[&c.current].checkpoints;
     let mut known = BTreeMap::<Tile, u32>::new();
-    for offset in [0, 100, 300, 500, 800, 1200] {
-        let Some((_, state)) = checkpoints.range(view.tick.saturating_add(offset)..).next() else {
+    let Some(last) = input.timeline.frames().next_back() else {
+        return;
+    };
+    let visible = last.visible_entities.iter().map(Arc::as_ref);
+    let remembered = input
+        .timeline
+        .remembered_buildings(last.tick)
+        .map(|sighting| sighting.entity);
+    for e in visible.chain(remembered) {
+        if allied(input.config(), input.player(), e.owner) {
             continue;
-        };
-        let observed = visible_state(state, player, &c.config, &c.content);
-        for e in observed
-            .entities
-            .iter()
-            .filter(|e| !allied(&c.config, player, e.owner))
-        {
-            let worth = match e.type_key.as_str() {
-                "silo" => 8,
-                "factory" => 6,
-                "turret" => 3,
-                _ => continue,
-            };
-            known.insert(e.tile, worth);
         }
+        let worth = match e.type_key.as_str() {
+            "silo" => 8,
+            "factory" => 6,
+            "turret" => 3,
+            _ => continue,
+        };
+        known.insert(e.tile, worth);
     }
     if known.is_empty() {
         return;
     }
+    let friendly_tiles: BTreeSet<_> = view
+        .own_entities
+        .iter()
+        .map(|e| e.tile)
+        .chain(
+            view.visible_entities
+                .iter()
+                .filter(|e| allied(input.config(), input.player(), e.owner))
+                .map(|e| e.tile),
+        )
+        .collect();
     let mut targets = vec![];
     while !known.is_empty() && targets.len() < 4 {
-        let safe = |pos: Tile| {
-            !view
-                .entities
-                .iter()
-                .any(|e| allied(&c.config, player, e.owner) && distance(e.tile, pos) <= 16)
-        };
         let Some(center) = known
             .keys()
             .copied()
-            .filter(|t| safe(*t))
+            .filter(|pos| !blast_tiles(*pos).any(|tile| friendly_tiles.contains(&tile)))
             .max_by_key(|pos| {
-                known
-                    .iter()
-                    .filter(|(t, _)| distance(**t, *pos) <= 16)
-                    .map(|(_, s)| *s)
+                blast_tiles(*pos)
+                    .filter_map(|tile| known.get(&tile))
                     .sum::<u32>()
             })
         else {
             break;
         };
         targets.push(center);
-        known.retain(|t, _| distance(*t, center) > 16);
+        for tile in blast_tiles(center) {
+            known.remove(&tile);
+        }
     }
     if targets.is_empty() {
         return;
+    }
+    // Reuse observed targets in opening silo blueprints while preserving their queue sizes.
+    for (index, command) in opening_plans.enumerate() {
+        for (offset, launch) in command.launches.iter_mut().take(targets.len()).enumerate() {
+            launch.target = targets[(index + offset) % targets.len()];
+        }
     }
     let key = "tac_nuke";
     for (index, e) in silos.iter().enumerate() {
@@ -503,30 +553,20 @@ pub(super) fn target_observed_bases(
 
 /// Split a stalled field army into search parties. Survey the public terrain for passable
 /// destinations far from the paths our army already followed in the published timeline.
-pub(super) fn search_stalemate(
-    c: &Controller,
-    view: &WorldState,
-    player: PlayerId,
-    draft: &mut TurnDraft,
-) {
-    let revision = &c.revisions[&c.current];
-    if !revision
-        .outcome
-        .as_ref()
-        .is_some_and(|o| o.kind == OutcomeKind::Stalemate)
-    {
+pub(super) fn search_stalemate(input: &PolicyTimeline, view: &PlayerFrame, draft: &mut TurnDraft) {
+    if !input.stalemate() {
         return;
     }
-    let armed = |e: &EntityState| {
-        e.owner == player
-            && e.lifecycle == Lifecycle::Complete
-            && c.content
+    let armed = |e: &OwnEntity| {
+        e.lifecycle == Lifecycle::Complete
+            && input
+                .content()
                 .types
                 .iter()
                 .any(|d| d.key == e.type_key && d.movement.is_some() && d.weapon.is_some())
     };
     let army: Vec<_> = view
-        .entities
+        .own_entities
         .iter()
         .filter(|e| armed(e))
         .map(|e| e.id.clone())
@@ -534,16 +574,16 @@ pub(super) fn search_stalemate(
     if army.len() < 12 {
         return;
     }
-    let Some(last) = revision.checkpoints.last_key_value().map(|(_, s)| s) else {
+    let Some(last) = input.timeline.frames().next_back() else {
         return;
     };
-    let last_view = visible_state(last, player, &c.config, &c.content);
-    let mut targets: Vec<_> = last_view
-        .entities
+    let mut targets: Vec<_> = last
+        .visible_entities
         .iter()
         .filter(|e| {
-            !allied(&c.config, player, e.owner)
-                && c.content
+            !allied(input.config(), input.player(), e.owner)
+                && input
+                    .content()
                     .types
                     .iter()
                     .any(|d| d.key == e.type_key && d.counts_for_survival)
@@ -553,27 +593,34 @@ pub(super) fn search_stalemate(
     targets.sort();
     targets.dedup();
     targets.truncate(4);
-    let terrain = &view.terrain;
+    let terrain = &input.timeline.terrain;
     let index = |tile: Tile| usize::from(tile.y) * usize::from(terrain.width) + usize::from(tile.x);
     let mut distances = vec![u16::MAX; terrain.cells.len()];
     let mut flood = VecDeque::new();
-    let step = (revision.checkpoints.len() / 8).max(1);
-    for checkpoint in revision
-        .checkpoints
-        .values()
-        .step_by(step)
-        .chain(std::iter::once(last))
-    {
-        for e in checkpoint
-            .entities
-            .iter()
-            .filter(|e| allied(&c.config, player, e.owner))
-        {
-            if distances[index(e.tile)] > 0 {
-                distances[index(e.tile)] = 0;
-                flood.push_back(e.tile);
+    let mut previous: Option<&PlayerFrame> = None;
+    for frame in input.timeline.frames() {
+        let own_changed =
+            previous.is_none_or(|old| !Arc::ptr_eq(&old.own_entities, &frame.own_entities));
+        let visible_changed =
+            previous.is_none_or(|old| !Arc::ptr_eq(&old.visible_entities, &frame.visible_entities));
+        let own_tiles = own_changed
+            .then_some(&frame.own_entities)
+            .into_iter()
+            .flat_map(|rows| rows.iter())
+            .map(|e| e.tile);
+        let allied_tiles = visible_changed
+            .then_some(&frame.visible_entities)
+            .into_iter()
+            .flat_map(|rows| rows.iter())
+            .filter(|e| allied(input.config(), input.player(), e.owner))
+            .map(|e| e.tile);
+        for tile in own_tiles.chain(allied_tiles) {
+            if distances[index(tile)] > 0 {
+                distances[index(tile)] = 0;
+                flood.push_back(tile);
             }
         }
+        previous = Some(frame);
     }
     let party_count = (army.len() / 6).clamp(2, 8);
     while targets.len() < party_count {
