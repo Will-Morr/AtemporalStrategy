@@ -193,6 +193,7 @@ def surviving_matter_figure(meta, pairs):
     import numpy as np
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
+    from matplotlib.patches import Patch, Rectangle
     from matplotlib.ticker import MaxNLocator
 
     rosters = [tuple(r) for r in meta["rosters"]]
@@ -225,10 +226,14 @@ def surviving_matter_figure(meta, pairs):
     for (i, j), v in np.ndenumerate(values.data):
         if not np.isfinite(v):
             label, ink = "—", "#28333b"
+        elif v == 0:
+            ax.add_patch(Rectangle((j-.5, i-.5), 1, 1, facecolor="#f3b8ad",
+                                   edgecolor="#d89588", hatch="//", linewidth=0))
+            label, ink = "0", "#40231d"
         else:
             r, g, b, _ = cmap(norm(v))
             ink = "#131820" if .2126*r+.7152*g+.0722*b > .52 else "white"
-            label = "0" if v == 0 else "<1" if v < 1 else f"{v:,.0f}"
+            label = "<1" if v < 1 else f"{v:,.0f}"
         ax.text(j, i, label, ha="center", va="center", fontsize=8, color=ink)
     arena = {"snake":"Winding corridor", "straight":"Straight corridor", "choke":"Choke", "open":"Open"}[meta["arena"]]
     economy = (f"Army · {meta['army_budget']:g} matter per side" if meta["mode"] == "army"
@@ -236,16 +241,17 @@ def surviving_matter_figure(meta, pairs):
     figure.text(.025,.975, f"{arena}  /  {economy}", fontsize=19, weight="bold")
     figure.text(.025,.948, "Average surviving matter of the row roster against the column opponent", fontsize=14)
     figure.text(.025,.927, f"Rules {meta['sim_rules_version']}   ·   Base destruction or tick {meta['ticks']:,}   ·   Both axes ordered by average survival", fontsize=10)
-    color_ax = figure.add_axes((.21,.044,.40,.012))
-    bar = figure.colorbar(ScalarMappable(norm=norm, cmap=cmap), cax=color_ax, orientation="horizontal")
-    bar.outline.set_visible(False)
-    if maximum:
-        bar.locator = MaxNLocator(nbins=6)
-        bar.update_ticks()
-    else:
-        bar.set_ticks([0])
-    figure.text(.63,.047,"Matter remaining, adjusted for unit health", fontsize=11)
-    figure.text(.21,.014,"Cells average both seats. A wiped-out force contributes 0. Values are rounded for display.", fontsize=10)
+    if maximum > 0:
+        color_ax = figure.add_axes((.21,.044,.40,.012))
+        bar = figure.colorbar(ScalarMappable(norm=norm, cmap=cmap), cax=color_ax, orientation="horizontal")
+        bar.outline.set_visible(False)
+        ticks = MaxNLocator(nbins=5).tick_values(0, maximum)
+        bar.set_ticks([0, *(t for t in ticks if 0 < t < maximum * .92), maximum])
+        bar.set_ticklabels(["Above 0", *(f"{t:,.3g}" for t in bar.get_ticks()[1:])])
+    figure.legend(handles=[Patch(facecolor="#f3b8ad", edgecolor="#d89588", hatch="//", label="0 · No surviving units"),
+                           Patch(facecolor="#d4d7da", label="— · No recorded trial")],
+                  loc="center left", bbox_to_anchor=(.64,.05), frameon=False, fontsize=10)
+    figure.text(.21,.012,"Positive colors show HP-weighted surviving matter. Cells average both seats.", fontsize=10)
     return figure
 
 

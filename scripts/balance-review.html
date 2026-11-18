@@ -60,6 +60,8 @@ button:focus-visible,select:focus-visible,.scroll:focus-visible{outline:2px soli
 .survival-matrix .mean{color:var(--muted)}
 .survival-cell{display:block;width:100%;height:clamp(13px,3.15svh,32px);padding:0;border:0;border-radius:3px;font-size:inherit;font-weight:650;font-variant-numeric:tabular-nums}
 .survival-value{font-size:clamp(.56rem,1.2vw,.82rem);white-space:nowrap}
+.survival-zero{background:repeating-linear-gradient(135deg,#f3b8ad 0 7px,#d89588 7px 8px);color:#40231d}
+.zero-key{display:inline-block;width:1.15em;height:.85em;border-radius:2px;vertical-align:middle;margin-right:.4em}
 .survival-cell.missing{background:repeating-linear-gradient(135deg,#202a24 0 4px,#29352d 4px 8px);color:var(--muted)}
 .survival-cell:is(:hover,:focus-visible,[aria-pressed="true"]){position:relative;outline:2px solid #fff;outline-offset:-2px}
 .pickers,.sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
@@ -128,11 +130,11 @@ select{width:100%;min-width:0;background:#111813;border:1px solid var(--line);bo
   <div class="section-head"><h2>Surviving matter by matchup</h2><p id="survival-context"></p></div>
   <div class="survival-tools">
     <div class="survival-legend">
-      <span>HP-weighted surviving matter</span>
+      <span>Positive surviving matter</span>
       <div id="survival-scale" class="scale" aria-hidden="true"></div>
-      <div class="scale-labels"><span>0</span><span id="survival-max"></span></div>
+      <div class="scale-labels"><span>Above 0</span><span id="survival-max"></span></div>
     </div>
-    <p class="survival-note">0 = no surviving units · — = no recorded trial</p>
+    <p class="survival-note"><span class="zero-key survival-zero" aria-hidden="true"></span>0 = no surviving units · — = no recorded trial</p>
   </div>
   <div class="survival-selection">
     <p id="survival-readout"></p>
@@ -184,6 +186,7 @@ const selectors = [byId('roster-a'), byId('roster-b')];
 const viridis = [[68, 1, 84], [71, 44, 122], [59, 82, 139], [44, 113, 142], [33, 145, 140], [40, 174, 128], [94, 201, 98], [173, 220, 48], [253, 231, 37]];
 const number = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
 const format = value => number.format(value);
+const formatSurvival = value => value > 0 && value < 0.1 ? '<0.1' : format(value);
 const signed = value => (value > 0 ? '+' : '') + format(value);
 const key = roster => roster.join('+');
 const name = roster => roster.map(unit => unit.replaceAll('_', ' ').replace(/^./, first => first.toUpperCase())).join(' + ');
@@ -312,10 +315,11 @@ function renderSurvival(rules, mode, arena) {
 
   const max = Math.max(0, ...rows.flatMap(row => row.values));
   const scale = byId('survival-scale');
+  scale.parentElement.hidden = max === 0;
   scale.style.background = max
     ? 'linear-gradient(to right,' + viridis.map(rgb => 'rgb(' + rgb.join(',') + ')').join(',') + ')'
     : 'rgb(' + viridis[0].join(',') + ')';
-  byId('survival-max').textContent = format(max);
+  byId('survival-max').textContent = formatSurvival(max);
   const {directory, title} = datasets[rules];
   byId('survival-context').textContent = title + ' · ' +
     controls[1].selectedOptions[0].textContent + ' · ' + arenas[arena];
@@ -352,23 +356,25 @@ function renderSurvival(rules, mode, arena) {
     const aName = name(dataset.rosters.get(a));
     const line = element('tr');
     const heading = rosterHeading(dataset.rosters.get(a), 'row', 'row-label');
-    const meanCell = element('td', mean === null ? '—' : format(mean), 'mean');
+    const meanCell = element('td', mean === null ? '—' : formatSurvival(mean), 'mean');
     meanCell.title = values.length + ' of ' + rosters.length + ' opponents recorded';
     line.append(heading, meanCell);
     for (const {a: b} of rows) {
       const value = cells.get(b);
       const trials = matches(a, b).length * (a === b ? 2 : 1);
       const detail = aName + ' vs ' + name(dataset.rosters.get(b)) + ' · ' +
-        (value === null ? 'No recorded trial' : format(value) + ' surviving matter · ' +
+        (value === null ? 'No recorded trial' : formatSurvival(value) + ' surviving matter · ' +
           trials + (trials === 1 ? ' seat result' : ' seat results'));
       const button = element('button', undefined, 'survival-cell');
-      button.append(value === null ? '—' : element('span', format(value), 'survival-value'));
+      button.append(value === null ? '—' : element('span', formatSurvival(value), 'survival-value'));
       button.type = 'button';
       button.dataset.pair = a + '/' + b;
       button.title = detail;
       button.setAttribute('aria-label', detail);
       if (value === null) {
         button.classList.add('missing');
+      } else if (value === 0) {
+        button.classList.add('survival-zero');
       } else {
         const rgb = survivalColor(value, max);
         button.style.backgroundColor = 'rgb(' + rgb.join(',') + ')';
