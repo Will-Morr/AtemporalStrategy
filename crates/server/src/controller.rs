@@ -740,6 +740,7 @@ impl Controller {
                 .filter_map(|s| s.profile.clone())
                 .collect(),
             initial_state: "initial-state.json".into(),
+            server_commit: crate::archive::server_commit(),
         };
         archive.write_manifest(&manifest, &self.config_yaml, &self.content_yaml, &initial)?;
         archive.write_lobby(&LobbyRecord {
@@ -1165,6 +1166,7 @@ impl Controller {
                 command_outcomes: data.command_outcomes.clone(),
                 time_totals: self.time_totals(),
                 timeline_index: data.timeline_index.clone(),
+                server_commit: crate::archive::server_commit(),
             })?;
             fail_point("before_publish", round);
         }

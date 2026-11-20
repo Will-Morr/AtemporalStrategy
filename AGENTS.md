@@ -1,5 +1,13 @@
 # Project instructions
 
+## Game-log backup before live-server cleanup
+
+**Never delete game logs from the live server until a local copy has been confirmed.** Game logs are everything under the server's `STATE/games` (games, replays, results, feedback, visits). This applies to manual commands, scripts and the hourly job, even when the disk is full.
+
+- Keep one local mirror, updated incrementally; do not create repeated full copies. Server code, release builds and executables need no backup and may be removed.
+- Confirm each file's content against the mirror (checksum) before deleting it; keep anything that does not match. Stop and report if the sync or confirmation fails.
+- `scripts/server-maintenance.py` implements this sequence and is what the hourly cron job runs; see `docs/hosting.md`.
+
 - Read `user_spec/README.md` and the relevant user specifications before working.
 - Consolidate user input into the appropriate thematic document under `user_spec/`; do not create a numbered file for each interaction. Preserve requirements and intent, combine repeated confirmations, and make superseding decisions clear. Keep `core_prompt.md` unchanged as the original reference. Add a new document only for a substantial new topic, and update the index and links as needed.
 - Only decisions actually made by the user are locked. Treat assistant architecture, defaults, contracts, scope limits, and workflow choices as revisable proposals, even when drafted in imperative language.

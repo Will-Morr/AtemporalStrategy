@@ -81,7 +81,8 @@ def main():
                 else:
                     request.unlink(missing_ok=True)
                 child = subprocess.Popen([str(release / 'target/release/atemporal-server'),
-                    '--port', str(args.port), '--coordinator-dir', str(games)], cwd=release)
+                    '--port', str(args.port), '--coordinator-dir', str(games)], cwd=release,
+                    env={**os.environ, 'ATEMPORAL_COMMIT': current})
                 print(f'Serving {current} on port {args.port}', flush=True)
             code = child.poll()
             if code is not None:
@@ -92,7 +93,8 @@ def main():
                     # return to the previous binary and its unchanged game data.
                     request.unlink(missing_ok=True)
                     probe = subprocess.Popen([str(candidate_release / 'target/release/atemporal-server'),
-                        '--port', str(args.port), '--coordinator-dir', str(games)], cwd=candidate_release)
+                        '--port', str(args.port), '--coordinator-dir', str(games)], cwd=candidate_release,
+                        env={**os.environ, 'ATEMPORAL_COMMIT': candidate})
                     if not stopping.wait(5) and probe.poll() is None and healthy(args.port):
                         current, release, child = candidate, candidate_release, probe
                         tmp = current_file.with_suffix('.tmp')

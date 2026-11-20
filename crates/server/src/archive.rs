@@ -17,6 +17,9 @@ pub struct Manifest {
     pub config: MatchConfig,
     pub profiles: Vec<PlayerProfile>,
     pub initial_state: String,
+    /// Git commit of the server that started the match (`ATEMPORAL_COMMIT`), when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_commit: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -39,6 +42,9 @@ pub struct RoundRecord {
     /// reloading the result cache.
     #[serde(default)]
     pub timeline_index: Vec<TimelineBucket>,
+    /// Git commit of the server that simulated this round; updates can land between rounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_commit: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -92,6 +98,15 @@ impl ResultSizes {
             + self.timeline_bytes
             + self.dictionary_bytes
     }
+}
+
+/// Commit of the running server build. The host supervisor sets `ATEMPORAL_COMMIT` to the
+/// release revision; workers inherit it.
+pub fn server_commit() -> Option<String> {
+    std::env::var("ATEMPORAL_COMMIT")
+        .ok()
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty())
 }
 
 pub struct Archive {
