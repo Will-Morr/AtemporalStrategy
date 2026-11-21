@@ -159,8 +159,9 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 .review-tools{display:grid;gap:7px;margin:8px 0;padding:8px 0;border-block:1px solid var(--edge)}.review-tools [hidden],#practice-options[hidden]{display:none}.review-tools small{display:block;color:#c8c7c0}.review-command{display:block;width:100%;text-align:left;padding-left:6px;border-left:3px solid;margin:4px 0}.review-jumps{display:flex;gap:4px}#practice-options{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#tick-activity{max-height:10rem;overflow:auto}#tick-activity strong{color:#ffda70}.review-queue{display:grid;gap:4px}#exit-practice{pointer-events:auto}
 
 /* Keep transport anchored to the viewport while selected units and draft details change. */
-#panels{grid-template-rows:minmax(126px,auto) var(--timeline-strip-height)}
+#panels{grid-template-rows:var(--step-row-height,minmax(126px,auto)) var(--timeline-strip-height)}
 #panels>#timeline-strip{grid-row:2}
+#panels[style*="--step-row-height"] #queue{overflow:auto}
 #play{min-width:4.5em}
 #new-game-menu{box-sizing:border-box;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);width:min(540px,92vw);max-height:80vh;padding:22px;background:#152531;border-color:#567083}
 #new-game-menu h3{font-size:13px;color:#b9ccda;margin:18px 0 8px}

@@ -1136,10 +1136,17 @@ export class Game {
       else this.zoomTimeline(Math.exp(e.deltaY * .002), this.renderer.timelineTick(e.clientX));
     }, { passive: false });
     $('play').onclick = () => this.togglePlay();
-    $('step-back').onclick = () => this.seek(this.playhead - 1);
-    $('step-fwd').onclick = () => this.seek(this.playhead + 1);
-    $('jump-back').onclick = () => this.seek(this.playhead - 100);
-    $('jump-fwd').onclick = () => this.seek(this.playhead + 100);
+    const panels = $('panels');
+    const releaseStepLayout = () => panels.style.removeProperty('--step-row-height');
+    $('game').addEventListener('click', e => {
+      if (!(e.target as Element).closest('#step-back,#step-fwd,#jump-back,#jump-fwd')) releaseStepLayout();
+    }, true);
+    window.addEventListener('keydown', e => { if (![',','.','<','>'].includes(e.key)) releaseStepLayout(); }, true);
+    window.addEventListener('resize', releaseStepLayout);
+    $('step-back').onclick = () => this.step(-1);
+    $('step-fwd').onclick = () => this.step(1);
+    $('jump-back').onclick = () => this.step(-100);
+    $('jump-fwd').onclick = () => this.step(100);
     $('to-draft').onclick = () => this.draft.tick !== null && this.seek(this.draft.tick);
     $<HTMLInputElement>('tick-input').onchange = e => this.seek(Number((e.target as HTMLInputElement).value));
     $('commit').onclick = () => void this.commit();
@@ -1150,6 +1157,12 @@ export class Game {
       this.renderer.resize();
     }).observe($('panels'));
     this.renderer.resize();
+  }
+
+  private step(delta: number): void {
+    // Exact-state replies can add or remove the selected unit's queue between clicks.
+    $('panels').style.setProperty('--step-row-height', `${$('selection').getBoundingClientRect().height}px`);
+    this.seek(this.playhead + delta);
   }
 
   togglePlay(): void {
@@ -1336,10 +1349,10 @@ export class Game {
       }
       case 'Enter': if (this.mode.kind === 'none' && !this.drag) void this.commit(); else this.toast('Finish or cancel the action before committing.'); break;
       case ' ': this.togglePlay(); e.preventDefault(); break;
-      case ',': this.seek(this.playhead - (e.shiftKey ? 100 : 1)); break;
-      case '.': this.seek(this.playhead + (e.shiftKey ? 100 : 1)); break;
-      case '<': this.seek(this.playhead - 100); break;
-      case '>': this.seek(this.playhead + 100); break;
+      case ',': this.step(e.shiftKey ? -100 : -1); break;
+      case '.': this.step(e.shiftKey ? 100 : 1); break;
+      case '<': this.step(-100); break;
+      case '>': this.step(100); break;
       case 'Home': this.seek(this.editableFrom); break;
       case 'End': this.seek(this.viewingPreview ? this.preview!.through_tick : this.availableThrough); break;
       case '[': if (e.shiftKey) {this.panTimeline(-(this.view.t1-this.view.t0)/4);break;} this.rate = RATES[Math.max(0, RATES.indexOf(this.rate) - 1)]; this.updatePanels(); break;

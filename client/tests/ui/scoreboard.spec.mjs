@@ -14,10 +14,13 @@ test('persistent scoreboard counts wins through history, refresh and match victo
   await expect(card(a,0)).toHaveAttribute('data-wins','1');await expect(card(a,1)).toHaveAttribute('data-wins','0');await expect(card(a,0)).toHaveAttribute('data-status','leading');
   await tile(a,target);await seek(a,2);
   const back=a.locator('#step-back'), position=await back.boundingBox();
+  const deck=await a.locator('#panels').boundingBox();
   await back.click();await expect.poll(()=>a.evaluate(()=>window.atemporal.exact?.tick)).toBe(1);
   expect(await back.boundingBox()).toEqual(position);
+  expect(await a.locator('#panels').boundingBox()).toEqual(deck);
   await back.click();await expect.poll(()=>a.evaluate(()=>window.atemporal.exact?.tick)).toBe(0);
   expect(await back.boundingBox()).toEqual(position);
+  expect(await a.locator('#panels').boundingBox()).toEqual(deck);
   await seek(a,0);await expect(card(a,0)).toHaveAttribute('data-wins','1');await review.capture('scoreboard-leading-at-opening-tick',a);
   await a.locator('#replay summary').first().click();await a.selectOption('#round-picker','0');await expect.poll(()=>a.evaluate(()=>window.atemporal.current)).toBe(0);await expect(card(a,0)).toHaveAttribute('data-wins','1');await review.capture('scoreboard-persists-in-historical-round',a);
   await a.selectOption('#round-picker','1');await a.locator('#replay summary').first().click();
