@@ -45,6 +45,8 @@ A sync or verification failure stops the run before anything is deleted. Each ru
 
 Use a dedicated SSH host alias for cron. Configure it for key-based OpenSSH on the VPS's private Tailscale address, with a pinned server host key, a dedicated identity file, `IdentitiesOnly yes` and `BatchMode yes`. Scope the server-side key to the operator machine's tailnet IP and disable forwarding and TTY allocation. Interactive Tailscale SSH can keep its existing sign-in policy. Both rsync and the cleanup commands use the alias passed with `--host`.
 
+On the live VPS, systemd starts `atemporal-backup-sshd.service` at boot. Its listener binds to the VPS's Tailscale IPv4 address on port 2222. The daemon reads `/etc/ssh/atemporal-backup/sshd_config` and `/etc/ssh/atemporal-backup/authorized_keys`. It accepts the operator machine's key as the non-root `atemporal` account. If either machine is replaced or receives a new tailnet IP, update the listener, source restrictions and local SSH configuration as applicable. Confirm the VPS host key over the administrative connection before updating the local pin.
+
 Before switching cron, run the command below manually with `--dry-run` under the cron user's account with `SSH_AUTH_SOCK` unset. Check the newest JSON record for `ok: true`, `rsync_exit: 0`, and an empty `unverified` list. Preserve the existing mirror when changing the connection.
 
 Example hourly entry:
