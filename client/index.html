@@ -157,6 +157,25 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 #turn-banner[data-compact="true"] button{border:none;padding:6px 10px}
 #turn-banner[data-other="true"]{background:#674316;border-color:#ffd387;color:#fff5d8}#clear-future{font-weight:700;background:#633434;border-color:#bc7971;padding:6px 10px}
 .review-tools{display:grid;gap:7px;margin:8px 0;padding:8px 0;border-block:1px solid var(--edge)}.review-tools [hidden],#practice-options[hidden]{display:none}.review-tools small{display:block;color:#c8c7c0}.review-command{display:block;width:100%;text-align:left;padding-left:6px;border-left:3px solid;margin:4px 0}.review-jumps{display:flex;gap:4px}#practice-options{display:flex;gap:6px;align-items:center;flex-wrap:wrap}#tick-activity{max-height:10rem;overflow:auto}#tick-activity strong{color:#ffda70}.review-queue{display:grid;gap:4px}#exit-practice{pointer-events:auto}
+
+/* Keep transport anchored to the viewport while selected units and draft details change. */
+#panels{grid-template-rows:minmax(126px,auto) var(--timeline-strip-height)}
+#panels>#timeline-strip{grid-row:2}
+#play{min-width:4.5em}
+#new-game-menu{box-sizing:border-box;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);width:min(540px,92vw);max-height:80vh;padding:22px;background:#152531;border-color:#567083}
+#new-game-menu h3{font-size:13px;color:#b9ccda;margin:18px 0 8px}
+#match-verdict{margin:4px 0}
+#round-results{display:grid;gap:4px;max-height:36vh;overflow-y:auto}
+#round-results button{--result-color:#ccb577;display:grid;grid-template-columns:6em 6em 1fr;align-items:baseline;gap:8px;margin:0;padding:9px 12px;background:#20313d;border-left:4px solid var(--result-color);text-align:left}
+#round-results button[data-result=win]{--result-color:#82d7a3}
+#round-results button[data-result=loss]{--result-color:#ffa69c}
+#round-results button[data-result=draw]{--result-color:#adbfce}
+#round-results button span{color:var(--result-color)}
+#round-results button small{color:#cad7df;text-align:right}
+#round-results button[aria-current=true]{background:#304654}
+#round-results button:hover,#round-results button:focus-visible{outline:1px solid #b9d6eb;outline-offset:-2px}
+.review-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+#new-game-menu .review-actions button{width:auto;margin:0;padding:5px 8px;font-size:12px}
 </style></head><body>
 
 <section id="lobby">

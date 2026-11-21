@@ -68,7 +68,7 @@ Refresh/rejoin must visibly identify the player and preserve independent identit
 H adds the selection to a group; provide an explicit clear-group action. This supersedes the previous H-replace/Shift+H-add gesture.
 
 
-Blueprints of every structure type, including turrets, need a clear deletion action. Normal drafting flows must not produce invalid-blueprint commit rejections. Preview queued changes as if applied at the selected tick, including group membership and priority. Show constructor priority in the bottom UI and distinguish a shared selection value from mixed values.
+Blueprints of every structure type, including turrets, need a clear deletion action. Deleting a building placed in the same draft cancels its placement and frees the tile immediately for reuse. Normal drafting flows must not produce invalid-blueprint commit rejections. Preview queued changes as if applied at the selected tick, including group membership and priority. Show constructor priority in the bottom UI and distinguish a shared selection value from mixed values.
 
 Ore should be yellow; fully depleted deposits should become light gray, distinct from partly mined deposits. Fog shades open tiles only; walls retain their dark gray. Miner silhouettes must primarily show their player color. Statistics plots need a slope switch showing a lightly smoothed derivative, especially for comparing active mining rates.
 
@@ -106,7 +106,7 @@ The game UI must not require scrolling, except when reviewing long command lists
 
 The subsequent UI pass still occupies too much screen area. Propose several ways to reduce the overall interface footprint for user review before implementing another layout change. The user subsequently chose to keep the current UI sections and move timeline control buttons beside the timeline to reduce vertical space. The alternative dock and side-inspector sketches are not selected.
 
-Multiple selected factories must be edited only as a group. If their configurations differ, writing a command clears their queues/configurations at the chosen tick before applying the new shared command, with an inline yellow visual warning. The latest user instruction supersedes the earlier acceptance requirement: do not show a browser warning/confirmation dialog; the inline warning is sufficient. Exactly aligned factories can keep appending items to their shared queues. Individual factory editing remains available when selected alone.
+Multiple selected factories must be edited only as a group. If their configurations differ, writing a command clears their queues/configurations at the chosen tick before applying the new shared command, with an inline yellow visual warning. The latest user instruction supersedes the earlier acceptance requirement: do not show a browser warning/confirmation dialog; the inline warning is sufficient. Exactly aligned factories can keep appending items to their shared queues. Collapse consecutive matching units into counted queue entries in the shared factory editor as well. Individual factory editing remains available when selected alone.
 
 Warn visibly about queued units and factories without orders, especially miners and constructors, and make missing construction orders apparent before committing. Show “Needs orders” only once the player has started giving orders in the current draft, and assess only that intervention tick; do not warn during idle replay browsing or at other ticks. Mixed factory queues are normal gameplay: a mining newborn order with miners and grunts must not trigger an incompatibility warning. Warn about missing orders, not an order being unusable by some queued unit types. Show a large colored banner while the player's turn is committed and waiting; remove it when execution starts. Highlight order ticks for the current selection on the timeline. Make unit statistics accessible before building units, with a clearly linked reference tab/page.
 
@@ -116,7 +116,7 @@ The remaining fixed-height workspace still wastes too much space, including for 
 
 ## Latest playtest corrections
 
-Hold Shift while placing a building to keep that building selected for repeated placement, including wall lines. Players keep fog of war throughout active gameplay, including when inspecting timelines; spectators and finished-match replays have full vision. This supersedes the earlier correction that gave all players full vision in recorded timelines. Put the timeline result explanation beneath its main label, state that it describes the final tick, and offer a jump to that state instead of generic “replay available” text. A completed living factory prevents elimination; an earlier replay frame must not be presented as the final state.
+Hold Shift while placing a building to keep that building selected for repeated placement, including wall lines. Players keep fog of war throughout active gameplay, including when inspecting timelines; replay viewers see the combined field of view of the players, with areas outside that coverage still dark. Put the timeline result explanation beneath its main label, state that it describes the final tick, and offer a jump to that state instead of generic “replay available” text. A completed living factory prevents elimination; an earlier replay frame must not be presented as the final state.
 
 Remove assistant-written promotional subtitles/taglines from page headers and dialogs. Keep the user-authored landing subtitle and prose; use functional headings and instructions elsewhere.
 
@@ -126,16 +126,18 @@ Draw routing paths as dotted lines. Preview pathfinding while aiming attack orde
 
 ## Artillery silhouette
 
-Keep artillery’s distinct long gun/turret from the design pass, but make its body side pieces look like tank treads. Both artillery and tanks are tread vehicles and must not move diagonally.
+Keep artillery’s distinct long gun/turret from the design pass, but make its body side pieces look like tank treads. Animate rotating turrets during playback and align the artillery barrel with its firing arc. Both artillery and tanks are tread vehicles and must not move diagonally.
 
 ## Timeline planning and battlefield feedback
 
-- Ground vision must respect walls, with a generous flood fill allowing limited sight around corners. Show previously seen buildings in gray while they are outside vision.
+- Ground vision must respect walls, with a generous flood fill allowing limited sight around corners. Show a gray last-seen image of buildings and mobile units where they were observed before the tile went dark.
 - Add a button to expand a selection to all matching unit and building types. Show a prominent signal when another player has committed and is waiting for the viewer. Let the viewer minimize this notice to a small corner box and reopen it, including in bot games.
 - Let players stage a reset of all their future orders from the chosen tick. It takes effect on commit and supports draft undo.
-- Shift-click can queue identical missile launches. If a launch would never be supplied, append the missing missile to the silo’s production queue.
+- Only Shift-clicking a build button produces five items. Each missile target click adds one launch. Holding Shift keeps targeting active for further clicks, including repeated clicks on the same destination. Append missing missiles to the production queue when available supply cannot fulfill the firing queue.
 - Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Include the substantial gameplay and balance changes in the November 18 entry. Publication is optional per commit. Roll minor changes into the next major release.
 
 ## Timeline inspection and practice
 
 Provide a view of previous timelines. Offer an optional visualization of the commands and events at each tick. Spectators and players reviewing a finished game can inspect both players’ plans, see which units or buildings received orders, and inspect the production queue of a selected enemy building. Allow new tick submissions in a replay of a completed or abandoned game to explore whether different orders could have won. Preserve the original recording and result.
+
+Keep playback controls in place when stepping back one tick. At match end, show every round’s result in a color-coded list and let players jump directly into a round by clicking its result.

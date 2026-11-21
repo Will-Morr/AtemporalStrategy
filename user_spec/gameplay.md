@@ -87,7 +87,7 @@ Provide a quickstart script that builds and launches the server. The later [coor
 The user expects a very simple mechanism to resolve unit deadlocks, such as allowing a unit to enter a teammate bot's occupied tile and moving the displaced bot by swapping positions or pseudorandomly placing it on an adjacent tile. Prefer such lightweight mechanics over a complex crowd/pathfinding system. Exact displacement precedence, legal moves and deterministic arbitration remain implementation proposals.
 
 
-Constructors must not remain parked on a factory output indefinitely blocking production. Attack-moving armed units must respond to enemies firing on them when their capabilities permit, including grunt/turret encounters.
+Constructors must not remain parked on a factory output indefinitely blocking production. Attack-moving armed units should route through hostile buildings and destroy obstructions along their path. Attack-moving armed units must respond to enemies firing on them when their capabilities permit, including grunt/turret encounters.
 
 ## Uncommitting while waiting
 

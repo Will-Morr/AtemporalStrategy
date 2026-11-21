@@ -151,7 +151,7 @@ export class Experience {
     if(parent!==null && parent!==undefined)void this.loadRound(parent);
   }
   private roundSelection = 0;
-  async selectRound(revision: number): Promise<void> {
+  async selectRound(revision: number, tick = this.g.playhead): Promise<void> {
     const request = ++this.roundSelection;
     await this.loadRound(revision);
     if (request !== this.roundSelection || !this.g.revisions.has(revision)) return;
@@ -160,7 +160,7 @@ export class Experience {
     this.g.playing = false; this.g.current = revision; this.g.exact = null;
     this.g.selection.clear(); this.g.recalledGroup = null;
     this.g.view = { t0:0,t1:Math.max(1,this.g.rev()!.outcome.terminal_state_tick) };
-    this.g.seek(Math.min(this.g.playhead,this.g.view.t1));
+    this.g.seek(Math.min(tick,this.g.view.t1));
     if(($('replay') as HTMLDetailsElement).open)this.loadComparison();
   }
   groups(through = this.g.draft.commands.length): ControlGroupState[] {
