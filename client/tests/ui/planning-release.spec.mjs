@@ -75,10 +75,44 @@ test('an expired satellite leaves a gray last sighting which survives seeking an
   await tile(a,home);await a.getByRole('button',{name:'Target Satellite',exact:true}).click();await tile(a,enemy);
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);
   await seek(a,100);await expect.poll(sight).toBe('remembered');
+  const enemyMiner=await position(b,'miner');
+  const minerMemory=()=>a.evaluate(()=>window.atemporal.entities().filter(e=>e.owner===1 && e.type_key==='miner' && e.remembered).map(e=>({x:e.x,y:e.y})));
+  await expect.poll(minerMemory).toEqual([enemyMiner]);
+  await tile(a,enemyMiner);expect(await a.evaluate(()=>window.atemporal.selectedViews().length)).toBe(0);
   await tile(a,enemy);expect(await a.evaluate(()=>window.atemporal.selectedViews().length)).toBe(0);
   await review.capture('gray-enemy-building-after-vision-expires',a);
-  await seek(a,0);await expect.poll(sight).toBe('unseen');
+  await seek(a,0);await expect.poll(sight).toBe('unseen');expect(await minerMemory()).toEqual([]);
   await a.reload();await revision(a,1);await seek(a,100);await expect.poll(sight).toBe('remembered');
+});
+
+test('archived replay shades tiles outside the combined player fields of view', async({review},testInfo)=>{
+  const server=await isolatedServer(testInfo);
+  review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();
+  await Promise.all([revision(a,0),revision(b,0)]);
+  const sight=page=>page.evaluate(()=>[...window.atemporal.visibility()].sort());
+  const own=await sight(a), other=await sight(b);
+  const union=[...new Set([...own,...other])].sort();
+  expect(union.length).toBeGreaterThan(own.length);
+  expect(union.length).toBeGreaterThan(other.length);
+  await a.locator('#actions .planning>summary').click();
+  await a.locator('#stop-archive').click();
+  await expect(b.locator('#new-game-menu')).toBeVisible();
+  await expect.poll(()=>sight(b)).toEqual(union);
+  await b.getByRole('button',{name:'Keep viewing replay'}).click();
+  const darkFloor=await b.evaluate(()=>{
+    const g=window.atemporal, mask=g.visibility();
+    return g.terrain.cells.some((cell,i)=>cell==='floor' && !mask.has([i%g.terrain.width,Math.floor(i/g.terrain.width)].join(',')));
+  });
+  expect(darkFloor).toBe(true);
+  await b.evaluate(()=>{
+    const {terrain, renderer}=window.atemporal;
+    renderer.camera.scale=Math.min(20,(renderer.map.height-renderer.headerHeight-20)/terrain.height);
+    renderer.centerOn(terrain.width/2,terrain.height/2);
+    renderer.draw();
+  });
+  await review.capture('archived-combined-field-of-view',b);
 });
 
 async function exportedFrames(server, revisionNumber) {

@@ -92,114 +92,85 @@ export function playerVisibility(
       for(let x=Math.max(0,Math.ceil(center.x-radius));x<=Math.min(terrain.width-1,Math.floor(center.x+radius));x++)
         if((x-center.x)**2+(y-center.y)**2<=radius**2)visible.add(`${x},${y}`);
   };
+  const sharesSight = (owner: number) => player === null || allied(multiplayer, player, owner);
   ground.update(terrain, entities);
   for (const e of entities) {
     const def = types.get(e.type_key);
-    if (!def || e.lifecycle !== 'complete' || !allied(multiplayer, player, e.owner)) continue;
+    if (!def || e.lifecycle !== 'complete' || !sharesSight(e.owner)) continue;
     if (legacy) revealCircle(e, def.vision);
     else for (const tile of ground.tiles(e, def.vision)) visible.add(tile);
   }
   for (const flight of sources.missiles) {
     const missile = types.get(flight.type_key)?.missile;
-    if (missile?.effect === 'satellite' && allied(multiplayer, player, flight.owner) &&
+    if (missile?.effect === 'satellite' && sharesSight(flight.owner) &&
         flight.launch_tick < tick && tick <= flight.impact_tick) {
       revealCircle(flightPosition(flight,tick), missile.radius);
     }
   }
   for (const zone of sources.recon) {
-    if (allied(multiplayer, player, zone.owner) && zone.starts_at <= tick && tick < zone.expires_at) {
+    if (sharesSight(zone.owner) && zone.starts_at <= tick && tick < zone.expires_at) {
       revealCircle(zone.center, zone.radius);
     }
   }
   return visible;
 }
 
-interface Sighting {
+interface SightFrame {
   tick: number;
-  building: EntityView | null;
+  exact: boolean;
+  mask: Uint32Array;
+  sightings: EntityView[];
 }
 
-export class BuildingMemory {
-  // Time indexing prevents later sightings from leaking backwards when scrubbing.
-  // Each revision owns independent memory.
-  private records = new Map<string, Sighting[]>();
-  private frames = new Map<number, Uint32Array>();
-  private latestMask?: Uint32Array;
-  private exactTicks = new Set<number>();
-
+export class SightMemory {
+  // Samples can arrive out of order, and exact seeks override sampled frames.
+  private frames: SightFrame[] = [];
+  private next = 0;
+  private known = new Map<string, EntityView>();
   constructor(private readonly width: number, private readonly height: number) {}
 
-  private upperBound(records: Sighting[], tick: number): number {
-    let lo = 0, hi = records.length;
-    while (lo < hi) {
-      const mid = (lo+hi) >>> 1;
-      if (records[mid].tick <= tick) lo = mid+1;
-      else hi = mid;
+  observe(tick: number, visible: ReadonlySet<string>, entities: EntityView[], exact = false): void {
+    let low = 0, high = this.frames.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (this.frames[mid].tick < tick) low = mid + 1;
+      else high = mid;
     }
-    return lo;
-  }
-
-  private tileIndex(tile: string): number {
-    const comma = tile.indexOf(',');
-    return Number(tile.slice(comma+1))*this.width + Number(tile.slice(0,comma));
-  }
-
-  observe(tick: number, visible: ReadonlySet<string>, buildings: EntityView[], exact = false): void {
-    if (!exact && this.exactTicks.has(tick)) return;
-    if (exact) this.exactTicks.add(tick);
-
-    // Keep a packed mask for each observed frame so an earlier, out-of-order
-    // discovery can account for empty observations already made at later ticks.
-    const mask = new Uint32Array(Math.ceil(this.width*this.height/32));
+    const existing = this.frames[low]?.tick === tick;
+    if (existing && this.frames[low].exact && !exact) return;
+    const bits = new Uint32Array(Math.ceil(this.width * this.height / 32));
     for (const tile of visible) {
-      const index = this.tileIndex(tile);
-      mask[index>>>5] |= 1<<(index&31);
+      const comma = tile.indexOf(',');
+      const index = Number(tile.slice(comma + 1)) * this.width + Number(tile.slice(0, comma));
+      bits[index >>> 5] |= 1 << (index & 31);
     }
-    const previous = this.latestMask;
-    const current = previous && mask.every((word,index) => word === previous[index]) ? previous : mask;
-    this.latestMask = current;
-    this.frames.set(tick, current);
-
-    const observed = new Map(buildings.map(building => [`${building.x},${building.y}`, building]));
-    for (const tile of new Set([...this.records.keys(), ...observed.keys()])) {
-      const building = observed.get(tile);
-      let records = this.records.get(tile);
-      if (!visible.has(tile)) {
-        // An exact snapshot supersedes any earlier observation of this tick.
-        if (records) {
-          const index = this.upperBound(records, tick)-1;
-          if (records[index]?.tick === tick) records.splice(index, 1);
-        }
-        continue;
-      }
-      if (!records) {
-        if (!building) continue;
-        const index = this.tileIndex(tile);
-        records = [];
-        for (const [at, sight] of this.frames) {
-          if (at !== tick && (sight[index>>>5] & (1<<(index&31)))) records.push({tick:at, building:null});
-        }
-        records.sort((a,b) => a.tick-b.tick);
-        this.records.set(tile, records);
-      }
-
-      const next = this.upperBound(records, tick);
-      const value = building
-        ? {...building, exact:undefined, silo:undefined, engaged:null, activity:'last seen', remembered:true}
-        : null;
-      const observation = {tick, building:value};
-      if (records[next-1]?.tick === tick) records[next-1] = observation;
-      else records.splice(next, 0, observation);
-    }
+    const previous = this.frames[low - 1]?.mask;
+    const mask = previous && bits.every((word, i) => word === previous[i]) ? previous : bits;
+    const sightings = entities.filter(e => visible.has(`${e.x},${e.y}`)).map(e => ({
+      index:e.index, id:e.id, owner:e.owner, type_key:e.type_key, x:e.x, y:e.y,
+      facing:e.facing, lifecycle:e.lifecycle, hp:e.hp, maxHp:e.maxHp,
+      activity:'last seen', engaged:null, remembered:true,
+    }));
+    this.frames.splice(low, existing ? 1 : 0, {tick, exact, mask, sightings});
+    if (low < this.next) this.rewind();
   }
 
-  remembered(tick: number, visible: ReadonlySet<string>): EntityView[] {
-    const remembered: EntityView[] = [];
-    for (const [tile, records] of this.records) {
-      if (visible.has(tile)) continue;
-      const last = records[this.upperBound(records,tick)-1];
-      if (last?.building) remembered.push(last.building);
+  private rewind(): void {
+    this.known.clear();
+    this.next = 0;
+  }
+
+  remembered(tick: number, visible: ReadonlySet<string>, liveIds: ReadonlySet<string> = new Set()): EntityView[] {
+    if (this.next && this.frames[this.next - 1].tick > tick) this.rewind();
+    while (this.next < this.frames.length && this.frames[this.next].tick <= tick) {
+      const frame = this.frames[this.next++];
+      for (const [id, e] of this.known) {
+        const index = e.y * this.width + e.x;
+        if (frame.mask[index >>> 5] & (1 << (index & 31))) this.known.delete(id);
+      }
+      for (const e of frame.sightings) this.known.set(JSON.stringify(e.id), e);
     }
-    return remembered;
+    return [...this.known].filter(([id, e]) =>
+      !visible.has(`${e.x},${e.y}`) && !liveIds.has(id)).map(([, e]) => e);
   }
 }

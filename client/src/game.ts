@@ -1,6 +1,6 @@
 import {packDraft, unpackDraft, type Draft} from './draft-storage';
 import {practice} from './practice';
-import {GroundVision, BuildingMemory, playerSeesEntity, playerVisibility} from './vision';
+import {GroundVision, SightMemory, playerSeesEntity, playerVisibility} from './vision';
 import {guideUrl} from './session';
 import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
@@ -284,10 +284,10 @@ export class Game {
       while(this.previewCoverage.size>8){const old=this.previewCoverage.keys().next().value!;this.previewCoverage.delete(old);for(const t of rev.samples.keys())if(Math.floor(t/CHUNK)===old)rev.samples.delete(t);rev.events=rev.events.filter(e=>Math.floor(e.tick/CHUNK)!==old);}
       if(!this.terrain){this.terrain=m.snapshot.terrain;this.initialOre=m.snapshot.ore;this.renderer.fit();const own=m.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
       const changed=this.exact?.revision!==m.revision || this.exact.tick!==tick;
-      if (!this.fullVision) this.recordBuildingSamples(rev, m.samples);
+      if (!this.fullVision) this.recordSightSamples(rev, m.samples);
       if(this.viewingPreview && Math.floor(this.playhead)===tick) {
         this.exact={revision:m.revision,tick,state:m.snapshot};
-        if (!this.fullVision) this.recordExactBuildings(rev, m.snapshot);
+        if (!this.fullVision) this.recordExactSightings(rev, m.snapshot);
       }
       if(changed)this.updatePanels();else this.updatePreviewStatus();
     } catch(error) {
@@ -326,7 +326,7 @@ export class Game {
       this.initialOre = exact.snapshot.ore;
       if(this.current===m.revision && !this.viewingPreview) {
         this.exact = { revision: m.revision, tick: 0, state: exact.snapshot };
-        if (!this.fullVision) this.recordExactBuildings(view, exact.snapshot);
+        if (!this.fullVision) this.recordExactSightings(view, exact.snapshot);
       }
       console.log(`initial exact state in ${Math.round(performance.now() - t0)} ms`);
       if(needsFit){this.renderer.fit();const own=exact.snapshot.entities.find(e=>e.owner===this.player);if(own)this.renderer.centerOn(own.tile.x,own.tile.y);}
@@ -368,7 +368,7 @@ export class Game {
     const rev = this.rev();
     if (!rev || this.replayErrors.has(rev.revision) || rev.loading.has(k) || k * CHUNK > rev.outcome.terminal_state_tick) return;
     if (rev.chunks.has(k)) {
-      void this.loadBuildingHistory(rev);
+      void this.loadSightHistory(rev);
       return;
     }
     rev.loading.add(k);
@@ -385,7 +385,7 @@ export class Game {
       const events = await this.net.request({ kind: 'get_events', revision: rev.revision, from_tick: from, to_tick: to, effects_only: true }, 'events', e => e.revision === rev.revision);
       rev.events = rev.events.concat(events.events);
       rev.chunks.add(k);
-      void this.loadBuildingHistory(rev);
+      void this.loadSightHistory(rev);
       while (rev.chunks.size > 8) {
         const oldest = rev.chunks.values().next().value!; rev.chunks.delete(oldest);
         for (const tick of rev.samples.keys()) if (Math.floor(tick/CHUNK) === oldest) rev.samples.delete(tick);
@@ -415,7 +415,7 @@ export class Game {
         if (this.exactPending?.tick === tick && this.exactPending.revision === rev.revision) this.exactPending = null;
         if (Math.floor(this.playhead) === tick && this.current === rev.revision) {
           this.exact = { revision: rev.revision, tick, state: e.snapshot };
-          if (!this.fullVision) this.recordExactBuildings(rev, e.snapshot);
+          if (!this.fullVision) this.recordExactSightings(rev, e.snapshot);
           if (this.player !== null && this.phase && this.phase.revision === rev.revision) this.net.send({ kind: 'planning_ready', round: this.phase.round, revision: rev.revision });
           this.updatePanels();
         }
@@ -511,7 +511,7 @@ export class Game {
     const revision=this.rev();
     if (!this.fullVision && revision && this.terrain) {
       const memory = this.memoryFor(revision);
-      views.push(...memory.remembered(Math.floor(this.playhead), visible));
+      views.push(...memory.remembered(Math.floor(this.playhead), visible, new Set(views.map(e => idKey(e.id)))));
     }
     return views;
   }
@@ -535,7 +535,7 @@ export class Game {
   }
 
   private sightHistory=new WeakMap<RevisionView,{next:number,busy:boolean}>();
-  private async loadBuildingHistory(rev:RevisionView):Promise<void> {
+  private async loadSightHistory(rev:RevisionView):Promise<void> {
     if(this.fullVision || this.viewingPreview || !this.terrain)return;
     const history=this.sightHistory.get(rev)??{next:0,busy:false};
     if(history.busy || history.next>Math.floor(this.playhead/CHUNK))return;
@@ -551,40 +551,36 @@ export class Game {
           if(this.rev()!==rev)return;
           rev.dictionary=range.entity_dictionary;samples=range.samples;
         }
-        this.recordBuildingSamples(rev,samples);
+        this.recordSightSamples(rev,samples);
         history.next++;
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-    } catch(error){console.warn('Could not restore building sightings',error);}
+    } catch(error){console.warn('Could not restore sightings',error);}
     finally {history.busy=false;}
   }
   private sampleGroundVision = new GroundVision();
   private groundVision = new GroundVision();
-  private buildingMemory = new WeakMap<RevisionView,BuildingMemory>();
+  private sightMemory = new WeakMap<RevisionView,SightMemory>();
 
-  private memoryFor(rev:RevisionView):BuildingMemory {
-    let memory=this.buildingMemory.get(rev);
+  private memoryFor(rev:RevisionView):SightMemory {
+    let memory=this.sightMemory.get(rev);
     if(!memory){
       const terrain=this.terrain!;
-      memory=new BuildingMemory(terrain.width,terrain.height);
-      this.buildingMemory.set(rev,memory);
+      memory=new SightMemory(terrain.width,terrain.height);
+      this.sightMemory.set(rev,memory);
     }
     return memory;
   }
 
-  private recordExactBuildings(rev:RevisionView, state:WorldState):void {
+  private recordExactSightings(rev:RevisionView, state:WorldState):void {
     const views = this.exactEntities(rev, state);
     const visible = playerVisibility(this.sampleGroundVision, state.terrain, views,
       {missiles:state.missiles??[], recon:state.recon??[]}, this.types, this.config.multiplayer,
       this.player, state.tick, this.net.rulesVersion===7);
-    this.memoryFor(rev).observe(state.tick, visible, views.filter(v => this.otherBuilding(v)), true);
+    this.memoryFor(rev).observe(state.tick, visible, views.filter(v => v.owner !== this.player), true);
   }
 
-  private otherBuilding(v:EntityView):boolean {
-    return v.owner !== this.player && this.types.get(v.type_key)?.kind==='structure';
-  }
-
-  private recordBuildingSamples(rev:RevisionView,samples:Sample[]):void {
+  private recordSightSamples(rev:RevisionView,samples:Sample[]):void {
     const memory=this.memoryFor(rev);
     for(const sample of samples){
       const views=sample.entities.flatMap(entity=>{
@@ -595,22 +591,23 @@ export class Game {
       const visible = playerVisibility(this.sampleGroundVision, this.terrain!, views,
         {missiles:sample.missiles??[], recon:sample.recon??[]}, this.types, this.config.multiplayer,
         this.player, sample.tick, this.net.rulesVersion===7);
-      memory.observe(sample.tick, visible, views.filter(v => this.otherBuilding(v)));
+      memory.observe(sample.tick, visible, views.filter(v => v.owner !== this.player));
     }
   }
 
-  private visionCache: { revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; events: unknown; tiles: Set<string> } | null = null;
+  private visionCache: { perspective: number | null; revision: number; tick: number; exact: unknown; sample: unknown; nextSample: unknown; events: unknown; tiles: Set<string> } | null = null;
   visibility(all?: EntityView[]): Set<string> {
     const sample = this.rev()?.samples.get(Math.floor(this.playhead / this.config.snapshot_interval) * this.config.snapshot_interval);
     const nextSample = this.rev()?.samples.get((Math.floor(this.playhead / this.config.snapshot_interval) + 1) * this.config.snapshot_interval);
     const cached = this.visionCache;
     const events = this.rev()?.events;
-    if (cached && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample && cached.events === events) return cached.tiles;
-    const visible = this.fullVision || !this.terrain ? new Set<string>() : playerVisibility(
+    const perspective = this.fullVision ? null : this.player;
+    if (cached && cached.perspective === perspective && cached.revision === this.current && cached.tick === this.playhead && cached.exact === this.exact && cached.sample === sample && cached.nextSample === nextSample && cached.events === events) return cached.tiles;
+    const visible = !this.terrain ? new Set<string>() : playerVisibility(
       this.groundVision, this.terrain, all ?? this.rawEntities(), this.missileState(),
-      this.types, this.config.multiplayer, this.player, this.playhead, this.net.rulesVersion===7,
+      this.types, this.config.multiplayer, perspective, this.playhead, this.net.rulesVersion===7,
     );
-    this.visionCache = { revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, events, tiles: visible };
+    this.visionCache = { perspective, revision: this.current, tick: this.playhead, exact: this.exact, sample, nextSample, events, tiles: visible };
     return visible;
   }
 

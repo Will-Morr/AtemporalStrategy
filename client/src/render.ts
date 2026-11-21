@@ -165,9 +165,9 @@ export class Renderer {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(terrain, ox, oy, t.width * s, t.height * s);
     const visible = this.game.visibility();
-    const sees = (tile: Tile) => this.game.fullVision || visible.has(`${tile.x},${tile.y}`);
+    const sees = (tile: Tile) => visible.has(`${tile.x},${tile.y}`);
     const cornerA=this.worldAt(0,this.headerHeight),cornerB=this.worldAt(width,height);
-    if (!this.game.fullVision) for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
+    for (let y=Math.max(0,Math.floor(cornerA.y));y<Math.min(t.height,Math.ceil(cornerB.y));y++) for(let x=Math.max(0,Math.floor(cornerA.x));x<Math.min(t.width,Math.ceil(cornerB.x));x++) if(t.cells[y*t.width+x]==='floor' && !sees({x,y})) { const [px,py]=this.screen(x,y);ctx.fillStyle='#48484f';ctx.fillRect(px,py,s+.5,s+.5); }
     // Fogged ore stays readable, with a muted yellow distinct from gray exhausted deposits.
     for (let i = 0; i < this.game.initialOre.length; i++) {
       const initial = this.game.initialOre[i];
@@ -191,7 +191,7 @@ export class Renderer {
       readout.style.top = `${Math.max(this.headerHeight + 8, Math.min(height - 35, py - 30))}px`;
     }
     const views = this.game.entities();
-    const byIndex = new Map(views.map(v => [v.index, v]));
+    const byIndex = new Map(views.filter(v => !v.remembered).map(v => [v.index, v]));
     // Combat effects from events near the playhead (presentation only).
     const tick = this.game.playhead;
     for (const e of this.game.eventsNear(Math.floor(tick), 3)) {
@@ -375,10 +375,10 @@ export class Renderer {
     g.drawImage(terrain, 0, 0, width, height);
     const sx = width / t.width, sy = height / t.height;
     const visible=this.game.visibility();
-    if(!this.game.fullVision) for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#48484f';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
+    for(let y=0;y<t.height;y++)for(let x=0;x<t.width;x++)if(t.cells[y*t.width+x]==='floor' && !visible.has(`${x},${y}`)){g.fillStyle='#48484f';g.fillRect(x*sx,y*sy,sx+.5,sy+.5);}
     for (let i = 0; i < this.game.initialOre.length; i++) {
       if (this.game.initialOre[i] > 0) {
-        const inVision = this.game.fullVision || visible.has(`${i % t.width},${Math.floor(i / t.width)}`);
+        const inVision = visible.has(`${i % t.width},${Math.floor(i / t.width)}`);
         g.fillStyle = this.game.oreAt(i)<=0 ? (inVision ? '#85858b' : '#626269') : (inVision ? '#ffcd38' : '#9b9168');
         g.fillRect((i % t.width) * sx, Math.floor(i / t.width) * sy, sx, sy);
       }
