@@ -115,18 +115,23 @@ export function playerVisibility(
   return visible;
 }
 
+interface RememberedEntity extends EntityView {
+  key: string;
+}
+
 interface SightFrame {
   tick: number;
   exact: boolean;
   mask: Uint32Array;
-  sightings: EntityView[];
+  sightings: RememberedEntity[];
 }
 
 export class SightMemory {
   // Samples can arrive out of order, and exact seeks override sampled frames.
   private frames: SightFrame[] = [];
   private next = 0;
-  private known = new Map<string, EntityView>();
+  private known = new Map<string, RememberedEntity>();
+  private latestAppearance = new Map<string, RememberedEntity>();
   constructor(private readonly width: number, private readonly height: number) {}
 
   observe(tick: number, visible: ReadonlySet<string>, entities: EntityView[], exact = false): void {
@@ -144,13 +149,30 @@ export class SightMemory {
       const index = Number(tile.slice(comma + 1)) * this.width + Number(tile.slice(0, comma));
       bits[index >>> 5] |= 1 << (index & 31);
     }
-    const previous = this.frames[low - 1]?.mask;
-    const mask = previous && bits.every((word, i) => word === previous[i]) ? previous : bits;
-    const sightings = entities.filter(e => visible.has(`${e.x},${e.y}`)).map(e => ({
-      index:e.index, id:e.id, owner:e.owner, type_key:e.type_key, x:e.x, y:e.y,
-      facing:e.facing, lifecycle:e.lifecycle, hp:e.hp, maxHp:e.maxHp,
-      activity:'last seen', engaged:null, remembered:true,
-    }));
+    // Keep an entry per observed tick so a later exact seek can replace any one
+    // sample. Identical consecutive observations share both of their payloads.
+    const previous = this.frames[low - 1] ?? this.frames[low];
+    const mask = previous && bits.every((word, i) => word === previous.mask[i]) ? previous.mask : bits;
+    let sightings: RememberedEntity[] = [];
+    for (const e of entities) {
+      if (!visible.has(`${e.x},${e.y}`)) continue;
+      const key = JSON.stringify(e.id);
+      let appearance = this.latestAppearance.get(key);
+      if (!appearance || appearance.index !== e.index || appearance.owner !== e.owner ||
+          appearance.type_key !== e.type_key || appearance.x !== e.x || appearance.y !== e.y ||
+          appearance.facing !== e.facing || appearance.lifecycle !== e.lifecycle ||
+          appearance.hp !== e.hp || appearance.maxHp !== e.maxHp) {
+        appearance = {
+          key, index:e.index, id:e.id, owner:e.owner, type_key:e.type_key, x:e.x, y:e.y,
+          facing:e.facing, lifecycle:e.lifecycle, hp:e.hp, maxHp:e.maxHp,
+          activity:'last seen', engaged:null, remembered:true,
+        };
+        this.latestAppearance.set(key, appearance);
+      }
+      sightings.push(appearance);
+    }
+    if (previous && sightings.length === previous.sightings.length &&
+        sightings.every((e, i) => e === previous.sightings[i])) sightings = previous.sightings;
     this.frames.splice(low, existing ? 1 : 0, {tick, exact, mask, sightings});
     if (low < this.next) this.rewind();
   }
@@ -163,12 +185,14 @@ export class SightMemory {
   remembered(tick: number, visible: ReadonlySet<string>, liveIds: ReadonlySet<string> = new Set()): EntityView[] {
     if (this.next && this.frames[this.next - 1].tick > tick) this.rewind();
     while (this.next < this.frames.length && this.frames[this.next].tick <= tick) {
+      const previous = this.frames[this.next - 1];
       const frame = this.frames[this.next++];
+      if (frame.mask === previous?.mask && frame.sightings === previous.sightings) continue;
       for (const [id, e] of this.known) {
         const index = e.y * this.width + e.x;
         if (frame.mask[index >>> 5] & (1 << (index & 31))) this.known.delete(id);
       }
-      for (const e of frame.sightings) this.known.set(JSON.stringify(e.id), e);
+      for (const e of frame.sightings) this.known.set(e.key, e);
     }
     return [...this.known].filter(([id, e]) =>
       !visible.has(`${e.x},${e.y}`) && !liveIds.has(id)).map(([, e]) => e);

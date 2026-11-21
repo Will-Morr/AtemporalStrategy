@@ -65,4 +65,19 @@ assert.deepEqual(scoutMemory.remembered(4, fog, new Set([JSON.stringify(scout.id
 scoutMemory.observe(5, fog, [], true);
 assert.deepEqual(scoutMemory.remembered(6, fog).map(e=>e.x), [1], 'exact sight supersedes a sampled location');
 
+// A long stationary scouting window should retain each appearance once.
+const stationary = new SightMemory(terrain.width, terrain.height);
+const pair = [scout, {...scout,id:{opening:2},x:2}];
+const both = new Set(['1,1','2,1']);
+for (let tick = 0; tick < 4000; tick++) stationary.observe(tick, both, pair);
+assert.equal(new Set(stationary.frames.map(f => f.sightings)).size, 1);
+assert.equal(new Set(stationary.frames.map(f => f.mask)).size, 1);
+stationary.observe(1999, both, [scout, {...pair[1],hp:12}], true);
+const middle = stationary.remembered(1999, fog);
+assert.equal(middle[1].hp, 12);
+assert.equal(stationary.remembered(2000, fog)[1].hp, pair[1].hp);
+assert.equal(stationary.remembered(1998, fog)[0], middle[0], 'unchanged entities retain their shared appearance');
+stationary.observe(1999, both, [], false);
+assert.equal(stationary.remembered(1999, fog)[1].hp, 12, 'a sample cannot overwrite the exact replacement');
+
 console.log('Player visibility: walls, team sight, flight/recon boundaries and time-indexed scout and building sightings passed.');
