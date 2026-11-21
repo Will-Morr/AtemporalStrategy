@@ -19,7 +19,7 @@ pub use output::{Output, RunResult};
 pub use world::Sim;
 
 /// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
-pub const RULES_VERSION: u32 = 12;
+pub const RULES_VERSION: u32 = 13;
 
 /// The stock public build used rules 8 before alternate tread movement and retreat.
 pub fn is_public_rules8(fingerprint: &Fingerprint) -> bool {

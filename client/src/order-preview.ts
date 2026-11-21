@@ -1,4 +1,5 @@
 import type {Neighbors, Order, Tile} from './contracts.generated';
+import {allied} from './vision';
 import {factoryPlan} from './factory';
 import {idKey, type EntityView, type Game} from './game';
 import type {Renderer} from './render';
@@ -9,11 +10,17 @@ export class OrderPreviews {
   routes: OrderRoute[]=[];
   private fields: PreviewFields | null=null;
   private topology='';
+  private breachFields = new Map<number,PreviewFields>();
   draw(g:Game,r:Renderer,ctx:CanvasRenderingContext2D,views:EntityView[]):void {
     this.routes=[];if(!g.terrain)return;
-    const blocked=new Set(views.filter(v=>!v.remembered&&!v.blueprint&&g.types.get(v.type_key)?.kind==='structure').map(v=>Math.floor(v.y)*g.terrain!.width+Math.floor(v.x)));
-    const topology=[...blocked].sort((a,b)=>a-b).join(',');
-    if(this.fields?.terrain!==g.terrain||topology!==this.topology){this.fields=new PreviewFields(g.terrain,blocked);this.topology=topology;}
+    const structures=views.filter(v=>!v.remembered&&!v.blueprint&&g.types.get(v.type_key)?.kind==='structure');
+    const cell=(v:EntityView)=>Math.floor(v.y)*g.terrain!.width+Math.floor(v.x);
+    const topology=structures.map(v=>`${cell(v)}:${v.owner}`).join(',');
+    if(this.fields?.terrain!==g.terrain||topology!==this.topology){
+      this.fields=new PreviewFields(g.terrain,new Set(structures.map(cell)));
+      this.breachFields.clear();
+      this.topology=topology;
+    }
     const fields=this.fields!;
     const aiming=(g.mode.kind==='attack'||g.mode.kind==='stored-target')&&!!g.hover;
     const targets=new Map<string,Tile>();
@@ -35,10 +42,21 @@ export class OrderPreviews {
       if(factory){const offsets={n:[0,-1],e:[1,0],s:[0,1],w:[-1,0]};const [dx,dy]=offsets[v.outputDirection??v.exact?.production?.output_direction??'e'];from=v.exact?.production?.output_tile??{x:from.x+dx,y:from.y+dy};}
       const types=plan?[...(plan.active?[plan.active.type_key]:[]),...plan.pending.map(i=>i.type)]:[v.type_key];
       const eligible=types.map(t=>g.types.get(t)).filter(t=>t?.movement&&(order.kind==='attack_move'||(order.kind==='mine'?t.mining:t.construction)));
-      const actual=new Set(eligible.map(t=>t!.movement!.neighbors));
-      // Only show routes the unit (or queued factory product) can actually use.
-      const rules:Neighbors[]=[...actual];
-      for(const rule of rules){
+      const profiles=new Map<string,{rule:Neighbors;breach:boolean}>();
+      for (const type of eligible) {
+        const rule=type!.movement!.neighbors;
+        const breach=g.net.rulesVersion>=13 && order.kind==='attack_move' && (type!.weapon?.damage??0)>0;
+        profiles.set(`${rule}:${breach}`,{rule,breach});
+      }
+      for(const {rule,breach} of profiles.values()){
+        let routeFields=fields;
+        if(breach){
+          if(!this.breachFields.has(v.owner)){
+            const blockers=structures.filter(b=>allied(g.config.multiplayer,v.owner,b.owner)).map(cell);
+            this.breachFields.set(v.owner,new PreviewFields(g.terrain,new Set(blockers)));
+          }
+          routeFields=this.breachFields.get(v.owner)!;
+        }
         let goal:Tile|undefined,adjacent=false;
         if(order.kind==='attack_move')goal=order.destination;
         else if(order.kind==='mine'){
@@ -55,8 +73,8 @@ export class OrderPreviews {
         }
         if(!goal)continue;
         targets.set(`${goal.x},${goal.y}`,goal);
-        const points=r.pathPreviews?fields.route(from,goal,rule,adjacent,factory?(v.outputDirection??v.exact?.production?.output_direction??'e'):v.facing,g.net.rulesVersion>=9):[from,goal];
-        this.routes.push({entity:idKey(v.id),rule,actual:actual.has(rule),from,goal,points});
+        const points=r.pathPreviews?routeFields.route(from,goal,rule,adjacent,factory?(v.outputDirection??v.exact?.production?.output_direction??'e'):v.facing,g.net.rulesVersion>=9):[from,goal];
+        this.routes.push({entity:idKey(v.id),rule,actual:true,from,goal,points});
       }
     }
     ctx.save();

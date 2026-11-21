@@ -126,7 +126,7 @@ pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprin
     })
 }
 
-/// Rules 7 and 9–11 retain their original behavior. Rules 8 had two incompatible
+/// Rules 7 and 9–12 retain their original behavior. Rules 8 had two incompatible
 /// implementations, and only the stock public build can be identified unambiguously.
 pub fn supports_build(recorded: &Fingerprint, current: &Fingerprint) -> bool {
     let Some(((old_build, old_rules), (new_build, new_rules))) = recorded
@@ -138,10 +138,12 @@ pub fn supports_build(recorded: &Fingerprint, current: &Fingerprint) -> bool {
     };
     old_build == new_build
         && if old_rules == "8" {
-            new_rules == "12" && atemporal_sim::is_public_rules8(recorded)
+            matches!(new_rules, "12" | "13") && atemporal_sim::is_public_rules8(recorded)
         } else {
             old_rules == new_rules
-                || (matches!(old_rules, "7" | "9" | "10" | "11") && new_rules == "12")
+                || (matches!(old_rules, "7" | "9" | "10" | "11")
+                    && matches!(new_rules, "12" | "13"))
+                || (old_rules == "12" && new_rules == "13")
         }
 }
 

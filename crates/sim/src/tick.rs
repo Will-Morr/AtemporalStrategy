@@ -361,7 +361,22 @@ impl Sim {
                     .as_ref()
                     .and_then(|id| self.find(id))
                     .filter(|j| self.target_valid(i, *j, zone, direct));
-                candidate = retained.or_else(|| self.nearest_hostile(i, zone, direct));
+                // A retained distant target can otherwise pin melee units behind a
+                // factory indefinitely, even when the building itself is within striking distance.
+                let obstruction = retained.and_then(|j| {
+                    if self.breach_enemy_structures
+                        && matches!(e.action, Order::AttackMove { .. })
+                        && Self::dist2(e.tile, self.state.entities[j].tile) > range * range + EPS
+                    {
+                        self.nearest_hostile(i, range.min(zone), direct)
+                            .filter(|&target| self.is_structure(target))
+                    } else {
+                        None
+                    }
+                });
+                candidate = obstruction
+                    .or(retained)
+                    .or_else(|| self.nearest_hostile(i, zone, direct));
             }
             if candidate.is_none()
                 && matches!(e.action, Order::AttackMove { .. })
@@ -1033,11 +1048,7 @@ impl Sim {
                 }
                 self.state.entities[i].local_detour.clear();
             }
-            let field = if intent.work_goal {
-                self.work_field(goal, m.neighbors)
-            } else {
-                self.field(goal, m.neighbors)
-            };
+            let field = self.movement_field(i, goal, m.neighbors, intent.work_goal);
             let here = field[self.idx(from)];
             if here == 0 {
                 self.state.entities[i].goal_settled = true;
@@ -1241,11 +1252,7 @@ impl Sim {
             return false;
         };
         let neighbors = self.def(mover).movement.as_ref().unwrap().neighbors;
-        let field = if work_goal {
-            self.work_field(goal, neighbors)
-        } else {
-            self.field(goal, neighbors)
-        };
+        let field = self.movement_field(mover, goal, neighbors, work_goal);
         matches!(
             self.descend(&field, to, mover, neighbors),
             Some((_, _, Occupancy::Free | Occupancy::Yielding))
@@ -1300,11 +1307,7 @@ impl Sim {
             && let Some(goal) = goal
         {
             let neighbors = self.def(i).movement.as_ref().unwrap().neighbors;
-            let field = if work_goal {
-                self.work_field(goal, neighbors)
-            } else {
-                self.field(goal, neighbors)
-            };
+            let field = self.movement_field(i, goal, neighbors, work_goal);
             let from = self.state.entities[i].tile;
             let detour = self.local_detour(&field, from, neighbors);
             let e = &mut self.state.entities[i];

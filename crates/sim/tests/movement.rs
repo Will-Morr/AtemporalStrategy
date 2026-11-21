@@ -423,3 +423,35 @@ fn stock_public_rules_eight_uses_wall_aware_indirect_targeting() {
     legacy_vision.step(&mut |_| {}).unwrap();
     assert!(entity(&legacy_vision.state, &target).hp < world.def("miner").max_hp);
 }
+
+#[test]
+fn armed_attack_movers_breach_an_enemy_wall_then_continue_to_destination() {
+    let mut w = World::new(&["###############", "#.............#", "###############"]);
+    let grunt = w.spawn_with(0, "grunt", 1, 1, attack_move(13, 1));
+    let wall = w.spawn(1, "wall", 11, 1);
+    w.entity_mut(&wall).hp = 1.0;
+    let run = w.run();
+    assert!(run.destroyed(&wall).is_some());
+    assert_eq!(entity(&run.result.final_state, &grunt).tile, tile(13, 1));
+    assert_checkpoint_equivalence(&w, &run);
+
+    let mut old = w.request();
+    old.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 12".into();
+    let mut old_sim = Sim::new(&old).unwrap();
+    old_sim.step(&mut |_| {}).unwrap();
+    assert_eq!(entity(&old_sim.state, &grunt).tile, tile(1, 1));
+
+    w.entity_mut(&wall).owner = 0;
+    assert_eq!(entity(&w.at(10), &grunt).tile, tile(1, 1));
+}
+
+#[test]
+fn attack_movers_strike_an_intervening_building_while_pursuing_a_unit() {
+    let mut w = World::new(&["#########", "#.......#", "#########"]);
+    let grinder = w.spawn_with(0, "grinder", 2, 1, attack_move(7, 1));
+    let factory = w.spawn(1, "factory", 3, 1);
+    let opponent = w.spawn(1, "miner", 5, 1);
+    w.entity_mut(&grinder).engaged_target = Some(opponent);
+    w.entity_mut(&factory).hp = 1.0;
+    assert_eq!(w.run().destroyed(&factory), Some(0));
+}

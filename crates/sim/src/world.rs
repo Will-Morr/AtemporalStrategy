@@ -24,6 +24,7 @@ pub struct Sim {
     pub state: WorldState,
     pub(crate) legacy_rules: bool,
     pub(crate) alternate_treads: bool,
+    pub(crate) breach_enemy_structures: bool,
     pub(crate) terrain_corner_scores: Option<std::sync::Arc<[i32]>>,
     pub(crate) artillery_retreat_margin: f64,
     pub(crate) artillery_retreat_enabled: bool,
@@ -131,6 +132,10 @@ impl Sim {
         }
         let mut sim = Self {
             legacy_rules,
+            breach_enemy_structures: build
+                .rsplit_once(" rules ")
+                .and_then(|(_, version)| version.parse::<u32>().ok())
+                .is_none_or(|version| version >= 13),
             alternate_treads: !legacy_rules && !public_rules8,
             terrain_corner_scores: (!public_rules8
                 && ![" rules 7", " rules 9", " rules 10", " rules 11"]
@@ -303,13 +308,21 @@ impl Sim {
     }
     /// Terrain walkable and not held by a structure or site; dynamic units are ignored.
     pub(crate) fn traversable(&self, t: Tile) -> bool {
+        self.route_traversable(t, None)
+    }
+    pub(crate) fn route_traversable(&self, t: Tile, attacking_team: Option<u8>) -> bool {
         if !self.floor(t) {
             return false;
         }
         match self.occ[self.idx(t)] {
             NONE => true,
             RESERVED => false,
-            o => !self.is_structure(o as usize),
+            o => {
+                !self.is_structure(o as usize)
+                    || attacking_team.is_some_and(|team| {
+                        team != self.team_of[usize::from(self.state.entities[o as usize].owner)]
+                    })
+            }
         }
     }
     pub(crate) fn offset(&self, t: Tile, dx: i32, dy: i32) -> Option<Tile> {
@@ -327,18 +340,30 @@ impl Sim {
         dy: i32,
         neighbors: Neighbors,
     ) -> Option<Tile> {
+        self.route_step(from, dx, dy, neighbors, None)
+    }
+    pub(crate) fn route_step(
+        &self,
+        from: Tile,
+        dx: i32,
+        dy: i32,
+        neighbors: Neighbors,
+        attacking_team: Option<u8>,
+    ) -> Option<Tile> {
         if dx != 0 && dy != 0 {
             if neighbors == Neighbors::Four {
                 return None;
             }
             let a = self.offset(from, dx, 0)?;
             let b = self.offset(from, 0, dy)?;
-            if !self.traversable(a) || !self.traversable(b) {
+            if !self.route_traversable(a, attacking_team)
+                || !self.route_traversable(b, attacking_team)
+            {
                 return None;
             }
         }
         let to = self.offset(from, dx, dy)?;
-        self.traversable(to).then_some(to)
+        self.route_traversable(to, attacking_team).then_some(to)
     }
     pub(crate) fn dist2(a: Tile, b: Tile) -> f64 {
         let dx = f64::from(a.x) - f64::from(b.x);

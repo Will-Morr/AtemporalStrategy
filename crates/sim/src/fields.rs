@@ -16,10 +16,18 @@ pub(crate) enum Occupancy {
 }
 const CAPACITY: usize = 256;
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct FieldKey {
+    goal: Tile,
+    diagonals: bool,
+    adjacent: bool,
+    attacking_team: Option<u8>,
+}
+
 pub struct FieldCache {
     version: u32,
     capacity: usize,
-    fields: BTreeMap<(u32, bool, bool), Arc<Vec<u16>>>,
+    fields: BTreeMap<FieldKey, Arc<Vec<u16>>>,
 }
 impl Default for FieldCache {
     fn default() -> Self {
@@ -40,36 +48,65 @@ impl Sim {
     }
 
     pub(crate) fn field(&mut self, goal: Tile, neighbors: Neighbors) -> Arc<Vec<u16>> {
-        self.goal_field(goal, neighbors, false)
+        self.goal_field(goal, neighbors, false, None)
     }
 
-    /// Distance to any traversable construction position (Chebyshev range one).
-    pub(crate) fn work_field(&mut self, goal: Tile, neighbors: Neighbors) -> Arc<Vec<u16>> {
-        self.goal_field(goal, neighbors, true)
+    /// Armed attack-movers plan through hostile structures. Actual movement still requires
+    /// a free step, so the unit fights the obstruction before advancing through its tile.
+    pub(crate) fn movement_field(
+        &mut self,
+        mover: usize,
+        goal: Tile,
+        neighbors: Neighbors,
+        work: bool,
+    ) -> Arc<Vec<u16>> {
+        let entity = &self.state.entities[mover];
+        let attack = self.breach_enemy_structures
+            && matches!(entity.action, Order::AttackMove { .. })
+            && self
+                .def(mover)
+                .weapon
+                .as_ref()
+                .is_some_and(|weapon| weapon.damage > 0.0);
+        let team = attack.then(|| self.team_of[usize::from(entity.owner)]);
+        self.goal_field(goal, neighbors, work, team)
     }
 
-    fn goal_field(&mut self, goal: Tile, neighbors: Neighbors, adjacent: bool) -> Arc<Vec<u16>> {
+    fn goal_field(
+        &mut self,
+        goal: Tile,
+        neighbors: Neighbors,
+        adjacent: bool,
+        attacking_team: Option<u8>,
+    ) -> Arc<Vec<u16>> {
         if self.fields.version != self.structure_version {
             self.fields.fields.clear();
             self.fields.version = self.structure_version;
         }
-        let key = (
-            self.idx(goal) as u32,
-            neighbors == Neighbors::Eight,
+        let key = FieldKey {
+            goal,
+            diagonals: neighbors == Neighbors::Eight,
             adjacent,
-        );
+            attacking_team,
+        };
         if let Some(f) = self.fields.fields.get(&key) {
             return f.clone();
         }
         if self.fields.fields.len() >= self.fields.capacity {
             self.fields.fields.clear();
         }
-        let field = Arc::new(self.build_field(goal, neighbors, adjacent));
+        let field = Arc::new(self.build_field(goal, neighbors, adjacent, attacking_team));
         self.fields.fields.insert(key, field.clone());
         field
     }
 
-    fn build_field(&self, goal: Tile, neighbors: Neighbors, adjacent: bool) -> Vec<u16> {
+    fn build_field(
+        &self,
+        goal: Tile,
+        neighbors: Neighbors,
+        adjacent: bool,
+        attacking_team: Option<u8>,
+    ) -> Vec<u16> {
         let mut dist = vec![UNREACHABLE; self.cells()];
         let mut queue = VecDeque::new();
         let mut seed = |t: Tile, dist: &mut Vec<u16>| {
@@ -82,20 +119,22 @@ impl Sim {
         if adjacent {
             for (dx, dy, _) in &DIRS {
                 if let Some(t) = self.offset(goal, *dx, *dy)
-                    && self.traversable(t)
+                    && self.route_traversable(t, attacking_team)
                 {
                     seed(t, &mut dist);
                 }
             }
-        } else if self.traversable(goal) {
+        } else if self.route_traversable(goal, attacking_team) {
             seed(goal, &mut dist);
         } else {
             let count = if neighbors == Neighbors::Eight { 8 } else { 4 };
             for (dx, dy, _) in &DIRS[..count] {
                 if let Some(t) = self.offset(goal, *dx, *dy)
-                    && self.traversable(t)
+                    && self.route_traversable(t, attacking_team)
                     && (dx.abs() + dy.abs() == 1
-                        || self.step_legal(t, -dx, -dy, neighbors).is_some())
+                        || self
+                            .route_step(t, -dx, -dy, neighbors, attacking_team)
+                            .is_some())
                 {
                     seed(t, &mut dist);
                 }
@@ -108,7 +147,7 @@ impl Sim {
                 continue;
             }
             for (dx, dy, _) in &DIRS[..count] {
-                if let Some(n) = self.step_legal(t, *dx, *dy, neighbors) {
+                if let Some(n) = self.route_step(t, *dx, *dy, neighbors, attacking_team) {
                     let i = self.idx(n);
                     if dist[i] == UNREACHABLE {
                         dist[i] = d + 1;

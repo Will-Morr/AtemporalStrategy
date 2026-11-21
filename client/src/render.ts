@@ -8,6 +8,15 @@ const FACING: Record<string, [number, number]> = { n: [0, -1], ne: [1, -1], e: [
 const OUTPUTS: CardinalDirection[] = ['n', 'e', 's', 'w'];
 const OFFSET: Record<CardinalDirection, [number, number]> = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] };
 
+// The projected parabola bends toward the top of the map. Its tangent at launch
+// is also the artillery barrel direction, including on nearly vertical shots.
+function artilleryControl(dx:number,dy:number): [number,number] {
+  const length=Math.hypot(dx,dy);
+  if(!length)return [0,0];
+  const bend=Math.min(2,length*.22)*(dx<0?-1:1)/length;
+  return [dx/2+dy*bend,dy/2-dx*bend];
+}
+
 /** Canvas map, minimap and timeline. Grayscale terrain; entities, ore and orders in color. */
 export class Renderer {
   pathPreviews = localStorage.getItem('atemporal-path-previews') !== 'false';
@@ -149,6 +158,9 @@ export class Renderer {
     return c;
   }
 
+  private gunAngles=new Map<string,number>();
+  private aimRevision=-1;
+  private aimTick=-1;
   private groupLabels = new Map<string,string>();
   draw(): void {
     this.groupLabels.clear();
@@ -192,6 +204,7 @@ export class Renderer {
     }
     const views = this.game.entities();
     const byIndex = new Map(views.filter(v => !v.remembered).map(v => [v.index, v]));
+    const shotAngles = new Map<string,number>();
     // Combat effects from events near the playhead (presentation only).
     const tick = this.game.playhead;
     for (const e of this.game.eventsNear(Math.floor(tick), 3)) {
@@ -205,7 +218,10 @@ export class Renderer {
         ctx.globalAlpha = Math.max(0, 1 - age / 3);
         ctx.beginPath();
         ctx.moveTo(ax, ay);
-        if (ev.visual_style === 'artillery') ctx.quadraticCurveTo((ax + bx) / 2, Math.min(ay, by) - s * 2, bx, by);
+        const dx=ev.target_tile.x-ev.source_tile.x,dy=ev.target_tile.y-ev.source_tile.y;
+        const [gx,gy]=ev.visual_style==='artillery'?artilleryControl(dx,dy):[dx,dy];
+        shotAngles.set(idKey(ev.attacker_id),Math.atan2(gy,gx)+Math.PI/2);
+        if (ev.visual_style === 'artillery') ctx.quadraticCurveTo(ax+gx*s,ay+gy*s,bx,by);
         else ctx.lineTo(bx, by);
         ctx.stroke();
         ctx.globalAlpha = 1;
@@ -221,12 +237,36 @@ export class Renderer {
         ctx.globalAlpha = 1;
       }
     }
+    const elapsed=this.game.playing && this.aimRevision===this.game.current ? tick-this.aimTick : -1;
+    this.aimRevision=this.game.current;
+    this.aimTick=tick;
+    const nextAngles=new Map<string,number>();
     // Entities.
     for (const v of views) {
       const [px,py]=this.screen(v.x,v.y);
       if(px+s<0 || py+s<this.headerHeight || px>width || py>height) continue;
-      this.drawEntity(ctx, v, s, byIndex);
+      let gunAngle: number | undefined;
+      if(!v.remembered && v.lifecycle==='complete' && ['tank','artillery','turret'].includes(v.type_key)){
+        const key=idKey(v.id), shot=shotAngles.get(key);
+        const target=v.engaged===null?undefined:byIndex.get(v.engaged);
+        const [fx,fy]=FACING[v.facing]??[0,-1];
+        let desired=Math.atan2(fy,fx)+Math.PI/2;
+        if(target){
+          const dx=target.x-v.x,dy=target.y-v.y;
+          const [gx,gy]=this.game.types.get(v.type_key)?.weapon?.visual_style==='artillery'?artilleryControl(dx,dy):[dx,dy];
+          desired=Math.atan2(gy,gx)+Math.PI/2;
+        }
+        const previous=this.gunAngles.get(key);
+        gunAngle=shot??desired;
+        if(shot===undefined && elapsed>=0 && elapsed<3 && previous!==undefined){
+          const turn=Math.atan2(Math.sin(desired-previous),Math.cos(desired-previous));
+          gunAngle=previous+Math.sign(turn)*Math.min(Math.abs(turn),elapsed*Math.PI/2);
+        }
+        nextAngles.set(key,gunAngle);
+      }
+      this.drawEntity(ctx, v, s, byIndex,gunAngle);
     }
+    this.gunAngles=nextAngles;
     const review = this.game.experience.review;
     if (review.active) review.update();
     ctx.save();
@@ -305,7 +345,7 @@ export class Renderer {
     this.drawTimeline();
   }
 
-  private drawEntity(ctx: CanvasRenderingContext2D, v: EntityView, s: number, byIndex: Map<number, EntityView>): void {
+  private drawEntity(ctx: CanvasRenderingContext2D, v: EntityView, s: number, byIndex: Map<number, EntityView>, gunAngle?: number): void {
     const def = this.game.types.get(v.type_key);
     const [px, py] = this.screen(v.x, v.y);
     const color = v.remembered ? '#96969d' : this.game.color(v.owner);
@@ -318,7 +358,9 @@ export class Renderer {
     ctx.save();
     ctx.translate(px+s/2,py+s/2);
     const [fx,fy]=FACING[v.facing] ?? [0,-1];
-    if (def?.kind !== 'structure') ctx.rotate(Math.atan2(fy,fx)+Math.PI/2);
+    const chassisAngle=def?.kind==='structure'?0:Math.atan2(fy,fx)+Math.PI/2;
+    ctx.rotate(chassisAngle);
+    const rotateGun=()=>ctx.rotate((gunAngle??chassisAngle)-chassisAngle);
     ctx.strokeStyle='#071019';ctx.lineWidth=Math.max(1,s*.06);
     const box = (x:number,y:number,w:number,h:number) => {ctx.fillRect(x*s,y*s,w*s,h*s);ctx.strokeRect(x*s,y*s,w*s,h*s);};
     const circle = (x:number,y:number,r:number) => {ctx.beginPath();ctx.arc(x*s,y*s,r*s,0,Math.PI*2);ctx.fill();ctx.stroke();};
@@ -326,21 +368,21 @@ export class Renderer {
     if (def?.kind === 'structure') {
       box(-.4,-.4,.8,.8);
       ctx.fillStyle='#d7efff';
-      if(v.type_key==='turret'){circle(0,0,.25);box(-.06,-.43,.12,.43);}
+      if(v.type_key==='turret'){rotateGun();circle(0,0,.25);box(-.06,-.43,.12,.43);}
       else if(v.type_key==='silo'){circle(-.18,0,.15);circle(.18,0,.15);ctx.strokeStyle='#34485c';ctx.beginPath();ctx.moveTo(-.18,-.15);ctx.lineTo(-.18,.15);ctx.moveTo(.18,-.15);ctx.lineTo(.18,.15);ctx.stroke();}
       else if(v.type_key==='factory'){box(-.25,-.23,.15,.3);box(.1,-.23,.15,.3);ctx.fillStyle='#071019';box(-.19,.17,.38,.23);}
       else {ctx.fillStyle='#ffffff55';box(-.36,-.04,.72,.08);}
     } else if(v.type_key==='scout') {triangle(.29,.4);ctx.fillStyle='#d7efff';triangle(.1,.2);}
     else if(v.type_key==='tank') {
       box(-.39,-.32,.18,.69);box(.21,-.32,.18,.69);box(-.24,-.29,.48,.6);
-      ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,-.39,.12,.43);
+      rotateGun();ctx.fillStyle='#d7efff';circle(0,0,.17);box(-.06,-.39,.12,.43);
     } else if(v.type_key==='artillery') {
       // Long exposed cannon on a narrow tracked carriage.
       const polygon=(points:[number,number][])=>{ctx.beginPath();points.forEach(([x,y],i)=>{if(i)ctx.lineTo(x*s,y*s);else ctx.moveTo(x*s,y*s);});ctx.closePath();ctx.fill();ctx.stroke();};
       box(-.38,-.12,.16,.53);box(.22,-.12,.16,.53);
       ctx.beginPath();for(const y of [.02,.16,.3]){ctx.moveTo(-.38*s,y*s);ctx.lineTo(-.22*s,y*s);ctx.moveTo(.22*s,y*s);ctx.lineTo(.38*s,y*s);}ctx.stroke();
       polygon([[0,-.22],[.23,-.04],[.18,.22],[-.18,.22],[-.23,-.04]]);
-      ctx.fillStyle='#d7efff';box(-.075,-.46,.15,.53);box(-.16,-.48,.32,.12);
+      rotateGun();ctx.fillStyle='#d7efff';box(-.075,-.46,.15,.53);box(-.16,-.48,.32,.12);
       ctx.fillStyle='#071019';ctx.fillRect(-.11*s,-.47*s,.22*s,.045*s);
     } else if(v.type_key==='constructor') {box(-.28,-.25,.56,.55);ctx.fillStyle='#ffe28a';box(-.36,-.42,.12,.35);box(.24,-.42,.12,.35);box(-.17,-.09,.34,.12);box(-.06,-.2,.12,.34);}
     else if(v.type_key==='miner') {box(-.34,-.26,.15,.56);box(.19,-.26,.15,.56);box(-.24,-.25,.48,.52);box(-.32,-.36,.64,.13);ctx.fillStyle='#e1d9b5';box(-.13,-.15,.26,.09);}
