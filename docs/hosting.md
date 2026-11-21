@@ -33,7 +33,7 @@ Two local `--resume` runs restored the saved slots, the exact tick-30 snapshot a
 
 ## Hourly game-log maintenance
 
-[`scripts/server-maintenance.py`](../scripts/server-maintenance.py) runs on the operator's machine, not the server, over root SSH. Each run:
+[`scripts/server-maintenance.py`](../scripts/server-maintenance.py) runs on the operator's machine over SSH. The remote account needs read and cleanup access to the game state and permission to remove release worktrees as the repository owner. Each run:
 
 1. Pulls `STATE/games` into a single local mirror (default `~/server-backups/personal-vps/games`) with rsync. Unchanged files are skipped and nothing is deleted from the mirror, so it holds one copy of every game ever played without repeated snapshots.
 2. Selects game folders that the directory marks expired (or no longer lists) and whose newest file is more than 24 hours old.
@@ -43,10 +43,14 @@ Two local `--resume` runs restored the saved slots, the exact tick-30 snapshot a
 
 A sync or verification failure stops the run before anything is deleted. Each run appends a JSON summary to `maintenance-runs.jsonl` beside the mirror. `--dry-run` syncs and verifies but deletes nothing. `scripts/check-server-maintenance.py` covers the sequence against local directories.
 
-The cron entry on the operator's machine:
+Use a dedicated SSH host alias for cron. Configure it for key-based OpenSSH on the VPS's private Tailscale address, with a pinned server host key, a dedicated identity file, `IdentitiesOnly yes` and `BatchMode yes`. Scope the server-side key to the operator machine's tailnet IP and disable forwarding and TTY allocation. Interactive Tailscale SSH can keep its existing sign-in policy. Both rsync and the cleanup commands use the alias passed with `--host`.
+
+Before switching cron, run the command below manually with `--dry-run` under the cron user's account with `SSH_AUTH_SOCK` unset. Check the newest JSON record for `ok: true`, `rsync_exit: 0`, and an empty `unverified` list. Preserve the existing mirror when changing the connection.
+
+Example hourly entry:
 
 ```cron
-17 * * * * /usr/bin/python3 -I /home/will/AtemporalStrategy/scripts/server-maintenance.py >> /home/will/server-backups/personal-vps/maintenance.log 2>&1
+17 * * * * /usr/bin/python3 -I /home/will/AtemporalStrategy/scripts/server-maintenance.py --host atemporal-backup >> /home/will/server-backups/personal-vps/maintenance.log 2>&1
 ```
 
 System journals and Caddy logs are not part of this job; their own rotation limits apply.

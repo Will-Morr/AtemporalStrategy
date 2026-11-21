@@ -68,6 +68,8 @@ Back up game logs before deleting them from the live server. The latest user ins
 >
 > We only care about game logs. Do not bloat this local drive with a million copies of the same unchanging folder. The game logs should include what commit the game was played on if they do not.
 
+The hourly sync must run unattended across interactive SSH session expirations.
+
 Only game logs (the server's game state folder) need a local copy, kept as a single incrementally updated mirror rather than repeated snapshots. Game logs older than 24 hours are deleted from the server only after their local copy is confirmed. Old builds are cleared without a backup. Each game log records the server commit it was played on. See [hosting maintenance](../docs/hosting.md#hourly-game-log-maintenance) and the [backup rule](../AGENTS.md#game-log-backup-before-live-server-cleanup).
 
 Review network-facing code for unintended code execution and similar host compromise, and fix and push concrete issues found. The user is not asking for anti-cheat protections; compromise of the trusted GitHub/repository update path is an accepted attack boundary. Keep the review and fixes appropriate to the small-server design.
