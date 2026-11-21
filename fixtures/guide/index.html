@@ -15,7 +15,7 @@ details{margin:32px 0;padding:20px;border:1px solid var(--line);border-radius:8p
 <body><main><aside class="doc-warning" aria-label="Documentation warning"><strong>Chatbot Docs Warning:</strong> Better than nothing but my apologies for the Claudelish</aside><a href="/">← Atemporal</a><header class="guide-heading">
 <h1>Game Docs</h1>
 </header>
-<nav aria-label="Guide contents"><a href="#main-actions">Main actions</a><a href="#ui">First turn</a><a href="#command-types">Commands</a><a href="#interface">Interface &amp; groups</a><a href="#unit-roles">Unit guide</a><a href="#units">Unit stats</a><a href="#full-rules">Detailed rules</a><a href="#patch-notes">Patch notes</a></nav>
+<nav aria-label="Guide contents"><a href="#main-actions">Main actions</a><a href="#ui">First turn</a><a href="#command-types">Commands</a><a href="#interface">Interface &amp; groups</a><a href="#unit-roles">Unit guide</a><a href="#units">Unit stats</a><a href="#full-rules">Detailed rules</a><a id="patch-notes" href="/patch-notes.html" target="_blank" rel="noopener">Patch notes</a></nav>
 <section aria-labelledby="main-actions">
 <h2 id="main-actions">The five main actions</h2>
 <p>Select your units and choose a time on the timeline before giving orders. These are the actions you will use most:</p>
@@ -185,42 +185,6 @@ details{margin:32px 0;padding:20px;border:1px solid var(--line);border-radius:8p
 <p>While the simulation runs, you can play or scrub the completed part of the new replay. The turquoise frontier marks the available ticks; the dark remainder is still being computed. Playback waits at that frontier and resumes as more ticks arrive. The result stays pending and orders remain closed until the full replay is verified. Refreshing rejoins the available preview, and final publication preserves the tick you are inspecting.</p>
 
 </details>
-
-<section id="patch-notes" aria-labelledby="patch-heading">
-<h2 id="patch-heading">Patch notes</h2>
-<article>
-<h3>November 21, 2026</h3>
-<ul>
-<li><strong>Missiles fire at one target per click.</strong> Hold Shift to keep choosing destinations. The silo queues any missing missiles. Shift-click a production button to build five.</li>
-<li>Deleting a building you just placed removes its draft order and frees the tile. Shared factory queues show a count for consecutive units with the same recipe and repeat setting.</li>
-<li>Attack-move can route through hostile buildings so armed units can destroy them. Turrets and artillery turn their barrels toward the target when firing.</li>
-<li>Gray silhouettes mark the last place your team saw a unit or building. Spectators and finished-game replays show the combined field of view of all players.</li>
-<li>Open <strong>Match review</strong> to see the color-coded result of each round. Click a round to jump to its replay. The playback controls stay in place when stepping back one tick.</li>
-</ul>
-</article>
-<article>
-<h3>November 18, 2026</h3>
-<ul>
-<li>Added patch notes</li>
-<li><strong>Start a new game to play the balance patch.</strong> Games already in progress on the previous public build keep their recorded unit stats and movement rules.</li>
-<li><strong>Artillery costs 120 matter, up from 80.</strong> A factory with 6 matter of income per tick now needs 20 ticks of income to pay for one gun. Its range is still 10 tiles.</li>
-<li><strong>Grinders move one tile every tick, up from one every two ticks.</strong> They cost 110 matter, up from 100, and keep their 275 HP. They can close on artillery quickly, especially when guns arrive one at a time from a factory.</li>
-<li><strong>Grunt damage per shot dropped from 8 to 3.</strong> Each grunt still costs 15 matter and can fire every three ticks.</li>
-<li><strong>Tanks move one tile every six ticks, down from one every four.</strong> That matches artillery speed. Grunts still move every two ticks.</li>
-<li><strong>Artillery now retreats automatically.</strong> A gun fires first if it has a shot ready. When a spotted enemy unit is closer than eight tiles, it tries to move away from danger and avoid dead ends.</li>
-<li><strong>Map shape changes which production queue wins the most matchups.</strong> At 3 matter per tick in our mirrored factory tests, pure grunts beat 12 of 14 opposing rosters on open ground and at the choke. Artillery + grunt led the straight corridor with 11. On the winding corridor, grinder and grinder + tank tied with 10 each.</li>
-<li><strong>Factory queues respond faster to repeated deletions.</strong> Removing units from several selected factories updates the queues together. If browser storage fills up, you can keep editing and commit from the open tab.</li>
-<li><strong>Preview movement before committing.</strong> Cyan dots trace tread routes and gold dots trace walker routes. Red corners mark the destination tile. Tanks and artillery alternate horizontal and vertical steps when equally short routes allow it. Artillery has a new field-gun silhouette on the map and in the production queue.</li>
-<li><strong>Quick play now uses Tactical 2.0.</strong> The new bot keeps workers in production while separate factories send fighters and artillery forward. It spreads out its bases and sends search parties after surviving enemies. It remembers previous sightings through fog and uses observed troop movement to infer where to scout and aim missiles. You can still choose Standard 1.0 in the game directory.</li>
-<li><strong>Artillery can spot enemies from 8 tiles away, up from 5.</strong> Its guns reach 10 tiles. Ground units now see around corners only as far as their vision allows. Walls block direct sight, and previously seen buildings and units appear gray when you lose sight of their tiles.</li>
-<li><strong>Default matches are first to 3 points, down from 5.</strong> You can still choose a different target when setting up a game.</li>
-<li><strong>Try a different move in a recorded game.</strong> Pick a timeline and tick, choose “Practice as,” then “Play this timeline.” Your opponent follows their recorded plan while you try new orders in a private copy. The original result stays intact.</li>
-<li><strong>Inspect earlier timelines.</strong> Turn on the overlay to see orders and events at each tick. Spectators and players reviewing a finished game can inspect both sides’ orders and factory queues.</li>
-<li><strong>Revise a plan in fewer clicks.</strong> “Select all matching” expands your selection to matching unit and building types. “Clear all future orders” stages a reset after the selected tick. You can undo it before committing. When another player is waiting for you, choose Minimize to collapse the banner into a corner. Click Player waiting to reopen it.</li>
-<li><strong>Queue missile salvos.</strong> Shift-click each destination to keep adding launches. If a silo would run out of that missile, it queues production to supply the launches.</li>
-</ul>
-</article>
-</section>
 
 
 <footer><details><summary>Game content identifier</summary><code>ca69ad9d1da84e07ee9f7390a5765bda5412e2ac6b4923b0bce29459581b1a75</code></details></footer></main></body></html>

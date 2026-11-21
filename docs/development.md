@@ -102,4 +102,4 @@ Enable `--test-server` on the local port-8080 development preview after updates.
 
 ## Publishing patch notes
 
-For a major release, add a dated entry to the patch notes section in `client/guide/introduction.html`. Both the home page and Game info link to its stable `#patch-notes` anchor. Collect smaller changes for the next major entry. Individual commits do not need a release note.
+Add player-facing entries to `client/patch-notes.html`, newest first. Give each entry a small heading with the short hash linked to the full GitHub commit URL, and the commit date. Group changes from the same commit together. Publish after the referenced commit exists so links resolve. The home page, Game Docs and in-game information open this page in a separate browsing context. Minor commits can be covered with the next release.

@@ -50,11 +50,24 @@ test('landing page starts a default bot match with one click and retains the pla
 test('landing navigation, content-backed explainer and retry after creation failure',async({page,review},testInfo)=>{
   const server=await isolatedServer(testInfo,small,content=>{content.types.find(t=>t.key==='miner').max_hp=137;},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url);
-  await page.getByRole('link',{name:'Patch notes',exact:true}).first().click();
-  await expect(page.locator('#patch-notes article h3').first()).toHaveText('November 21, 2026');
-  await expect(page.locator('#patch-notes')).toContainText('Tactical 2.0');
-  await expect(page.locator('#patch-notes')).toContainText('8 tiles away, up from 5');
-  await page.goBack();
+  const popup=page.waitForEvent('popup');
+  await page.getByRole('link',{name:'Patch notes',exact:true}).click();
+  const notes=await popup;
+  await expect(notes).toHaveURL(server.url+'patch-notes.html');
+  await expect(page).toHaveURL(server.url);
+  const commits=notes.locator('article h2 a');
+  await expect(commits.first()).toHaveText(/^[a-f0-9]{7,12}$/);
+  for(const link of await commits.all()){
+    const hash=await link.textContent();
+    expect(await link.getAttribute('href')).toMatch(new RegExp('^https://github\\.com/Will-Morr/AtemporalStrategy/commit/'+hash+'[a-f0-9]{'+(40-hash.length)+'}$'));
+  }
+  await expect(notes.locator('main')).toContainText('Tactical 2.0');
+  await expect(notes.locator('main')).toContainText('8 tiles away, up from 5');
+  await review.capture('patch-notes-commit-stack',notes);
+  await notes.setViewportSize({width:390,height:844});
+  expect(await notes.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await notes.screenshot({path:testInfo.outputPath('patch-notes-mobile.png')});
+  await notes.close();
   await page.getByRole('link',{name:'Game Docs',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Game Docs',exact:true})).toBeVisible();
   await expect(page.locator('.doc-warning')).toHaveText('Chatbot Docs Warning: Better than nothing but my apologies for the Claudelish');

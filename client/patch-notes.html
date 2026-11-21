@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Patch notes · Atemporal</title>
+<style>
+:root{color-scheme:dark;background:#0e141c;color:#edf4fa;font:16px/1.55 system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0}main{width:min(100%,760px);margin:auto;padding:48px 24px 72px}
+a{color:#86dcff;text-underline-offset:.2em}a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
+h1{font-size:clamp(2rem,6vw,2.8rem);margin:12px 0 28px;line-height:1.15}
+article{padding:20px 0;border-top:1px solid #344456}article header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+h2{font:600 .93rem/1.4 ui-monospace,monospace;margin:0}time{font-size:.85rem;color:#a0afbd}
+ul{margin:10px 0 0;padding-left:1.2em}li+li{margin-top:6px}li:only-child{list-style:none;margin-left:-1.2em}
+@media(max-width:480px){main{padding:28px 18px 48px}}
+</style></head><body><main id="patch-notes">
+<a href="/">← Atemporal</a>
+<h1>Patch notes</h1>
+<article id="commit-3dda96a">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/3dda96a9933123ad4bf861062481ff55e26b7928">3dda96a</a></h2><time datetime="2026-11-21">November 21, 2026</time></header>
+<ul>
+<li>Join open lobbies and running games under <strong>Lobbies</strong>. Open <strong>Replays</strong> to review the five latest completed matches across all players. Incomplete games close after 24 hours without activity.</li>
+</ul>
+</article>
+<article id="commit-c23a938">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/c23a938391f6eaa9a0e431542c66296c6afd6410">c23a938</a></h2><time datetime="2026-11-21">November 21, 2026</time></header>
+<ul>
+<li><strong>Missiles fire at one target per click.</strong> Hold Shift to keep choosing destinations. The silo queues any missing missiles. Shift-click a production button to build five.</li>
+<li>Deleting a building you just placed removes its draft order and frees the tile. Shared factory queues show a count for consecutive units with the same recipe and repeat setting.</li>
+</ul>
+</article>
+<article id="commit-a84673a">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/a84673adbfca7281f8cd272cba207bdf00ebce47">a84673a</a></h2><time datetime="2026-11-21">November 21, 2026</time></header>
+<ul>
+<li>Attack-move can route through hostile buildings so armed units can destroy them. Turrets and artillery turn their barrels toward the target when firing.</li>
+</ul>
+</article>
+<article id="commit-4efcbe2">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/4efcbe2319554bbde82ae76c75d30c7b66e4f3b1">4efcbe2</a></h2><time datetime="2026-11-21">November 21, 2026</time></header>
+<ul>
+<li>Gray silhouettes mark the last place your team saw a unit or building. Spectators and finished-game replays show the combined field of view of all players.</li>
+</ul>
+</article>
+<article id="commit-f41c71d">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/f41c71d6531f90120d868205d514b97737d73f2e">f41c71d</a></h2><time datetime="2026-11-21">November 21, 2026</time></header>
+<ul>
+<li>Open <strong>Match review</strong> to see the color-coded result of each round. Click a round to jump to its replay. The playback controls stay in place when stepping back one tick.</li>
+</ul>
+</article>
+<article id="commit-cef34e5">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/cef34e56c37486e1f1cf0aebaccf588ff4bc68c6">cef34e5</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Start a new game to play the balance patch.</strong> Games already in progress on the previous public build keep their recorded unit stats and movement rules.</li>
+</ul>
+</article>
+<article id="commit-727b77a">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/727b77a52dd58c4ff69f96b67fa669be04a61a55">727b77a</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Map shape changes which production queue wins the most matchups.</strong> At 3 matter per tick in our mirrored factory tests, pure grunts beat 12 of 14 opposing rosters on open ground and at the choke. Artillery + grunt led the straight corridor with 11. On the winding corridor, grinder and grinder + tank tied with 10 each.</li>
+</ul>
+</article>
+<article id="commit-b625462">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/b625462f41bd3e3abec41af35ac987860986562e">b625462</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Artillery costs 120 matter, up from 80.</strong> A factory with 6 matter of income per tick now needs 20 ticks of income to pay for one gun. Its range is still 10 tiles.</li>
+<li><strong>Grinders move one tile every tick, up from one every two ticks.</strong> They cost 110 matter, up from 100, and keep their 275 HP. They can close on artillery quickly, especially when guns arrive one at a time from a factory.</li>
+</ul>
+</article>
+<article id="commit-3ee6425">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/3ee642589126b4f3c60a4eca268c2ad0651c0ef5">3ee6425</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Factory queues respond faster to repeated deletions.</strong> Removing units from several selected factories updates the queues together. If browser storage fills up, you can keep editing and commit from the open tab.</li>
+</ul>
+</article>
+<article id="commit-9133803">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/91338031373150d44801604fd543b2e9b27bd186">9133803</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Tanks move one tile every six ticks, down from one every four.</strong> That matches artillery speed. Grunts still move every two ticks.</li>
+</ul>
+</article>
+<article id="commit-47b1d4d">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/47b1d4d45f7082714dba7dfbb9d05d5a42203bfb">47b1d4d</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Grunt damage per shot dropped from 8 to 3.</strong> Each grunt still costs 15 matter and can fire every three ticks.</li>
+</ul>
+</article>
+<article id="commit-20fbbdb">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/20fbbdb9fb9c0737a91c5bf4915b347fa10af1ad">20fbbdb</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li>When another player is waiting for you, choose <strong>Minimize</strong> to collapse the banner into a corner. Click <strong>Player waiting</strong> to reopen it.</li>
+</ul>
+</article>
+<article id="commit-33e21cd">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/33e21cdaa7aa5d2907363848f556f527edae40b2">33e21cd</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li><strong>Artillery now retreats automatically.</strong> A gun fires first if it has a shot ready. When a spotted enemy unit is closer than eight tiles, it tries to move away from danger and avoid dead ends.</li>
+</ul>
+</article>
+<article id="commit-f30f70f">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/f30f70f14c058b8f50e3394bfa43c2ccf069944a">f30f70f</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li>Tactical 2.0 remembers previous sightings through fog and uses observed troop movement to infer where to scout and aim missiles.</li>
+</ul>
+</article>
+<article id="commit-85402ff">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/85402ffc27ac192b5fe849da7019b595abbfe9e6">85402ff</a></h2><time datetime="2026-11-18">November 18, 2026</time></header>
+<ul>
+<li>Added patch notes</li>
+<li><strong>Quick play now uses Tactical 2.0.</strong> The new bot keeps workers in production while separate factories send fighters and artillery forward. It spreads out its bases and sends search parties after surviving enemies. You can still choose Standard 1.0 in the game directory.</li>
+<li><strong>Artillery can spot enemies from 8 tiles away, up from 5.</strong> Its guns reach 10 tiles. Ground units now see around corners only as far as their vision allows. Walls block direct sight, and previously seen buildings and units appear gray when you lose sight of their tiles.</li>
+<li><strong>Default matches are first to 3 points, down from 5.</strong> You can still choose a different target when setting up a game.</li>
+<li><strong>Try a different move in a recorded game.</strong> Pick a timeline and tick, choose “Practice as,” then “Play this timeline.” Your opponent follows their recorded plan while you try new orders in a private copy. The original result stays intact.</li>
+<li><strong>Inspect earlier timelines.</strong> Turn on the overlay to see orders and events at each tick. Spectators and players reviewing a finished game can inspect both sides’ orders and factory queues.</li>
+<li><strong>Revise a plan in fewer clicks.</strong> “Select all matching” expands your selection to matching unit and building types. “Clear all future orders” stages a reset after the selected tick. You can undo it before committing.</li>
+<li><strong>Queue missile salvos.</strong> Shift-click each destination to keep adding launches. If a silo would run out of that missile, it queues production to supply the launches.</li>
+</ul>
+</article>
+<article id="commit-4ee45bb">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/4ee45bb0d6bff1a9be70c9a148631acca96cb3ef">4ee45bb</a></h2><time datetime="2026-11-14">November 14, 2026</time></header>
+<ul>
+<li><strong>Preview movement before committing.</strong> Cyan dots trace tread routes and gold dots trace walker routes.</li>
+</ul>
+</article>
+<article id="commit-1bf4846">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/1bf4846caba110f151800ea8dc0175a2fbd39cdf">1bf4846</a></h2><time datetime="2026-11-14">November 14, 2026</time></header>
+<ul>
+<li>Red corners mark the destination tile. Tanks and artillery alternate horizontal and vertical steps when equally short routes allow it.</li>
+</ul>
+</article>
+<article id="commit-f4f6f50">
+<header><h2><a href="https://github.com/Will-Morr/AtemporalStrategy/commit/f4f6f503102a8f5c5b376222e2d0148822fb4cd4">f4f6f50</a></h2><time datetime="2026-11-14">November 14, 2026</time></header>
+<ul>
+<li>Artillery has a new field-gun silhouette on the map and in the production queue.</li>
+</ul>
+</article>
+</main></body></html>

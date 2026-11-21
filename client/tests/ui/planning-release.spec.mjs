@@ -23,7 +23,8 @@ test('a silo supplies a single targeted launch and a staged reset preserves its 
   const popup=a.waitForEvent('popup');
   await a.getByRole('link',{name:'Patch notes'}).click();
   const notes=await popup;
-  await expect(notes.locator('#patch-notes article h3').first()).toHaveText('November 21, 2026');
+  await expect(notes).toHaveURL(/\/patch-notes\.html$/);
+  await expect(notes.locator('article h2 a').first()).toHaveText(/^[a-f0-9]{7,12}$/);
   await notes.screenshot({path:testInfo.outputPath('game-info-patch-notes.png'),timeout:15000});await notes.close();
   await a.getByText('Game info',{exact:true}).click();
   await a.setViewportSize({width:1920,height:1080});

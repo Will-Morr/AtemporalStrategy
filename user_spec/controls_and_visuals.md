@@ -134,7 +134,7 @@ Keep artillery’s distinct long gun/turret from the design pass, but make its b
 - Add a button to expand a selection to all matching unit and building types. Show a prominent signal when another player has committed and is waiting for the viewer. Let the viewer minimize this notice to a small corner box and reopen it, including in bot games.
 - Let players stage a reset of all their future orders from the chosen tick. It takes effect on commit and supports draft undo.
 - Only Shift-clicking a build button produces five items. Each missile target click adds one launch. Holding Shift keeps targeting active for further clicks, including repeated clicks on the same destination. Append missing missiles to the production queue when available supply cannot fulfill the firing queue.
-- Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Include the substantial gameplay and balance changes in the November 18 entry. Publication is optional per commit. Roll minor changes into the next major release.
+- Link patch notes from the main page and in-game information. The first entry reads “Added patch notes”. Preserve the substantial November 18 gameplay and balance notes. Open patch notes in their own window or tab, in a stack with small Git hash headings that link to the corresponding commits. Publication is optional per commit. Roll minor changes into the next major release.
 
 ## Timeline inspection and practice
 

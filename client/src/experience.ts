@@ -61,7 +61,7 @@ export class Experience {
     planning.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
     const guide = document.createElement('a'); guide.href = guideUrl; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
     const info=document.createElement('details');info.id='game-info';const infoTitle=document.createElement('summary');infoTitle.textContent='Game info';info.append(infoTitle);
-    const patch=document.createElement('a');patch.href=guideUrl+'#patch-notes';patch.target='_blank';patch.rel='noopener';patch.textContent='Patch notes ↗';info.append(patch);
+    const patch=document.createElement('a');patch.href='/patch-notes.html';patch.target='_blank';patch.rel='noopener';patch.textContent='Patch notes ↗';info.append(patch);
     $('top').append(info);
     const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
     planning.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
