@@ -250,7 +250,7 @@ export class Renderer {
         const key=idKey(v.id), shot=shotAngles.get(key);
         const target=v.engaged===null?undefined:byIndex.get(v.engaged);
         const [fx,fy]=FACING[v.facing]??[0,-1];
-        let desired=Math.atan2(fy,fx)+Math.PI/2;
+        let desired=v.type_key==='turret'?0:Math.atan2(fy,fx)+Math.PI/2;
         if(target){
           const dx=target.x-v.x,dy=target.y-v.y;
           const [gx,gy]=this.game.types.get(v.type_key)?.weapon?.visual_style==='artillery'?artilleryControl(dx,dy):[dx,dy];
