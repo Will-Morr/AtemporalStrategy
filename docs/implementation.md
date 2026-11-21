@@ -12,7 +12,7 @@ Execute and verify in this order. Details: [hosting](hosting.md).
 2. [x] Consolidate user requirements and establish this ordered checklist.
 3. [x] Implement a simple automatic `main` updater that waits for idle games.
 4. [x] Hide games without connected human players and add Show inactive games.
-5. [x] Expire games after six hours without activity; deny viewing and stop workers.
+5. [x] Archive incomplete games after 24 hours without activity and retain the five latest completed matches for replay.
 6. [x] Preserve recent completed games as spectator replays until expiry.
 7. [x] Run server and real-browser checks, inspect screenshots, document hosting, commit and push.
 

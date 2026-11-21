@@ -89,6 +89,33 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(self.run_tool(), 0)
         self.assertTrue((self.dest / 'game-old/setup.json').exists())
 
+    def test_five_completions_rank_across_games_and_rematches(self):
+        directory = json.loads((self.games / 'directory.json').read_text())
+        for i in range(8):
+            # The two newest completions share one lobby. The newest unfinished match
+            # cannot displace an older win. Start order is the reverse of finish order.
+            name = f'game-ranked-{min(i, 6)}'
+            directory['games'][name] = {'expired': True}
+            root = self.games / name / 'replays' / f'match-{8-i}'
+            root.mkdir(parents=True)
+            (root / 'manifest.json').write_text('{}')
+            (root / 'rounds').mkdir()
+            last = root / 'rounds/10.json'
+            last.write_text(json.dumps({'score': {'match_winners': [0] if i else []}}))
+            if i % 2:
+                (root / 'completed.json').write_text(str(i * 1000))
+            os.utime(last, (i, i))
+        for root in self.games.glob('game-ranked-*'):
+            age(root, 3 * DAY)
+            for last in root.glob('replays/*/rounds/10.json'):
+                i = 8 - int(last.parent.parent.name.split('-')[1])
+                os.utime(last, (i, i))
+        (self.games / 'directory.json').write_text(json.dumps(directory))
+        self.assertEqual(self.run_tool(), 0)
+        self.assertEqual(sorted(p.name for p in self.games.glob('game-ranked-*')),
+                         [f'game-ranked-{i}' for i in (3, 4, 5, 6)])
+        self.assertTrue((self.dest / 'game-ranked-2/replays/match-6/manifest.json').is_file())
+
     def test_dry_run_deletes_nothing(self):
         self.assertEqual(self.run_tool('--dry-run'), 0)
         self.assertTrue((self.games / 'game-old').exists())
@@ -100,9 +127,9 @@ class MaintenanceTests(unittest.TestCase):
         bad = self.dest / 'game-old/replays/match-1/results/7/events.json'
         bad.write_text('X' * len(bad.read_text()))  # same size, different bytes
         with patch.object(m, 'sync', return_value=0):
-            self.assertEqual(self.run_tool(), 0)
+            self.assertEqual(self.run_tool(), 1)
         self.assertTrue((self.games / 'game-old/replays/match-1/results/7/events.json').exists())
-        self.assertFalse((self.games / 'game-orphan').exists())
+        self.assertTrue((self.games / 'game-orphan').exists())
         run = json.loads((self.dest.parent / 'maintenance-runs.jsonl').read_text().splitlines()[-1])
         self.assertEqual(run['unverified'], ['game-old'])
 
@@ -116,7 +143,7 @@ class MaintenanceTests(unittest.TestCase):
         with patch.object(m, 'on_server', side_effect=delayed):
             self.assertEqual(self.run_tool(), 0)
         self.assertEqual((self.games / 'game-old/setup.json').read_text(), '{"late": true}')
-        self.assertFalse((self.games / 'game-old/replays').exists())
+        self.assertTrue((self.games / 'game-old/replays').exists())
 
     def test_sync_failure_deletes_nothing(self):
         with patch.object(m, 'rsync_source', return_value='/nonexistent/games/'):

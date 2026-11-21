@@ -51,14 +51,16 @@ async function boot(): Promise<void> {
   if (location.pathname.startsWith('/games/')) {
     (document.getElementById('guide-link') as HTMLAnchorElement).href=`${location.pathname.match(/^\/games\/[^/]+/)![0]}/guide/`;
     for (const parent of [document.getElementById('lobby'),document.getElementById('top')]) {
-      const link=document.createElement('a');link.href='/lobbies/';link.textContent='All games';link.style.pointerEvents='auto';parent?.prepend(link);
+      const link=document.createElement('a');link.href=location.pathname.includes('/replays/')?'/replays/':'/lobbies/';link.textContent=location.pathname.includes('/replays/')?'Replays':'All games';link.style.pointerEvents='auto';parent?.prepend(link);
     }
     const identity=await fetch('/api/directory').then(r=>r.json());
-    if(identity.user===null){location.replace(`/lobbies/?join=${encodeURIComponent(location.pathname)}`);return;}
-    (document.getElementById('username') as HTMLInputElement).value=identity.user;
+    const replayPath=location.pathname.includes('/replays/');
+    if(identity.user===null && !replayPath){location.replace(`/lobbies/?join=${encodeURIComponent(location.pathname)}`);return;}
+    (document.getElementById('username') as HTMLInputElement).value=identity.user??'';
     document.getElementById('username')!.closest('label')!.hidden=true;
     const entry=identity.games.find((g:{id:string})=>g.id===location.pathname.split('/')[2]);
-    if(entry){document.body.dataset.gameName=entry.name;document.querySelector('#lobby h1')!.textContent=entry.name;}
+    const name=entry?.name??identity.replays?.find((r:{game:string})=>r.game===location.pathname.split('/')[2])?.name;
+    if(name){document.body.dataset.gameName=name;document.querySelector('#lobby h1')!.textContent=name;}
     document.body.dataset.botOnly=String(!!entry?.bots?.length && entry.bots.every((bot:unknown)=>bot!==null));
     if(!practice && location.pathname.includes('/replays/')) sessionStorage.removeItem(slotStorageKey);
   }

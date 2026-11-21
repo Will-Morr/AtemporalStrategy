@@ -2,9 +2,49 @@ import type {Setup, LobbySlot} from './contracts.generated';
 import {setFingerprint} from './session';
 setFingerprint();
 type Style='standard'|'tactical';
-interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}};replays:string[]}
-interface Directory {games:Entry[];user:string|null;defaults:Setup;default_bot:Style}
+interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}}}
+interface Replay {id:string; game:string; name:string; time:number; finished:boolean; locked:boolean; players:string[]}
+interface Directory {games:Entry[];replays:Replay[];user:string|null;defaults:Setup;default_bot:Style}
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
+const reviewing = location.pathname === '/replays/';
+document.querySelector(`.directory-nav a[href="${location.pathname}"]`)?.setAttribute('aria-current','page');
+if (reviewing) {
+  document.title = 'Atemporal Strategy · Replays';
+  $('page-title').textContent = 'Replays';
+  $('lobby-tools').hidden = true;
+  $('lobby-help').hidden = true;
+  $('games').setAttribute('aria-label','Replays');
+}
+function showReplays(list:HTMLElement):void {
+  for (const replay of directory.replays) {
+    const card=document.createElement('article');
+    card.className='card';
+    const body=document.createElement('div');
+    const badge=document.createElement('span');
+    badge.className='badge';
+    badge.textContent=replay.finished?'Completed':'Archived';
+    const title=document.createElement('h3');
+    title.textContent=replay.name;
+    const info=document.createElement('p');
+    info.textContent=new Date(replay.time).toLocaleString()+(replay.locked?' · Password required':'');
+    const link=document.createElement('a');
+    link.className='button';
+    link.href=`/games/${replay.game}/replays/${replay.id}/`;
+    link.textContent='View replay';
+    const roster=document.createElement('p');
+    roster.className='players';
+    roster.textContent=replay.players.join(' · ');
+    body.append(badge,title,roster,info);
+    card.append(body,link);
+    list.append(card);
+  }
+  if (!directory.replays.length) {
+    const empty=document.createElement('div');
+    empty.className='empty';
+    empty.textContent='No replays available yet.';
+    list.append(empty);
+  }
+}
 let directory:Directory;
 let advancedDirty=false;
 let initialized=false;
@@ -13,16 +53,16 @@ async function api(path:string,body?:unknown):Promise<any>{const response=await 
 function render():void {
   const filter=$<HTMLSelectElement>('filter').value,mine=$<HTMLInputElement>('mine').checked;
   const list=$('games');list.replaceChildren();
-  const games=[...directory.games].sort((a,b)=>b.created-a.created).filter(g=>(g.active_players>0||$<HTMLInputElement>('inactive').checked||filter==='recent')&&(!mine||g.mine)&&(filter==='all'||filter==='open'&&g.status.phase==='lobby'||filter==='active'&&['planning','simulating'].includes(g.status.phase)||filter==='recent'&&g.replays.length));
+  if (reviewing) { showReplays(list); return; }
+  const games=[...directory.games].sort((a,b)=>b.created-a.created).filter(g=>!['archived','finished'].includes(g.status.phase)&&(g.active_players>0||$<HTMLInputElement>('inactive').checked)&&(!mine||g.mine)&&(filter==='all'||filter==='open'&&g.status.phase==='lobby'||filter==='active'&&['planning','simulating'].includes(g.status.phase)));
   for(const game of games){
     const card=document.createElement('article');card.className='card';card.dataset.game=game.id;
-    const body=document.createElement('div'),badge=document.createElement('span');badge.className='badge';badge.textContent=game.status.phase==='lobby'?'Open lobby':game.status.phase==='archived'?'Archived':game.status.phase==='finished'?'Finished':'Active';
+    const body=document.createElement('div'),badge=document.createElement('span');badge.className='badge';badge.textContent=game.status.phase==='lobby'?'Open lobby':'Active';
     const title=document.createElement('h3');title.textContent=game.name;body.append(badge,title);
     const info=document.createElement('p');info.textContent=`${game.players} players · ${(game.status.objective?.kind==='simple_win'?'Simple win':game.status.objective?.kind)??'Preparing'}${game.status.round?` · Round ${game.status.round}`:''}${game.status.round&&game.status.last_activity_ms?` · Last turn ${new Date(game.status.last_activity_ms).toLocaleString()}`:''}${game.locked?' · Password required':''}${game.mine?' · Your game':''}`;
     const roster=document.createElement('p');roster.className='players';roster.textContent=game.status.slots?.map(s=>s.profile?.username??`Slot ${s.slot}: open`).join(' · ')??'Preparing lobby…';body.append(info,roster);
-    const link=document.createElement('a');link.className='button';link.href=`/games/${game.id}/`;link.textContent=game.status.phase==='lobby'?'Enter lobby':['finished','archived'].includes(game.status.phase)?'View game':'Watch / rejoin';
+    const link=document.createElement('a');link.className='button';link.href=`/games/${game.id}/`;link.textContent=game.status.phase==='lobby'?'Enter lobby':'Watch / rejoin';
     card.append(body,link);
-    if(game.replays.length){const replays=document.createElement('details');replays.className='replays';replays.open=filter==='recent';const summary=document.createElement('summary');summary.textContent=`Recent replays (${game.replays.length})`;replays.append(summary);for(const id of game.replays){const a=document.createElement('a');a.href=`/games/${game.id}/replays/${id}/`;const stamp=Number(id.split('-')[1]);a.textContent=Number.isFinite(stamp)?`Replay · ${new Date(stamp).toLocaleString()}`:`Replay ${id}`;a.title=id;replays.append(a);}card.append(replays);}
     list.append(card);
   }
   if(!games.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=filter==='all'?'No active games. Create a lobby or show inactive games.':'No games match these filters.';list.append(empty);}
@@ -53,7 +93,7 @@ function slots():void {
 $('new-game').onclick=()=>{advancedDirty=false;slots();syncSetup();$('create-error').textContent='';$<HTMLDialogElement>('create').showModal();};
 $('cancel-create').onclick=()=>$<HTMLDialogElement>('create').close();
 $('profile').onclick=()=>{$<HTMLInputElement>('user-name').value=directory.user??'';$<HTMLDialogElement>('identity').showModal();};
-$('identity').addEventListener('cancel',e=>{if(directory.user===null)e.preventDefault();});
+$('identity').addEventListener('cancel',e=>{if(directory.user===null && !reviewing)e.preventDefault();});
 $('identity-form').onsubmit=async e=>{e.preventDefault();try{const username=$<HTMLInputElement>('user-name').value;await api('/api/identity',{username});localStorage.setItem('atemporal-username',username);$<HTMLDialogElement>('identity').close();await refresh();continueToGame();}catch(e){$('identity-error').textContent=(e as Error).message;}};
 for(const id of ['objective','player-count','sides','control','map-size','symmetric'])$(id).onchange=()=>{if(id==='player-count'){if($<HTMLSelectElement>('player-count').value==='3')$<HTMLSelectElement>('symmetric').value='false';slots();}syncSetup();};
 $('all-bots').onchange=slots;
@@ -68,5 +108,5 @@ $('create-form').onsubmit=async e=>{
   }catch(e){$('create-error').textContent=(e as Error).message;submit.disabled=false;}
 };
 $('inactive').onchange=render;$('filter').onchange=render;$('mine').onchange=render;$('refresh').onclick=()=>void refresh();
-void refresh().then(()=>{if(directory?.user===null){$<HTMLInputElement>('user-name').value=localStorage.getItem('atemporal-username')??'';$<HTMLDialogElement>('identity').showModal();}else if(directory)continueToGame();});
+void refresh().then(()=>{if(directory?.user===null && !reviewing){$<HTMLInputElement>('user-name').value=localStorage.getItem('atemporal-username')??'';$<HTMLDialogElement>('identity').showModal();}else if(directory)continueToGame();});
 setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]'))void refresh();},4000);

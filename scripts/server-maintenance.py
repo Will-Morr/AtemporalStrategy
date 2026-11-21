@@ -29,6 +29,34 @@ SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', '-o', 'ServerAli
 
 # ---- Runs on the server (shipped over ssh as source; stdlib only). ---------------------------
 
+def protected_games(games, listed):
+    """Rank completed matches, including rematches and logs from pre-marker servers."""
+    completed = []
+    for match in games.glob('game-*/replays/*'):
+        if not (match / 'manifest.json').is_file():
+            continue
+        marker = match / 'completed.json'
+        if marker.exists():
+            finished = json.loads(marker.read_text())
+            if type(finished) is not int or finished < 0:
+                raise ValueError(f'invalid completion timestamp in {marker}')
+        else:
+            rounds = (p for p in (match / 'rounds').glob('*.json') if p.stem.isascii() and p.stem.isdecimal())
+            last = max(rounds, key=lambda p: int(p.stem), default=None)
+            if last is None:
+                continue
+            data = json.loads(last.read_text())
+            if not any((data.get(field) or {}).get('match_winners') for field in ('score', 'timed')):
+                continue
+            finished = last.stat().st_mtime_ns // 1_000_000
+        completed.append((finished, match.parent.parent.name, match.name))
+    completed.sort(reverse=True)
+    # Also preserve the five the directory can serve if an orphan log is present.
+    visible = (r for r in completed if r[1] in listed)
+    from itertools import islice
+    return {game for _, game, _ in completed[:5] + list(islice(visible, 5))}
+
+
 def remote_plan(cfg):
     games = Path(cfg['state']) / 'games'
     cutoff = time.time() - cfg['max_age_hours'] * 3600
@@ -36,9 +64,12 @@ def remote_plan(cfg):
         listed = json.loads((games / 'directory.json').read_text()).get('games', {})
     except FileNotFoundError:
         listed = {}
+    protected = protected_games(games, listed)
     folders = []
     for entry in sorted(games.iterdir()):
         if not entry.name.startswith('game-') or not entry.is_dir() or entry.is_symlink():
+            continue
+        if entry.name in protected:
             continue
         record = listed.get(entry.name)
         if record is not None and not record.get('expired'):
@@ -61,7 +92,7 @@ def remote_plan(cfg):
     keep = {current, ready[-1].name if ready else None}
     remove = [r.name for r in ready if r.name not in keep] if current else []
     st = os.statvfs(games)
-    return {'folders': folders, 'releases': remove, 'current': current,
+    return {'protected_games': sorted(protected), 'folders': folders, 'releases': remove, 'current': current,
             'free_bytes': st.f_bavail * st.f_frsize}
 
 
@@ -70,7 +101,12 @@ def remote_delete(cfg, payload):
     import shutil
     games = Path(cfg['state']) / 'games'
     freed, deleted, kept = 0, [], []
+    # Recheck eligibility before deleting: another match may have finished since verification.
+    eligible = {folder['name'] for folder in remote_plan(cfg)['folders']}
     for folder in payload['folders']:
+        if folder['name'] not in eligible:
+            kept.append(folder['name'])
+            continue
         root = games / folder['name']
         changed = 0
         for rel, size, mtime_ns in folder['files']:
@@ -160,8 +196,7 @@ def rsync(args, extra):
 def sync(args):
     args.dest.mkdir(parents=True, exist_ok=True)
     result = rsync(args, ['--stats'])
-    # 24: files vanished during transfer, normal on a live server; anything else is a failure.
-    if result.returncode not in (0, 24):
+    if result.returncode != 0:
         raise RuntimeError(f'rsync exited {result.returncode}: {result.stderr.strip()[-2000:]}')
     return result.returncode
 
@@ -225,6 +260,9 @@ def main(argv=None):
         record['candidates'] = len(plan['folders'])
         record['verified'] = len(verified)
         record['unverified'] = sorted({f['name'] for f in plan['folders']} - verified)
+        record['protected_games'] = plan['protected_games']
+        if record['unverified']:
+            raise RuntimeError('checksum confirmation failed; cleanup stopped')
         payload = {'folders': [f for f in plan['folders'] if f['name'] in verified],
                    'releases': plan['releases'], 'current': plan['current']}
         if args.dry_run:

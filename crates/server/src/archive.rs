@@ -198,6 +198,52 @@ fn turn_key(name: &str) -> Option<(u32, PlayerId)> {
     Some((round.parse().ok()?, player.parse().ok()?))
 }
 
+// A round file is the durable commit point. Its timestamp survives resume and replay viewing.
+fn record_completion(root: &Path, round: &Path) -> Result<()> {
+    let modified = fs::metadata(round)
+        .and_then(|m| m.modified())
+        .map_err(|e| e.to_string())?;
+    let millis = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as u64;
+    atomic_write(&root.join("completed.json"), &json(&millis)?)
+}
+
+pub fn migrate_completion(root: &Path) -> Result<()> {
+    if root.join("completed.json").exists() || !root.join("manifest.json").is_file() {
+        return Ok(());
+    }
+    let rounds = root.join("rounds");
+    if !rounds.exists() {
+        return Ok(());
+    }
+    let mut last = None;
+    for entry in fs::read_dir(rounds).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.extension().is_some_and(|ext| ext == "json")
+            && let Some(n) = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| s.parse::<u32>().ok())
+            && last.as_ref().is_none_or(|(prev, _)| *prev < n)
+        {
+            last = Some((n, path));
+        }
+    }
+    if let Some((_, path)) = last {
+        let round: serde_json::Value = read_json(&path)?;
+        if ["score", "timed"].iter().any(|field| {
+            round[field]["match_winners"]
+                .as_array()
+                .is_some_and(|w| !w.is_empty())
+        }) {
+            record_completion(root, &path)?;
+        }
+    }
+    Ok(())
+}
+
 impl Archive {
     pub fn create(replay_root: &Path, match_id: &str) -> Result<Self> {
         let root = replay_root.join(match_id);
@@ -333,10 +379,23 @@ impl Archive {
             .map_err(|e| e.to_string())
     }
     pub fn write_round(&self, record: &RoundRecord) -> Result<()> {
+        let path = self.root.join(format!("rounds/{}.json", record.round));
         atomic_write(
-            &self.root.join(format!("rounds/{}.json", record.round)),
+            &path,
             &serde_json::to_vec_pretty(record).map_err(|e| e.to_string())?,
-        )
+        )?;
+        if record
+            .score
+            .as_ref()
+            .is_some_and(|s| !s.match_winners.is_empty())
+            || record
+                .timed
+                .as_ref()
+                .is_some_and(|t| !t.match_winners.is_empty())
+        {
+            record_completion(&self.root, &path)?;
+        }
+        Ok(())
     }
     pub fn write_results(&self, data: &crate::controller::RevisionData) -> Result<ResultSizes> {
         let start = std::time::Instant::now();

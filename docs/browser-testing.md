@@ -197,7 +197,7 @@ The focused `simple win game type can be selected and started` coordinator scena
 
 ### Small-host lifecycle
 
-`coordinator.spec.mjs` also covers Show inactive games, an update restarting the server despite a live player (whose tab reloads onto the new server), same-address recovery, and six-hour expiry blocking direct game/guide/replay access across restart. The expiry test ages the persisted activity timestamp. The existing recent-replay scenario verifies spectator review before expiry. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.
+`coordinator.spec.mjs` also covers Show inactive games, an update restarting the server despite a live player (whose tab reloads onto the new server), same-address recovery, and 24-hour expiry blocking direct access to an abandoned incomplete game across restart. The expiry test ages the persisted activity timestamp. The replay scenarios cover the separate Replays tab and read-only playback. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.
 
 ### Home page and quick play
 
@@ -252,3 +252,7 @@ The scouting scenarios show a gray last-seen miner and buildings after satellite
 The scoreboard and rematch scenarios exercised both players’ result colors, three selectable rounds, reopening the review on a historical round, and starting a rematch. The archive scenario opened a read-only bot game through the coordinator and branched into practice. Full-frame screenshots and traces are under `artifacts/ui/nov21-rematch-review` and `artifacts/ui/nov21-archive-review`. The browser tests run against local game servers.
 
 The rules 13 release passed `combat-facing.spec.mjs`. Inspected frames in `artifacts/ui/combat-rules13` show the route reaching the enemy turret, independently aimed tank and turret barrels, and the artillery barrel aligned with the outgoing shell arc. The scenario also verifies live playback rotation and seeking back to the idle pose. Six integrated Chromium scenarios passed in `artifacts/ui/nov21-integrated-review`, including a three-round review that seeks to round 2’s final tick, stable workspace and button positions across successive steps, and combined replay fog.
+
+### Replay retention verification, November 21, 2026
+
+The desktop Chromium coordinator and landing suites passed all nine scenarios. The retention scenario opens a real bot recording, seeds six legacy winning ledgers in a tombstoned lobby, and restarts the coordinator. A fresh browser sees the five newest completion times and opens the newest replay read-only. The sixth replay and the live lobby return 404. The inactivity scenario ages the saved activity timestamp to test the 24-hour boundary without waiting a day. Screenshot review covered the lobby list, replay cards at desktop and 390px widths, and read-only playback. Other browser engines were not exercised.

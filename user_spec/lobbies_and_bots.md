@@ -8,7 +8,7 @@ The launched webserver acts as a game coordinator. Players can create games and 
 
 Game creation should be very simple: choose game type, configuration and map. Default to the existing 1v1 setup, while exposing the existing settings for experimentation. Players can select bot opponents. Preserve shared map selection before starting.
 
-Joining a lobby defaults to spectator. Before starting, clicking an unclaimed slot bar claims it. The release/unclaim button belongs on the player’s claimed slot bar. The lobby UI also offers spectating running games and viewing recent replays.
+Joining a lobby defaults to spectator. Before starting, clicking an unclaimed slot bar claims it. The release/unclaim button belongs on the player’s claimed slot bar. The lobby UI also offers spectating running games. A separate Replays tab provides match review.
 
 The user suggested splitting a started game into a separate process and routing its traffic directly to that process. This is a preferred direction to investigate, not a locked process lifecycle or routing contract.
 
@@ -18,7 +18,7 @@ Host on a small remote computer on the live Internet, expecting about four simul
 
 Automatically update and restart when `main` changes, but do not restart while games are actively being played.
 
-Hide games with no active player from the default lobby list. Provide a “Show inactive games” checkbox. After six hours with no new moves or other game activity, archive the game and make it no longer viewable. Recently completed games must remain available for spectator review before expiry.
+Use Lobbies for joining active lobbies and running games. Hide games without connected players by default and keep the option to show inactive lobbies. Use a separate Replays tab for review. Keep the five most recently completed matches across all players available regardless of age, including their complete server-side game logs. Archive incomplete games after 24 hours without activity. This replaces the six-hour expiry rule.
 
 Backward compatibility with older game data is not required. A quick migration script is acceptable if old game data is useful for reference.
 
@@ -70,7 +70,7 @@ Back up game logs before deleting them from the live server. The latest user ins
 
 The hourly sync must run unattended across interactive SSH session expirations.
 
-Only game logs (the server's game state folder) need a local copy, kept as a single incrementally updated mirror rather than repeated snapshots. Game logs older than 24 hours are deleted from the server only after their local copy is confirmed. Old builds are cleared without a backup. Each game log records the server commit it was played on. See [hosting maintenance](../docs/hosting.md#hourly-game-log-maintenance) and the [backup rule](../AGENTS.md#game-log-backup-before-live-server-cleanup).
+Only game logs (the server's game state folder) need a local copy, kept as a single incrementally updated mirror rather than repeated snapshots. Cleanup preserves the full logs for the latest five completed matches. Other eligible game logs older than 24 hours may be deleted only after their local copy is confirmed. Old builds are cleared without a backup. Each game log records the server commit it was played on. See [hosting maintenance](../docs/hosting.md#hourly-game-log-maintenance) and the [backup rule](../AGENTS.md#game-log-backup-before-live-server-cleanup).
 
 Review network-facing code for unintended code execution and similar host compromise, and fix and push concrete issues found. The user is not asking for anti-cheat protections; compromise of the trusted GitHub/repository update path is an accepted attack boundary. Keep the review and fixes appropriate to the small-server design.
 

@@ -36,7 +36,7 @@ Two local `--resume` runs restored the saved slots, the exact tick-30 snapshot a
 [`scripts/server-maintenance.py`](../scripts/server-maintenance.py) runs on the operator's machine over SSH. The remote account needs read and cleanup access to the game state and permission to remove release worktrees as the repository owner. Each run:
 
 1. Pulls `STATE/games` into a single local mirror (default `~/server-backups/personal-vps/games`) with rsync. Unchanged files are skipped and nothing is deleted from the mirror, so it holds one copy of every game ever played without repeated snapshots.
-2. Selects game folders that the directory marks expired (or no longer lists) and whose newest file is more than 24 hours old.
+2. Protects the full game folders containing the five latest completed matches across all players, including rematches. It reads the winning round for logs from older servers. Selects other game folders that the directory marks expired (or no longer lists) and whose newest file is more than 24 hours old.
 3. Compares every file in those folders against the mirror with an rsync checksum pass and a local size check. Any folder with a mismatch stays on the server.
 4. Deletes only confirmed files whose size and modification time are unchanged since step 2, then removes empty folders. `directory.json`, `visits.jsonl` and feedback stay on the server.
 5. Removes release worktrees other than the current release, the newest finished build and any build in progress. Code and executables are not backed up.
@@ -49,19 +49,21 @@ On the live VPS, systemd starts `atemporal-backup-sshd.service` at boot. Its lis
 
 Before switching cron, run the command below manually with `--dry-run` under the cron user's account with `SSH_AUTH_SOCK` unset. Check the newest JSON record for `ok: true`, `rsync_exit: 0`, and an empty `unverified` list. Preserve the existing mirror when changing the connection.
 
+The operator installs the tested script outside the checkout so a branch switch cannot revert the retention policy. When updating maintenance, run `install -D -m 755 scripts/server-maintenance.py ~/.local/lib/atemporal/server-maintenance.py` from the verified revision.
+
 Example hourly entry:
 
 ```cron
-17 * * * * /usr/bin/python3 -I /home/will/AtemporalStrategy/scripts/server-maintenance.py --host atemporal-backup >> /home/will/server-backups/personal-vps/maintenance.log 2>&1
+17 * * * * /usr/bin/python3 -I /home/will/.local/lib/atemporal/server-maintenance.py --host atemporal-backup >> /home/will/server-backups/personal-vps/maintenance.log 2>&1
 ```
 
 System journals and Caddy logs are not part of this job; their own rotation limits apply.
 
 ## Lobby activity and expiry
 
-An active player is a connected human holding a slot. Bots and spectators do not make a game active. The default list hides inactive games; **Show inactive games** includes them. **Recent replays** also shows inactive completed matches for spectator review. A disconnected player's claimed slot does not count as online.
+Lobbies lists games with a connected human player. Show inactive games also lists open or in-progress games whose players disconnected. Finished and explicitly archived matches appear under Replays.
 
-Six hours after the latest persisted game activity, the coordinator expires the entire game, stops its workers, omits it from every directory filter, and rejects game, guide and replay access. Expiry retains files on disk for recovery; it does not offer a public archive browser or delete data. Explicitly stopped matches and bot playtests still have their existing `archived` match phase and are reviewable until this separate six-hour game expiry.
+After 24 hours without game activity the coordinator closes the live game and stops its live worker. It persists that decision across restarts. The five most recently completed matches across all players remain available through their read-only replay URLs, with the original lobby password where applicable. Rematches count separately. The ranking uses the winning round’s original file time, including for older logs. Recently stopped unfinished matches are also reviewable for 24 hours after stopping and do not use any of the five places. The hourly job keeps the entire game folder for each protected match and checksum-verifies other eligible logs against the local mirror before removing them.
 
 Activity includes successful lobby/connection changes, accepted turns, uncommits and published simulation results. Merely fetching the directory, viewing a replay, seeking or keeping a tab open does not extend retention. Local unsubmitted edits are not sent to the server and cannot count. Activity timestamps survive restarts; records without timestamps fall back to game creation. Maintenance runs every two seconds, with access checks also enforcing the deadline. Worker activity/presence status is sampled every 750 ms. These definitions and the update grace are implementation choices, not additional user requirements.
 

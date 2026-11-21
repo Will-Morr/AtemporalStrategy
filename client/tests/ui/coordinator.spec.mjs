@@ -59,8 +59,8 @@ test('bot-only playtest archives at its budget and exposes read-only recent repl
   await page.goto(server.url+'lobbies/');await identify(page,'Playtester');await create(page,'Standard bot practice',{all:true,bot:'standard',rounds:3,edit:c=>{c.match_defaults.objective.rules.victory_rule.points=10;}});
   await page.getByRole('button',{name:'Spectate',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>window.atemporal?.latest),{timeout:90000}).toBe(3);
-  await page.goto(server.url+'lobbies/');await page.locator('#filter').selectOption('recent');await expect(page.locator('.card')).toHaveCount(1);await expect(page.locator('.badge')).toHaveText('Archived');await review.capture('coordinator-recent-bot-playtest-replay',page);
-  await page.locator('.replays a').click();await expect(page.getByRole('button',{name:'View replay',exact:true})).toBeEnabled();await expect(page.locator('#map-picker')).toBeHidden();await review.capture('coordinator-read-only-entry',page);await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);await expect(page.locator('#commit')).toBeDisabled();await expect(page.locator('#new-game-start')).toHaveCount(0);await page.getByRole('button',{name:'Keep viewing replay'}).click();
+  await page.goto(server.url+'lobbies/');await expect(page.locator('.card')).toHaveCount(0);await page.getByRole('link',{name:'Replays',exact:true}).click();await expect(page.locator('.card')).toHaveCount(1);await expect(page.locator('.badge')).toHaveText('Archived');await review.capture('coordinator-recent-bot-playtest-replay',page);
+  await page.getByRole('link',{name:'View replay'}).click();await expect(page.getByRole('button',{name:'View replay',exact:true})).toBeEnabled();await expect(page.locator('#map-picker')).toBeHidden();await review.capture('coordinator-read-only-entry',page);await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);await expect(page.locator('#commit')).toBeDisabled();await expect(page.locator('#new-game-start')).toHaveCount(0);await page.getByRole('button',{name:'Keep viewing replay'}).click();
   const parts=new URL(page.url()).pathname.split('/');const token=JSON.parse(await readFile(`${server.dir}/games/${parts[2]}/replays/${parts[4]}/lobby.json`,'utf8')).tokens[0];
   await page.evaluate(async token=>{const g=window.atemporal;g.net.send({kind:'hello',protocol_version:2,last_revision:null,slot_token:token});await g.net.request({kind:'get_exact_state',revision:g.current,tick:0},'exact_state');},token);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);
   await seek(page,Math.min(100,await page.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick)));await review.capture('coordinator-read-only-replay',page);await page.reload();await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);
@@ -133,11 +133,70 @@ test('updates restart despite live players, hide inactive games and expire all g
   const statusPath=`${server.dir}/games/${id}/status.json`;
   await expect.poll(async()=>JSON.parse(await readFile(statusPath,'utf8')).slots[0].connected).toBe(false);
   const status=JSON.parse(await readFile(statusPath,'utf8'));
-  status.last_activity_ms=Date.now()-6*60*60*1000-1000;
+  status.last_activity_ms=Date.now()-24*60*60*1000-1000;
   await writeFile(statusPath,JSON.stringify(status));
   await expect.poll(async()=>{const d=await(await listing.request.get(server.url+'api/directory')).json();return d.games.length;}).toBe(0);
   for(const path of [url,`${url}guide/`,`${url}replays/${status.match_id}/`])expect((await listing.request.get(path)).status()).toBe(404);
   await expect.poll(async()=>JSON.parse(await readFile(`${server.dir}/games/directory.json`,'utf8')).games[id].expired).toBe(true);
   await server.stop();await server.start();
   expect((await listing.request.get(url)).status()).toBe(404);
+});
+
+test('five completed recordings survive lobby expiry, migration and restart',async({page,review},testInfo)=>{
+  const {cp,unlink,utimes,writeFile}=await import('node:fs/promises');
+  const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);
+  review.afterClose(server.stop);
+  await page.goto(server.url+'lobbies/');
+  await identify(page,'Recording owner');
+  const url=await create(page,'Replay retention',{all:true,rounds:1});
+  const game=new URL(url).pathname.split('/')[2];
+  const root=server.dir+'/games';
+  const recordings=root+'/'+game+'/replays';
+  await expect.poll(async()=>(await (await page.request.get(server.url+'api/directory')).json()).replays.length).toBe(1);
+  const [original]=await readdir(recordings);
+  await page.goto('about:blank');
+  await server.stop();
+
+  // Seed six historical winning ledgers from one playable recording. Deliberately
+  // reverse the order of match IDs and finish times to exercise migration and ranking.
+  const directory=JSON.parse(await readFile(root+'/directory.json','utf8'));
+  directory.games[game].expired=true;
+  await writeFile(root+'/directory.json',JSON.stringify(directory));
+  for(let n=1;n<=6;n++){
+    const id='match-'+n;
+    const match=recordings+'/'+id;
+    await cp(recordings+'/'+original,match,{recursive:true});
+    await unlink(match+'/archive.json');
+    const manifest=JSON.parse(await readFile(match+'/manifest.json','utf8'));
+    manifest.match_id=id;
+    await writeFile(match+'/manifest.json',JSON.stringify(manifest));
+    const last=match+'/rounds/1.json';
+    const round=JSON.parse(await readFile(last,'utf8'));
+    round.score.match_winners=[{kind:'player',player_id:0}];
+    await writeFile(last,JSON.stringify(round));
+    await utimes(last,1000-n,1000-n);
+  }
+  // The unfinished recording is outside its short review window.
+  const archive=recordings+'/'+original+'/archive.json';
+  const stopped=JSON.parse(await readFile(archive,'utf8'));
+  stopped.stopped_at_unix_ms=100;
+  await writeFile(archive,JSON.stringify(stopped));
+  await server.start();
+
+  const guest=await(await review.newContext('replay-visitor')).newPage();
+  await guest.goto(server.url);
+  await guest.getByRole('link',{name:'Replays',exact:true}).click();
+  const links=guest.getByRole('link',{name:'View replay',exact:true});
+  await expect(links).toHaveCount(5);
+  for(let n=1;n<=5;n++)await expect(links.nth(n-1)).toHaveAttribute('href',new RegExp('/match-'+n+'/$'));
+  expect((await guest.request.get(url)).status()).toBe(404);
+  expect((await guest.request.get(url+'replays/match-6/')).status()).toBe(404);
+  await review.capture('five-retained-completed-replays',guest);
+  await guest.setViewportSize({width:390,height:844});
+  expect(await guest.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await review.capture('retained-replays-mobile',guest);
+  await links.first().click();
+  await guest.getByRole('button',{name:'View replay',exact:true}).click();
+  await revision(guest,1);
+  await expect(guest.locator('#commit')).toBeDisabled();
 });

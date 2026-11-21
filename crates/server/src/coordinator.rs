@@ -42,6 +42,16 @@ struct Directory {
     games: BTreeMap<String, GameRecord>,
     users: BTreeMap<String, String>,
 }
+#[derive(Serialize, PartialEq, Eq, PartialOrd, Ord)]
+struct ReplayListing {
+    time: u64,
+    game: String,
+    id: String,
+    name: String,
+    finished: bool,
+    locked: bool,
+    players: Vec<String>,
+}
 struct Worker {
     child: Child,
     port: u16,
@@ -146,6 +156,12 @@ impl Coordinator {
             .cloned()
             .collect();
         for game in games {
+            let replays = coordinator.game_root(&game.id).join("replays");
+            if replays.is_dir() {
+                for entry in std::fs::read_dir(replays).map_err(|e| e.to_string())? {
+                    crate::archive::migrate_completion(&entry.map_err(|e| e.to_string())?.path())?;
+                }
+            }
             if !coordinator.expired(&game, now_ms())
                 && !matches!(
                     coordinator.status(&game.id)["phase"].as_str(),
@@ -163,7 +179,7 @@ impl Coordinator {
                 self.status(&game.id)["last_activity_ms"]
                     .as_u64()
                     .unwrap_or(game.created),
-            ) >= 6 * 60 * 60 * 1000
+            ) >= 24 * 60 * 60 * 1000
     }
     fn active_players(&self, game: &GameRecord, status: &Value) -> usize {
         // Persisted connection bits alone are stale after a coordinator crash.
@@ -202,7 +218,7 @@ impl Coordinator {
                     self.workers
                         .lock()
                         .unwrap()
-                        .retain(|key, _| !key.starts_with(&format!("{}:", game.id)));
+                        .remove(&format!("{}:live", game.id));
                 }
             }
             if changed {
@@ -241,6 +257,94 @@ impl Coordinator {
             .cloned()
             .ok_or_else(|| "Game not found".into())
     }
+    fn reviewable_game(&self, id: &str, replay: Option<&str>) -> Result<GameRecord> {
+        let directory = self.directory.lock().unwrap();
+        let game = directory.games.get(id).ok_or("Game not found")?;
+        if replay.is_none() && !self.expired(game, now_ms()) {
+            return Ok(game.clone());
+        }
+        if self
+            .replay_catalog(&directory)
+            .iter()
+            .any(|r| r.game == id && replay.is_none_or(|id| r.id == id))
+        {
+            Ok(game.clone())
+        } else {
+            Err("Replay not found".into())
+        }
+    }
+
+    fn replay_catalog(&self, directory: &Directory) -> Vec<ReplayListing> {
+        let mut completed = Vec::new();
+        let mut archived = Vec::new();
+        for game in directory.games.values() {
+            let Ok(entries) = std::fs::read_dir(self.game_root(&game.id).join("replays")) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let id = entry.file_name().to_string_lossy().into_owned();
+                let root = entry.path();
+                if !valid_id(&id) || !root.join("manifest.json").is_file() {
+                    continue;
+                }
+                let completion = std::fs::read(root.join("completed.json"))
+                    .ok()
+                    .and_then(|data| serde_json::from_slice::<u64>(&data).ok());
+                let (time, finished) = match completion {
+                    Some(time) => (time, true),
+                    None => {
+                        let Some(time) = std::fs::read(root.join("archive.json"))
+                            .ok()
+                            .and_then(|data| serde_json::from_slice::<Value>(&data).ok())
+                            .and_then(|a| a["stopped_at_unix_ms"].as_u64())
+                        else {
+                            continue;
+                        };
+                        if now_ms().saturating_sub(time) >= 24 * 60 * 60 * 1000 {
+                            continue;
+                        }
+                        (time, false)
+                    }
+                };
+                let listing = ReplayListing {
+                    time,
+                    game: game.id.clone(),
+                    id,
+                    name: game.name.clone(),
+                    finished,
+                    players: Vec::new(),
+                    locked: !game.password.is_empty(),
+                };
+                if finished {
+                    completed.push(listing);
+                } else {
+                    archived.push(listing);
+                }
+            }
+        }
+        completed.sort_unstable_by(|a, b| b.cmp(a));
+        completed.truncate(5);
+        archived.sort_unstable_by(|a, b| b.cmp(a));
+        completed.extend(archived);
+        for row in &mut completed {
+            let manifest = self
+                .game_root(&row.game)
+                .join("replays")
+                .join(&row.id)
+                .join("manifest.json");
+            if let Ok(bytes) = std::fs::read(manifest)
+                && let Ok(data) = serde_json::from_slice::<Value>(&bytes)
+                && let Some(profiles) = data["profiles"].as_array()
+            {
+                row.players = profiles
+                    .iter()
+                    .filter_map(|p| p["username"].as_str().map(str::to_owned))
+                    .collect();
+            }
+        }
+
+        completed
+    }
     /// Appends who did what to visits.jsonl for counting unique users; best effort.
     fn log_visit(&self, h: &HeaderMap, event: &str, detail: &str) {
         use std::io::Write;
@@ -271,7 +375,7 @@ impl Coordinator {
         }
         let key = format!("{}:{}", game.id, replay.unwrap_or("live"));
         let mut workers = self.workers.lock().unwrap();
-        if self.expired(game, now_ms()) {
+        if replay.is_none() && self.expired(game, now_ms()) {
             return Err("Game expired".into());
         }
         if let Some(w) = workers.get_mut(&key)
@@ -283,12 +387,14 @@ impl Coordinator {
         let dir = self.game_root(&game.id);
         let replays = dir.join("replays");
         std::fs::create_dir_all(&replays).map_err(|e| e.to_string())?;
-        atomic_json(&dir.join("setup.json"), &game.setup)?;
+        if replay.is_none() {
+            atomic_json(&dir.join("setup.json"), &game.setup)?;
+            atomic_json(&dir.join("bots.json"), &game.bots)?;
+        }
         let pinned_content = dir.join("content.yaml");
         if !pinned_content.exists() {
             std::fs::copy(&self.content, &pinned_content).map_err(|e| e.to_string())?;
         }
-        atomic_json(&dir.join("bots.json"), &game.bots)?;
         let saved = self.status(&game.id);
         let latest = if let Some(r) = replay {
             Some(r.to_owned())
@@ -409,18 +515,37 @@ pub fn router(c: Coordinator) -> Router {
 async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
     let d = c.directory.lock().unwrap();
     let user = cookie(&h, "atemporal-user");
-    let games:Vec<_>=d.games.values().filter(|g| !c.expired(g, now_ms())).map(|g|{
-        let status=c.status(&g.id);
-        let mut replays=vec![];
-        if let Ok(entries)=std::fs::read_dir(c.game_root(&g.id).join("replays")) {
-            for entry in entries.flatten(){let id=entry.file_name().to_string_lossy().to_string();
-                if valid_id(&id)&&entry.path().join("manifest.json").exists()&&(status["match_id"]!=id||matches!(status["phase"].as_str(),Some("finished"|"archived"))){replays.push(id);}
-            }
-        }
-        replays.sort();replays.reverse();replays.truncate(12);
-        json!({"active_players":c.active_players(g, &status),"id":g.id,"name":g.name,"created":g.created,"locked":!g.password.is_empty(),"status":status,"players":g.setup.match_defaults.player_count,"bots":g.bots.slots,"mine":user.as_ref().is_some_and(|u|g.members.get(u).is_some_and(|slots|slots.iter().any(|slot|status["slots"].as_array().is_some_and(|ss|ss.iter().any(|s|s["slot"]==*slot&&s["claimed"]==true))))),"replays":replays})
-    }).collect();
-    Json(json!({"games":games,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults,"default_bot":crate::bots::DEFAULT_STYLE,"debug_test":c.test_server})).into_response()
+    let replays = c.replay_catalog(&d);
+    let games: Vec<_> = d
+        .games
+        .values()
+        .filter(|g| !c.expired(g, now_ms()))
+        .map(|g| {
+            let status = c.status(&g.id);
+            let mine = user
+                .as_ref()
+                .and_then(|u| g.members.get(u))
+                .is_some_and(|owned| {
+                    status["slots"].as_array().is_some_and(|slots| {
+                        slots.iter().any(|s| {
+                            s["claimed"] == true && owned.iter().any(|id| s["slot"] == *id)
+                        })
+                    })
+                });
+            let game_replays: Vec<_> = replays
+                .iter()
+                .filter(|r| r.game == g.id)
+                .map(|r| &r.id)
+                .collect();
+            json!({
+                "active_players": c.active_players(g, &status), "id": g.id, "name": g.name,
+                "created": g.created, "locked": !g.password.is_empty(), "status": status,
+                "players": g.setup.match_defaults.player_count, "bots": g.bots.slots,
+                "mine": mine, "replays": game_replays
+            })
+        })
+        .collect();
+    Json(json!({"games":games,"replays":replays,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults,"default_bot":crate::bots::DEFAULT_STYLE,"debug_test":c.test_server})).into_response()
 }
 #[derive(Deserialize)]
 struct IdentityInput {
@@ -590,7 +715,7 @@ async fn feedback(
     Json(input): Json<FeedbackInput>,
 ) -> Response {
     let _admission = Admission::new(&c);
-    let game = match c.game(&id) {
+    let game = match c.reviewable_game(&id, None) {
         Ok(g) => g,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -662,7 +787,7 @@ async fn join(
     h: HeaderMap,
     Json(input): Json<JoinInput>,
 ) -> Response {
-    let game = match c.game(&id) {
+    let game = match c.reviewable_game(&id, None) {
         Ok(g) => g,
         Err(e) => return error(e),
     };
@@ -682,17 +807,20 @@ async fn join(
         .into_response()
 }
 async fn game_page(State(c): State<Coordinator>, Path(id): Path<String>, h: HeaderMap) -> Response {
-    page(c, id, h).await
+    page(c, id, None, h).await
 }
 async fn replay_page(
     State(c): State<Coordinator>,
-    Path((id, _)): Path<(String, String)>,
+    Path((id, replay)): Path<(String, String)>,
     h: HeaderMap,
 ) -> Response {
-    page(c, id, h).await
+    page(c, id, Some(replay), h).await
 }
-async fn page(c: Coordinator, id: String, h: HeaderMap) -> Response {
-    let game = match c.game(&id) {
+async fn page(c: Coordinator, id: String, replay: Option<String>, h: HeaderMap) -> Response {
+    let game = match replay
+        .as_ref()
+        .map_or_else(|| c.game(&id), |r| c.reviewable_game(&id, Some(r)))
+    {
         Ok(g) => g,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -742,7 +870,10 @@ async fn relay(
     h: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    let game = match c.game(&id) {
+    let game = match replay
+        .as_ref()
+        .map_or_else(|| c.game(&id), |r| c.reviewable_game(&id, Some(r)))
+    {
         Ok(g) => g,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -759,15 +890,6 @@ async fn relay(
     };
     let worker_key = format!("{}:{}", id, replay.as_deref().unwrap_or("live"));
     c.log_visit(&h, if readonly { "replay" } else { "game" }, &worker_key);
-    if let Some(r) = &replay {
-        let status = c.status(&id);
-        if !valid_id(r)
-            || (status["match_id"] == *r
-                && !matches!(status["phase"].as_str(), Some("finished" | "archived")))
-        {
-            return StatusCode::NOT_FOUND.into_response();
-        }
-    }
     let wc = c.clone();
     let wg = game.clone();
     let port = match tokio::task::spawn_blocking(move || wc.worker(&wg, replay.as_deref())).await {
@@ -850,7 +972,8 @@ async fn guide_file(State(c): State<Coordinator>, Path(path): Path<String>) -> R
 async fn asset(State(c): State<Coordinator>, uri: axum::http::Uri) -> Response {
     match uri.path() {
         "/" => ws::serve(&c.client, "landing.html").await,
-        "/lobbies/" => ws::serve(&c.client, "directory.html").await,
+        "/lobbies/" | "/replays/" => ws::serve(&c.client, "directory.html").await,
+        "/replays" => Redirect::to("/replays/").into_response(),
         "/lobbies" => Redirect::to("/lobbies/").into_response(),
         "/guide" => Redirect::to("/guide/").into_response(),
         p => ws::serve(&c.client, p.trim_start_matches('/')).await,
@@ -872,7 +995,7 @@ async fn game_guide_file(
     game_guide_response(c, id, path, h).await
 }
 async fn game_guide_response(c: Coordinator, id: String, path: String, h: HeaderMap) -> Response {
-    let game = match c.game(&id) {
+    let game = match c.reviewable_game(&id, None) {
         Ok(g) => g,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
@@ -950,17 +1073,17 @@ mod tests {
             expired: false,
             members: BTreeMap::new(),
         };
-        let six_hours = 6 * 60 * 60 * 1000;
-        assert!(!c.expired(&game, 1000 + six_hours - 1));
-        assert!(c.expired(&game, 1000 + six_hours));
+        let one_day = 24 * 60 * 60 * 1000;
+        assert!(!c.expired(&game, 1000 + one_day - 1));
+        assert!(c.expired(&game, 1000 + one_day));
         std::fs::create_dir_all(c.game_root(&game.id)).unwrap();
         atomic_json(
             &c.game_root(&game.id).join("status.json"),
             &json!({"last_activity_ms":2000,"phase":"finished"}),
         )
         .unwrap();
-        assert!(!c.expired(&game, 1000 + six_hours));
-        assert!(c.expired(&game, 2000 + six_hours));
+        assert!(!c.expired(&game, 1000 + one_day));
+        assert!(c.expired(&game, 2000 + one_day));
         game.expired = true;
         assert!(c.expired(&game, 2000)); // A clock change cannot resurrect a tombstone.
         assert_eq!(
