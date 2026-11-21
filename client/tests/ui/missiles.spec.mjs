@@ -23,6 +23,18 @@ test('silo blueprint production, launch previews, satellite replay and stockpili
   await review.capture('silo-production-no-scroll-1366',a);
   await a.locator('.silo-production>summary').click();
   await a.getByRole('combobox',{name:'Selection priority'}).selectOption('high');
+  await a.getByRole('button',{name:'Target Satellite',exact:true}).click();
+  await a.keyboard.down('Shift');
+  await tile(a,enemy);
+  await a.keyboard.up('Shift');
+  await expect(a.locator('.missile-launches li')).toHaveCount(1);
+  await expect(a.locator('.silo-production summary')).toContainText('3 waiting');
+  await tile(a,build);
+  await expect(a.locator('.missile-launches li')).toHaveCount(2);
+  await expect(a.locator('.silo-production summary')).toContainText('4 waiting');
+  expect(await a.evaluate(()=>window.atemporal.mode.kind)).toBe('none');
+  await review.capture('two-targets-one-extra-satellite',a);
+  await a.keyboard.press('Control+z');await a.keyboard.press('Control+z');
   const predicted={};
   for(const name of ['Satellite','Cluster','Tac nuke']){await a.getByRole('button',{name:`Target ${name}`,exact:true}).click();const point=await hover(a,enemy);await expect(a.locator('#range-readout')).toContainText('ticks to hit after launch');await expect(a.locator('#range-readout')).toContainText(name);predicted[name.toLowerCase().replace(' ','_')]=Number((await a.locator('#range-readout').innerText()).match(/(\d+) ticks to hit/)[1]);if(name==='Tac nuke')await review.capture('nuke-target-flight-time-and-area',a);await a.mouse.click(...point);}
   await expect(a.locator('.missile-launches li')).toHaveCount(3);await a.getByRole('button',{name:'Remove launch 3',exact:true}).click();await expect(a.locator('.missile-launches li')).toHaveCount(2);

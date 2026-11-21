@@ -23,6 +23,16 @@ function sameEntity(a: EntityId, b: EntityId): boolean {
 
 type PendingItem = {type: string; ref: DraftItemRef2 | null; loop: boolean};
 
+export function queueBatches(pending: PendingItem[]) {
+  const batches: {type: string; loop: boolean; indices: number[]}[] = [];
+  pending.forEach((item, index) => {
+    const last = batches.at(-1);
+    if (last?.type === item.type && last.loop === item.loop) last.indices.push(index);
+    else batches.push({type: item.type, loop: item.loop, indices: [index]});
+  });
+  return batches;
+}
+
 export function factoryPlan(g: Game, v: EntityView) {
   const p = v.exact?.production;
   let pending: PendingItem[] = v.blueprint

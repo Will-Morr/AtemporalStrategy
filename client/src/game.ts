@@ -4,7 +4,7 @@ import {GroundVision, SightMemory, playerSeesEntity, playerVisibility} from './v
 import {guideUrl} from './session';
 import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
-import {missileName, queueLaunches} from './silo';
+import {missileName, queueLaunch} from './silo';
 import { unitIcon } from './icons';
 import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type {
@@ -67,7 +67,7 @@ export interface EntityView {
 type Mode =
   | { kind: 'none' }
   | { kind: 'attack' }
-  | { kind: 'launch'; type_key: string; silos: EntityId[]; batch:boolean }
+  | { kind: 'launch'; type_key: string; silos: EntityId[] }
   | { kind: 'support' }
   | { kind: 'area'; order: 'mine' | 'construct' }
   | { kind: 'build' }
@@ -636,9 +636,67 @@ export class Game {
   }
 
   cancelSelectedBlueprints(): boolean {
-    const refs=this.selectedViews().filter(v=>this.ownSelectable(v)).map(v=>this.blueprintRef(v)).filter((r): r is DraftItemRef=>r!==null);
-    if(!refs.length)return false;
-    this.stage({kind:'cancel_blueprints',blueprint_ids:refs});
+    const selected = this.selectedViews().filter(v => this.ownSelectable(v));
+    const refs = selected.map(v => this.blueprintRef(v)).filter((ref): ref is DraftItemRef => ref !== null);
+    if (!refs.length) return false;
+    const persistent = refs.filter(ref => ref.kind === 'persistent');
+    if (persistent.length === refs.length) {
+      this.stage({kind: 'cancel_blueprints', blueprint_ids: persistent});
+      return true;
+    }
+    const gate = this.canStage();
+    if (!gate.ok) { this.toast(gate.reason); return true; }
+
+    const removed = new Map<string, Set<number>>();
+    for (const ref of refs) {
+      if (ref.kind !== 'draft') continue;
+      const indices = removed.get(ref.local_id) ?? new Set<number>();
+      indices.add(ref.item_index);
+      removed.set(ref.local_id, indices);
+    }
+
+    // A partial wall-line deletion shifts item indices for later settings and cancellations.
+    const commands: DraftCommand[] = [];
+    const newIndices = new Map<string, Map<number, number>>();
+    for (const draft of this.draft.commands) {
+      const command = draft.command;
+      const excluded = removed.get(draft.local_id);
+      if (command.kind === 'place_blueprints' && excluded) {
+        const indices = new Map<number, number>();
+        const tiles = command.tiles.filter((_, index) => {
+          if (excluded.has(index)) return false;
+          indices.set(index, indices.size);
+          return true;
+        });
+        newIndices.set(draft.local_id, indices);
+        const output_directions = command.output_directions?.filter((_, index) => indices.has(index)) ?? null;
+        if (tiles.length) commands.push({...draft, command: {...command, tiles, output_directions}});
+      } else if ((command.kind === 'configure_blueprints' || command.kind === 'cancel_blueprints') &&
+                 command.blueprint_ids.some(ref => ref.kind === 'draft' && newIndices.has(ref.local_id))) {
+        const blueprint_ids = command.blueprint_ids.flatMap<DraftItemRef>(ref => {
+          if (ref.kind !== 'draft' || !newIndices.has(ref.local_id)) return [ref];
+          const item_index = newIndices.get(ref.local_id)!.get(ref.item_index);
+          return item_index === undefined ? [] : [{...ref, item_index}];
+        });
+        if (blueprint_ids.length) commands.push({...draft, command: {...command, blueprint_ids}});
+      } else commands.push(draft);
+    }
+    if (persistent.length && this.config.control_limit === 'single_order' && commands.length) {
+      this.toast('Single-order mode: delete the staged command first.');
+      return true;
+    }
+    if (persistent.length) {
+      commands.push({local_id: `d${Date.now()}-${this.draft.commands.length}`, future_orders: 'keep',
+        command: {kind: 'cancel_blueprints', blueprint_ids: persistent}});
+    }
+    this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
+    this.draft.redo = [];
+    this.draft.commands = commands;
+    this.draft.tick = commands.length ? Math.floor(this.playhead) : null;
+    this.draft.selected = null;
+    for (const v of selected) if (this.blueprintRef(v)) this.selection.delete(idKey(v.id));
+    $('toast').classList.remove('active');
+    this.updatePanels();
     return true;
   }
 
@@ -972,9 +1030,10 @@ export class Game {
       if (this.mode.kind === 'launch') {
         const mode=this.mode;
         for(const v of this.entities().filter(v=>this.ownSelectable(v)&&this.types.get(v.type_key)?.silo&&mode.silos.some(id=>idKey(id)===idKey(v.id)))) {
-          queueLaunches(this,v,mode.type_key,tile,e.shiftKey || mode.batch ? 5 : 1);
+          queueLaunch(this,v,mode.type_key,tile);
         }
-        this.mode={kind:'none'};this.updateMode();return;
+        if (!e.shiftKey) this.mode={kind:'none'};
+        this.updateMode();return;
       }
       if (this.mode.kind === 'attack' || this.mode.kind === 'stored-target') {
         this.applyTileMode(tile);
@@ -1144,7 +1203,7 @@ export class Game {
   }
   validPlacement(tile: Tile, factory: boolean): boolean {
     const terrain = this.terrain;
-    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t) && !this.exact?.state.blueprints.some(b => this.canInspectPlan(b.owner) && b.tile.x === t.x && b.tile.y === t.y) && !this.draft.commands.some(c => c.command.kind === 'place_blueprints' && c.command.tiles.some(b => b.x === t.x && b.y === t.y));
+    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t);
     const offsets = { n: [0,-1], e: [1,0], s: [0,1], w: [-1,0] };
     const [dx,dy] = offsets[this.renderer.outputDirection];
     return clear(tile) && (!factory || clear({ x: tile.x + dx, y: tile.y + dy }));
@@ -1352,7 +1411,7 @@ export class Game {
     const text = (() => {
       switch (this.mode.kind) {
         case 'none': return '';
-        case 'launch': return `Target ${missileName(this.mode.type_key)}: click the map · Shift-click queues five · Esc cancels`;
+        case 'launch': return `Target ${missileName(this.mode.type_key)}: click the map · Shift-click to keep targeting · Esc cancels`;
         case 'attack': return 'Attack-move: click a destination tile (Esc cancels)';
         case 'support': return 'Support: click one of your units';
         case 'area': return `${this.mode.order === 'mine' ? 'Mine' : 'Construct'}: drag a rectangle`;

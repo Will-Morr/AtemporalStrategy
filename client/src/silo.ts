@@ -17,9 +17,9 @@ export function setSiloPlan(g:Game,v:EntityView,plan:SiloPlan):void {
   if(v.blueprint)g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint],settings:{...structuredClone(v.settings!),silo_plan:plan}});
   else g.stage({kind:'set_silo_plan',silos:[v.id],plan});
 }
-export function queueLaunches(g:Game,v:EntityView,type:string,target:Tile,count:number):void {
+export function queueLaunch(g:Game,v:EntityView,type:string,target:Tile):void {
   const production=factoryPlan(g,v), plan=production.silo;
-  for(let i=0;i<count;i++)plan.launches.push({type_key:type,target});
+  plan.launches.push({type_key:type,target});
   const pending=production.pending.filter(item=>item.type===type);
   const active=production.active?.type_key===type ? production.active : null;
   const repeats=pending.some(item=>item.loop) || active?.loop_enabled;
@@ -48,7 +48,7 @@ export function siloPanel(g:Game,v:EntityView):HTMLElement {
   root.append(inventory);
   const auto=button(`Auto launch: ${plan.automatic?'On':'Off'}`,()=>setSiloPlan(g,v,{...plan,automatic:!plan.automatic}));auto.setAttribute('aria-pressed',String(plan.automatic));auto.title=`Fire stock at visible enemies within ${def.silo!.auto_range} tiles when the manual queue is empty. Explosions also hit allies.`;inventory.append(auto);
   const targets=document.createElement('div');targets.className='missile-target-buttons';
-  for(const type of def.production!.recipes){const b=button(`Target ${missileName(type)}`,event=>{g.mode={kind:'launch',type_key:type,silos:[v.id],batch:event.shiftKey};g.updateMode();document.getElementById('map')!.focus();});b.title='Click a target. Shift-click for five identical launches. Missing missiles are added to production.';targets.append(b);}root.append(targets);
+  for(const type of def.production!.recipes){const b=button(`Target ${missileName(type)}`,()=>{g.mode={kind:'launch',type_key:type,silos:[v.id]};g.updateMode();document.getElementById('map')!.focus();});b.title='Click a target. Shift-click to queue one launch and keep targeting. Missing missiles are added to production.';targets.append(b);}root.append(targets);
   const launches=document.createElement('ol');launches.className='missile-launches';
   plan.launches.forEach((launch,index)=>{const li=document.createElement('li');const m=g.types.get(launch.type_key)!.missile!;li.append(unitIcon(launch.type_key,g.color(v.owner)),document.createTextNode(`${missileName(launch.type_key)} → ${launch.target.x},${launch.target.y} · ${flightTicks(v,launch.target,m)} ticks flight`));const remove=button('×',()=>{const next=structuredClone(plan);next.launches.splice(index,1);setSiloPlan(g,v,next);});remove.setAttribute('aria-label',`Remove launch ${index+1}`);li.append(remove);launches.append(li);});root.append(launches);
   const note=document.createElement('small');note.textContent=plan.launches.length?'Launches fire in order as stock becomes ready. Flight times start at launch.':plan.automatic?'Automatic targeting is active. Manual launches have unlimited range.':'Stockpile mode. Build missiles above, then target a launch when ready.';root.append(note);

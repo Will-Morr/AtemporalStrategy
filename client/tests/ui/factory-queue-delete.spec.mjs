@@ -130,6 +130,10 @@ test('factory queue supports repeated single and shared deletions', async ({revi
   await selectBoth(a, sites);
   for (let i = 0; i < size / 5; i++) await add.click({modifiers: ['Shift']});
   expect(await queues(a)).toEqual([size, size]);
+  await expect(a.locator('.shared-factories .queue-item')).toHaveCount(1);
+  await expect(a.locator('.shared-factories .queue-item')).toContainText('grunt ×30');
+  await a.getByRole('button', {name:'Loop shared grunt batch'}).click();
+  expect(await a.evaluate(()=>window.atemporal.selectedViews().every(v=>v.settings.queue_loop_flags.every(Boolean)))).toBe(true);
   await review.capture('shared-queue-before-delete', a);
   await measure(a);
   for (let i = size; i > 0; i--) {
@@ -240,7 +244,7 @@ test('completed factory queues retain the remaining items after deletion and com
   await selectBoth(a, sites);
   expect(await a.evaluate(() => window.atemporal.selectedViews().map(v => v.lifecycle))).toEqual(['complete', 'complete']);
   await add.click({modifiers: ['Shift']});
-  await a.getByRole('button', {name: 'Remove shared item 2', exact: true}).click();
+  await a.getByRole('button', {name: 'Remove shared item 5', exact: true}).click();
   await expect(a.getByRole('button', {name: 'Remove shared item 5', exact: true})).toHaveCount(0);
   await a.keyboard.press('Control+z');
   await expect(a.getByRole('button', {name: 'Remove shared item 5', exact: true})).toBeVisible();

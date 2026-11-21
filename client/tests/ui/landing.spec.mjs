@@ -51,7 +51,7 @@ test('landing navigation, content-backed explainer and retry after creation fail
   const server=await isolatedServer(testInfo,small,content=>{content.types.find(t=>t.key==='miner').max_hp=137;},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url);
   await page.getByRole('link',{name:'Patch notes',exact:true}).first().click();
-  await expect(page.locator('#patch-notes li').first()).toHaveText('Added patch notes');
+  await expect(page.locator('#patch-notes article h3').first()).toHaveText('November 21, 2026');
   await expect(page.locator('#patch-notes')).toContainText('Tactical 2.0');
   await expect(page.locator('#patch-notes')).toContainText('8 tiles away, up from 5');
   await page.goBack();

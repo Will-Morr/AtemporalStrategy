@@ -24,7 +24,12 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   await a.keyboard.press('Control+z');await expect(a.locator('#queue')).toContainText('grunt ×1');
   await a.getByRole('button',{name:'Delete selected blueprints',exact:true}).click();
   expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(false);
+  expect(await a.evaluate(t=>window.atemporal.validPlacement(t,true),spots[0])).toBe(true);
+  expect(await a.evaluate(()=>window.atemporal.draft.commands.map(d=>d.command.kind))).not.toContain('place_blueprints');
   await a.keyboard.press('Control+z');expect(await a.evaluate(()=>window.atemporal.entities().some(e=>e.type_key==='factory'))).toBe(true);await a.keyboard.press('Control+u');
+  await place('factory',spots[0]);
+  await expect(a.locator('#cancel-blueprints')).toBeVisible();
+  await a.locator('#cancel-blueprints').click();
   await place('turret',spots[1]);await expect(a.locator('#cancel-blueprints')).toBeVisible();await review.capture('turret-blueprint-delete-control',a);
   await a.keyboard.press('Delete');
   await place('turret',spots[2]);
@@ -68,4 +73,38 @@ test('depleted ore and mining slope are readable in a real replay',async({review
   await a.keyboard.press('v');await a.selectOption('#metric','mined');await a.selectOption('#graph-mode','slope');await expect(a.locator('#graph-caption')).toContainText('smoothed slope / tick');
   await expect.poll(()=>a.evaluate(()=>window.atemporal.experience.stats.get(window.atemporal.current)?.length??0)).toBeGreaterThan(1);
   await review.capture('smoothed-mining-rate',a);
+});
+
+test('deleting the middle of a draft wall keeps its neighbors and their settings', async ({review},testInfo)=>{
+  const server=await isolatedServer(testInfo);
+  review.afterClose(server.stop);
+  const [a,b]=await players(review,server.url);
+  await a.getByRole('button',{name:'Start match',exact:true}).click();
+  await revision(a,0);await revision(b,0);
+  const {constructor,line}=await a.evaluate(()=>{
+    const g=window.atemporal;
+    const constructor=g.entities().find(v=>v.type_key==='constructor'&&v.owner===0);
+    for(let y=1;y<g.terrain.height-1;y++){
+      for(let x=1;x<g.terrain.width-3;x++){
+        const line=[{x,y},{x:x+1,y},{x:x+2,y}];
+        if(line.every(tile=>g.validPlacement(tile,false)))return {constructor,line};
+      }
+    }
+  });
+  await tile(a,constructor);
+  await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'wall'}).click();
+  const points=await a.evaluate(line=>{
+    const r=window.atemporal.renderer;
+    r.centerOn(line[1].x,line[1].y);
+    return line.map(t=>r.screen(t.x+.5,t.y+.5));
+  },line);
+  await a.mouse.move(...points[0]);await a.mouse.down();await a.mouse.move(...points[2]);await a.mouse.up();
+  await tile(a,line[2]);await a.locator('#selection-priority select').selectOption('high');
+  await tile(a,line[1]);await a.locator('#cancel-blueprints').click();
+  await expect(a.locator('#draft-list li')).toHaveCount(2);
+  expect(await a.evaluate(t=>window.atemporal.validPlacement(t,false),line[1])).toBe(true);
+  await tile(a,line[2]);await expect(a.locator('#selection-priority select')).toHaveValue('high');
+  await review.capture('middle-wall-removed-end-priority-preserved',a);
+  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await seek(a,1);
+  expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0).map(b=>[b.tile,b.settings?.priority??b.priority]))).toEqual([[line[0],'medium'],[line[2],'high']]);
 });

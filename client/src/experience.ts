@@ -5,7 +5,7 @@ import {siloPanel} from './silo';
 import { scoreboard } from './scoreboard';
 import { slopePoints } from './plot';
 import { unitIcon } from './icons';
-import { factoryPlan, factorySignature, orderLabel } from './factory';
+import { factoryPlan, factorySignature, orderLabel, queueBatches } from './factory';
 import type { AcceptedTurn, Command, ControlGroupState, EntityId, PlayerStats, ServerMessage, StatsSample } from './contracts.generated';
 import { Game, idKey, type EntityView, type RevisionView } from './game';
 
@@ -330,9 +330,7 @@ export class Experience {
       const queue=document.createElement('div');queue.className='queue-icons';
       if(plan.active){const active=document.createElement('div');active.className='queue-item active';const progress=plan.active.awaiting_output?'Output blocked':`${Math.round(plan.active.paid_matter)} / ${g.types.get(plan.active.type_key)?.matter_cost} matter`;active.append(unitIcon(plan.active.type_key,g.color(v.owner)),document.createTextNode(`Building ${plan.active.type_key} · ${progress}`));const cancel=button('×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}}));cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key}`);cancel.title='Cancel this unit; spent matter is lost';cancel.onfocus=()=>{this.focusDelete=()=>cancel.click();};cancel.disabled=!enabled;const repeat=button(plan.active.loop_enabled?'↻':'1×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:plan.active!.item_id}],enabled:!plan.active!.loop_enabled}}));repeat.setAttribute('aria-label',`Loop active ${plan.active.type_key}`);repeat.setAttribute('aria-pressed',String(plan.active.loop_enabled??false));repeat.disabled=!enabled;active.dataset.loop=String(plan.active.loop_enabled??false);active.append(repeat,cancel);queue.append(active);}
       // Group adjacent recipes, preserving build order and each item reference for removal.
-      const batches:{type:string,loop:boolean,indices:number[]}[]=[];
-      plan.pending.forEach((item,index)=>{const last=batches.at(-1);if(last?.type===item.type&&last.loop===item.loop)last.indices.push(index);else batches.push({type:item.type,loop:item.loop,indices:[index]});});
-      for(const batch of batches){const chip=document.createElement('div');chip.className='queue-item';chip.title=`${batch.type} ×${batch.indices.length}`;chip.append(unitIcon(batch.type,g.color(v.owner)),document.createTextNode(`${batch.type} ×${batch.indices.length}`));const index=batch.indices.at(-1)!;const remove=button('−',()=>{if(v.blueprint)configure(s=>{s.queue.splice(index,1);s.queue_loop_flags?.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[plan.pending[index].ref!]}});});remove.setAttribute('aria-label',`Remove one queued ${batch.type}`);remove.onfocus=()=>{this.focusDelete=()=>remove.click();};remove.disabled=!enabled;const repeat=button(batch.loop?'↻':'1×',()=>{if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);for(const index of batch.indices)s.queue_loop_flags[index]=!batch.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(index=>plan.pending[index].ref!),enabled:!batch.loop}});});repeat.setAttribute('aria-label',`Loop queued ${batch.type}`);repeat.setAttribute('aria-pressed',String(batch.loop));repeat.title=batch.loop?'Repeats after completion':'Build once';repeat.disabled=!enabled;chip.dataset.loop=String(batch.loop);chip.append(repeat,remove);queue.append(chip);}
+      for(const batch of queueBatches(plan.pending)){const chip=document.createElement('div');chip.className='queue-item';chip.title=`${batch.type} ×${batch.indices.length}`;chip.append(unitIcon(batch.type,g.color(v.owner)),document.createTextNode(`${batch.type} ×${batch.indices.length}`));const index=batch.indices.at(-1)!;const remove=button('−',()=>{if(v.blueprint)configure(s=>{s.queue.splice(index,1);s.queue_loop_flags?.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[plan.pending[index].ref!]}});});remove.setAttribute('aria-label',`Remove one queued ${batch.type}`);remove.onfocus=()=>{this.focusDelete=()=>remove.click();};remove.disabled=!enabled;const repeat=button(batch.loop?'↻':'1×',()=>{if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);for(const index of batch.indices)s.queue_loop_flags[index]=!batch.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(index=>plan.pending[index].ref!),enabled:!batch.loop}});});repeat.setAttribute('aria-label',`Loop queued ${batch.type}`);repeat.setAttribute('aria-pressed',String(batch.loop));repeat.title=batch.loop?'Repeats after completion':'Build once';repeat.disabled=!enabled;chip.dataset.loop=String(batch.loop);chip.append(repeat,remove);queue.append(chip);}
       if(!plan.active && !plan.pending.length){const empty=document.createElement('span');empty.className='muted';empty.textContent=isSilo?'Production empty — build missiles below.':'Queue empty — add units below.';queue.append(empty);}card.insertBefore(queue,summary);
       const recipes=document.createElement('div');recipes.className='recipe-icons';
       for(const type of g.types.get(v.type_key)?.production?.recipes ?? []){const add=button('',event=>{const items=Array(event.shiftKey?5:1).fill(type);if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);s.queue.push(...items);s.queue_loop_flags.push(...items.map(()=>plan.loop));});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items}});});add.append(unitIcon(type,g.color(v.owner)),document.createTextNode(isSilo?` ${type.replace('_',' ')} +`:'+'));add.setAttribute('aria-label',`Queue ${type}`);add.title=`Queue ${type} · ${g.types.get(type)?.matter_cost} matter · Shift-click adds 5`;add.disabled=!enabled;recipes.append(add);}card.append(recipes);
@@ -360,11 +358,30 @@ export class Experience {
     const queue=document.createElement('div');queue.className='queue-icons';
     if(aligned){
       if(plan.active){const active=button(`Cancel active ${plan.active.type_key} on all`,()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));queue.append(active);const repeat=button(plan.active.loop_enabled?'Active repeats':'Repeat active on all',()=>edit(v=>{const active=factoryPlan(g,v).active;if(active)g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:active.item_id}],enabled:!plan.active!.loop_enabled}});}));queue.append(repeat);}
-      plan.pending.forEach((item,index)=>{
-        const chip=document.createElement('span');chip.className='queue-item';chip.append(unitIcon(item.type,g.color(g.player!)),document.createTextNode(item.type));
-        const repeat=button(item.loop?'↻':'1×',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue_loop_flags![index]=!item.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[factoryPlan(g,v).pending[index].ref!],enabled:!item.loop}});}));repeat.setAttribute('aria-label',`Loop shared item ${index+1}`);
-        const remove=button('−',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue.splice(index,1);s.queue_loop_flags!.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[factoryPlan(g,v).pending[index].ref!]}});}));remove.setAttribute('aria-label',`Remove shared item ${index+1}`);chip.append(repeat,remove);queue.append(chip);
-      });
+      for(const batch of queueBatches(plan.pending)){
+        const index=batch.indices.at(-1)!;
+        const chip=document.createElement('span');
+        chip.className='queue-item';
+        chip.dataset.loop=String(batch.loop);
+        chip.append(unitIcon(batch.type,g.color(g.player!)),document.createTextNode(`${batch.type} ×${batch.indices.length}`));
+        const repeat=button(batch.loop?'↻':'1×',()=>edit(v=>{
+          if(v.blueprint)configure(v,s=>{for(const i of batch.indices)s.queue_loop_flags![i]=!batch.loop;});
+          else {
+            const pending=factoryPlan(g,v).pending;
+            g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(i=>pending[i].ref!),enabled:!batch.loop}});
+          }
+        }));
+        repeat.setAttribute('aria-label',`Loop shared ${batch.type} batch`);
+        repeat.setAttribute('aria-pressed',String(batch.loop));
+        const remove=button('−',()=>edit(v=>{
+          if(v.blueprint)configure(v,s=>{s.queue.splice(index,1);s.queue_loop_flags!.splice(index,1);});
+          else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[factoryPlan(g,v).pending[index].ref!]}});
+        }));
+        remove.setAttribute('aria-label',`Remove shared item ${index+1}`);
+        remove.onfocus=()=>{this.focusDelete=()=>remove.click();};
+        chip.append(repeat,remove);
+        queue.append(chip);
+      }
     }
     card.append(queue);
     const recipes=document.createElement('div');recipes.className='recipe-icons';
