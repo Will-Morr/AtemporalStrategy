@@ -292,3 +292,32 @@ lobby creation, landing actions and the rebase notice. The two runs are under
 `artifacts/ui/factory-placement-coordinator-landing`. They used the release
 server built for the placement changes and did not verify later Tactical
 policy changes.
+
+## Checker incidents and guarded continuation
+
+All four `checker-incidents.spec.mjs` scenarios passed in desktop Chromium 153
+at 1920×1080 with seed 42 and one worker per run. The tests used live player
+inputs and injected checker disagreements in the controlled browser session.
+A submitted draft with conflicting local IDs and an exact-state placement
+mismatch each saved a distinct incident at revision 0, tick 0. The returned
+identifiers matched the saved files. The tests compared the saved world state
+with the exact snapshot, checked that local aliases retained their meaning
+without retaining their original strings, and verified that the incident files
+were unavailable through browser asset URLs.
+
+An ordinary occupied tile produced a placement reason and created no incident.
+When the local checker wrongly refused a legal placement, rebase, or commit
+preflight, the authoritative checker confirmed the original draft and recorded
+the fault. The browser staged the placement, rebased the draft to tick 5, and
+submitted it through normal validation. The published revision had both
+blueprints at tick 6. Escape cancelled an action before a deliberately delayed
+approval arrived, leaving the draft untouched. An injected filesystem failure
+produced an operator log entry with an attempted report ID and a player message
+that the report could not be saved.
+
+Inspected the full rendered rejection, resumed commit, cancelled retry and
+failed-write notices. Reports and traces are in
+`artifacts/ui/checker-incidents-continuation-verified` for direct transport and
+`artifacts/ui/checker-incidents-continuation-peripheral` for the inputs-only
+relay. The focused checks did not repeat the full browser suite or inject
+discrepancies into a live deployment.
