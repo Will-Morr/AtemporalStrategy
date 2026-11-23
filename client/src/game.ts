@@ -897,7 +897,7 @@ export class Game {
     finally {this.factoryEditing=false;this.updatePanels();}
   }
 
-  stage(command: Command, policy: FutureOrderPolicy = 'keep'): boolean {
+  stage(command: Command, policy: FutureOrderPolicy = 'keep', finishPlacement?: () => void): boolean {
     const gate = this.canStage();
     if (!gate.ok) {
       this.toast(gate.reason);
@@ -910,14 +910,26 @@ export class Game {
     if (command.kind === 'place_blueprints') {
       const issue = this.placementPlanAtPlayhead()?.issue(command);
       if (issue) {
-        this.showDraftRejection('placement', {
+        const local_id = this.draftIds.create();
+        const mode = this.mode;
+        const direction = this.renderer.outputDirection;
+        this.reconsiderDraftRejection('placement', {
           based_on_revision: this.current,
           tick: Math.floor(this.playhead),
-          commands: [...this.draft.commands, {local_id: this.draftIds.create(), command, future_orders: policy}],
-        }, issue);
+          commands: [...this.draft.commands, {local_id, command, future_orders: policy}],
+        }, issue, () => {
+          if (this.mode !== mode || this.renderer.outputDirection !== direction || !this.canStage().ok) return false;
+          this.writeDraftCommand(command, policy, local_id);
+          finishPlacement?.();
+          return true;
+        });
         return false;
       }
     }
+    return this.writeDraftCommand(command, policy);
+  }
+
+  private writeDraftCommand(command: Command, policy: FutureOrderPolicy, localId?: string): boolean {
     // One shared payload remains one protocol command for disjoint recipients.
     if(this.factoryEditing){
       const previous=this.draft.commands.at(-1);
@@ -948,7 +960,7 @@ export class Game {
         return [d];
       });
     }
-    this.draft.commands = [...this.draft.commands, { local_id: this.draftIds.create(), command: command as DraftCommand['command'], future_orders: policy }];
+    this.draft.commands = [...this.draft.commands, { local_id: localId ?? this.draftIds.create(), command: command as DraftCommand['command'], future_orders: policy }];
     if (!this.factoryEditing) this.updatePanels();
     return true;
   }
@@ -1049,11 +1061,19 @@ export class Game {
     if (!gate.ok) { this.toast(gate.reason); return; }
     const issue = this.blueprintDraftIssue(this.exact!.state, this.draft.commands);
     if (issue) {
-      this.showDraftRejection('rebase', {
+      this.reconsiderDraftRejection('rebase', {
         based_on_revision: this.current, tick: Math.floor(this.playhead), commands: this.draft.commands,
-      }, issue);
+      }, issue, () => {
+        if (!this.canStage(true).ok) return false;
+        this.applyDraftRebase();
+        return true;
+      });
       return;
     }
+    this.applyDraftRebase();
+  }
+
+  private applyDraftRebase(): void {
     this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
     this.draft.redo = [];
     this.draft.tick = Math.floor(this.playhead);
@@ -1081,38 +1101,62 @@ export class Game {
     return null;
   }
 
-  async checkBlueprintDraft(tick: number, commands = this.draft.commands, revision = this.current): Promise<void> {
-    if (!commands.some(d => ['place_blueprints', 'cancel_blueprints', 'configure_blueprints'].includes(d.command.kind))) return;
+  async checkBlueprintDraft(tick: number, commands = this.draft.commands, revision = this.current): Promise<string | null> {
+    if (!commands.some(d => ['place_blueprints', 'cancel_blueprints', 'configure_blueprints'].includes(d.command.kind))) return null;
     const state = this.exact?.revision === revision && this.exact.tick === tick ? this.exact.state :
       (await this.net.request({kind:'get_exact_state',revision,tick},'exact_state',m=>m.revision===revision&&m.tick===tick)).snapshot;
     const issue = this.blueprintDraftIssue(state, commands);
-    if (issue) {
-      const draft = {based_on_revision: revision, tick, commands};
-      throw new Error(await this.checkLocalDraftRejection('commit_preflight', draft, issue));
-    }
+    if (!issue) return null;
+    this.toast(issue);
+    const checked = await this.compareDraftRejection('commit_preflight', {based_on_revision: revision, tick, commands}, issue);
+    if (!checked.authoritativeAccepted) throw new Error(checked.message);
+    return checked.message;
   }
 
   private draftCheckNumber = 0;
 
   async checkLocalDraftRejection(source: DraftCheckSource, draft: TurnDraft, issue: string): Promise<string> {
-    if (!this.session.token) return issue;
+    return (await this.compareDraftRejection(source, draft, issue)).message;
+  }
+
+  private async compareDraftRejection(source: DraftCheckSource, draft: TurnDraft, issue: string): Promise<{message: string; authoritativeAccepted: boolean}> {
+    const declined = {message: issue, authoritativeAccepted: false};
+    if (!this.session.token) return declined;
     const request_id = `draft-check-${++this.draftCheckNumber}`;
     try {
       const compared = await this.net.request({
         kind: 'compare_draft_check', request: {request_id, slot_token: this.session.token, draft}, source, issue,
       }, 'draft_check_compared', reply => reply.request_id === request_id, 5000);
-      return compared.issue ?? issue;
+      // A comparison of a veto returns an issue only when the authoritative check accepted.
+      // Draft recovery uses this same response to report the original compiler error.
+      return {message: compared.issue ?? issue, authoritativeAccepted: source !== 'recovery' && compared.issue != null};
     } catch {
       // A disconnected, stale, or older server cannot confirm a checker discrepancy.
-      return issue;
+      return declined;
     }
   }
 
-  private showDraftRejection(source: DraftCheckSource, draft: TurnDraft, issue: string): void {
+  private draftGuard(): () => boolean {
+    const match = this.net.matchId, round = this.round, revision = this.current, draftTick = this.draft.tick;
+    const commands = this.draft.commands;
+    const contents = JSON.stringify(commands);
+    const undo = this.draft.undo.length, redo = this.draft.redo.length;
+    return () => match === this.net.matchId && round === this.round && revision === this.current &&
+      draftTick === this.draft.tick && undo === this.draft.undo.length && redo === this.draft.redo.length &&
+      commands === this.draft.commands && contents === JSON.stringify(this.draft.commands);
+  }
+
+  private draftIntentNumber = 0;
+
+  private reconsiderDraftRejection(source: 'placement' | 'rebase', draft: TurnDraft, issue: string, retry: () => boolean): void {
     this.toast(issue);
-    const round = this.round;
-    void this.checkLocalDraftRejection(source, draft, issue).then(message => {
-      if (message !== issue && this.round === round && this.current === draft.based_on_revision) this.toast(message);
+    const guard = this.draftGuard();
+    const intent = ++this.draftIntentNumber;
+    const match = this.net.matchId;
+    void this.compareDraftRejection(source, draft, issue).then(checked => {
+      if (!checked.authoritativeAccepted || this.net.matchId !== match) return;
+      const applied = this.draftIntentNumber === intent && guard() && Math.floor(this.playhead) === draft.tick && retry();
+      this.toast(applied ? checked.message : `${checked.message} The plan changed before the action could be retried.`);
     });
   }
 
@@ -1130,20 +1174,21 @@ export class Game {
     this.updatePanels();
     const submittedRound = this.round;
     const request_id = `${this.player}-${this.round}-${Date.now()}`;
+    let checkerReport: string | null = null;
     try {
       const commands = this.draft.commands;
       const revision = this.current;
-      const draftTick = this.draft.tick;
-      await this.checkBlueprintDraft(tick, commands, revision);
-      if (this.draft.commands !== commands || this.draft.tick !== draftTick || this.current !== revision || this.round !== submittedRound) {
+      const guard = this.draftGuard();
+      checkerReport = await this.checkBlueprintDraft(tick, commands, revision);
+      if (!guard()) {
         throw new Error('The plan changed during validation. Review your draft and commit again.');
       }
       await this.net.request({ kind: 'commit', checker_approved: true, request: { request_id, slot_token: this.session.token, draft: { based_on_revision: revision, tick, commands } } }, 'commit_accepted', m => m.request_id === request_id);
       if (this.round === submittedRound && !this.committed.includes(this.player!)) this.committed.push(this.player!);
       this.clearDraft();
-      this.toast('Turn committed. Waiting for the other players…');
+      this.toast(checkerReport ? `Turn committed. ${checkerReport}` : 'Turn committed. Waiting for the other players…');
     } catch (err) {
-      this.toast(`Turn not submitted. Your draft is saved. ${(err as Error).message}`);
+      this.toast(`Turn not submitted. Your draft is saved. ${(err as Error).message}${checkerReport ? ` ${checkerReport}` : ''}`);
     }
     this.turnRequestPending = false;
     this.updatePanels();
@@ -1328,9 +1373,11 @@ export class Game {
   placeAt(tile: Tile, end: Tile = tile, repeat = false): void {
     if (this.mode.kind !== 'place') return;
     const command = this.placementCommand(this.mode.type_key, this.placementTiles(tile, end));
-    if (!this.stage(command)) return;
-    if (!repeat) this.mode = { kind: 'none' };
-    this.updateMode();
+    const finish = () => {
+      if (!repeat) this.mode = { kind: 'none' };
+      this.updateMode();
+    };
+    if (this.stage(command, 'keep', finish)) finish();
   }
 
   placementTiles(a: Tile, b: Tile): Tile[] {

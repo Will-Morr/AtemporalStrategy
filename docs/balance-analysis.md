@@ -104,3 +104,5 @@ The bot-policy comparison used rules 14 for both opponents and replayed the huma
 | Second, four human turns | 3–0 | 1–2 | Draw, loss, win, win |
 
 Neither 2.1 run reached the first-to-three target before the recorded human turns ended. In the second game Tactical intervened at tick 1,156, won the rewritten timeline at tick 1,618, and kept that winning timeline on the next round. All bot drafts passed validation. These two plans informed development. On a separate map, seed 296108, Tactical in seat 1 beat Standard 3–0.
+
+On the independent October sustained-pressure recording, an opening-only check shortened the limit from 20,000 to 2,000 ticks. At that point Tactical was the sole surviving side, had eight factories and had spent 39,636 matter on production. All 29 human opening commands had their recipients. This establishes the position at tick 2,000.

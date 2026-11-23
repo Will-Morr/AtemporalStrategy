@@ -1,7 +1,7 @@
 import {mkdir, readFile, readdir, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {test, expect} from './fixtures.mjs';
-import {isolatedPeripheral, isolatedServer, players, revision, tile} from './game-helpers.mjs';
+import {isolatedPeripheral, isolatedServer, players, revision, seek, tile} from './game-helpers.mjs';
 
 async function openMatch(review, testInfo) {
   const launch = process.env.ATEMPORAL_UI_PERIPHERAL ? isolatedPeripheral : isolatedServer;
@@ -15,7 +15,7 @@ async function openMatch(review, testInfo) {
   await revision(player, 0);
   await revision(opponent, 0);
   const match = await player.evaluate(() => window.atemporal.net.matchId);
-  return {player, server, match, archive: join(server.dir, 'replays', match)};
+  return {player, opponent, server, match, archive: join(server.dir, 'replays', match)};
 }
 
 async function openPlots(page) {
@@ -103,8 +103,8 @@ test('rejected checked commit saves exact checker evidence without disclosing it
   await review.capture('reported-exact-state-mismatch-retains-draft', player);
 });
 
-test('ordinary placement conflict stays local, but a false veto persists a checker incident', async ({review}, testInfo) => {
-  const {player, archive} = await openMatch(review, testInfo);
+test('ordinary placement conflict stays local, but a false veto reports and continues a legal plan', async ({review}, testInfo) => {
+  const {player, opponent, archive} = await openMatch(review, testInfo);
   const [first, second] = await openPlots(player);
   await player.evaluate(() => {
     const game = window.atemporal;
@@ -127,11 +127,12 @@ test('ordinary placement conflict stays local, but a false veto persists a check
   expect(record.checker).toMatchObject({failure: 'client_rejected', client_check_source: 'placement'});
   expect(record.checker.draft.commands.map(d => d.command.tiles[0])).toEqual([first, second]);
   expect(raw.includes(injectedReason)).toBe(false);
-  await expect(player.locator('#draft-list li')).toHaveCount(1);
+  await expect(player.locator('#draft-list li')).toHaveCount(2);
   await review.capture('reported-false-placement-veto', player);
 
   await player.keyboard.press('Escape');
-  const originalDraft = await player.evaluate(() => window.atemporal.draft);
+  const originalCommands = await player.evaluate(() => window.atemporal.draft.commands);
+  await seek(player, 5);
   await player.evaluate(() => {
     window.atemporal.blueprintDraftIssue = () => 'Browser checker incorrectly refused to rebase this draft.';
   });
@@ -140,7 +141,8 @@ test('ordinary placement conflict stays local, but a false veto persists a check
   await expect(player.locator('#toast')).toContainText('incorrectly refused to rebase');
   const rebase = await reportFromToast(player, archive);
   expect(rebase.record.checker.client_check_source).toBe('rebase');
-  expect(await player.evaluate(() => window.atemporal.draft)).toEqual(originalDraft);
+  expect(await player.evaluate(() => window.atemporal.draft.tick)).toBe(5);
+  expect(await player.evaluate(() => window.atemporal.draft.commands)).toEqual(originalCommands);
   await review.capture('reported-false-rebase-veto', player);
 
   await player.evaluate(() => {
@@ -151,8 +153,36 @@ test('ordinary placement conflict stays local, but a false veto persists a check
   const preflight = await reportFromToast(player, archive);
   expect(preflight.record.checker.client_check_source).toBe('commit_preflight');
   expect(new Set([record.report_id, rebase.id, preflight.id]).size).toBe(3);
-  expect(await player.evaluate(() => window.atemporal.draft)).toEqual(originalDraft);
+  await expect(player.locator('#toast')).toContainText('Turn committed');
   await review.capture('reported-false-commit-preflight-veto', player);
+  await opponent.locator('#commit').click();
+  await revision(player, 1);
+  await seek(player, 6);
+  expect(await player.evaluate(() => window.atemporal.exact.state.blueprints
+    .filter(b => b.owner === 0).map(b => b.tile))).toEqual([first, second]);
+});
+
+test('a late checker approval cannot stage a placement the player cancelled', async ({review}, testInfo) => {
+  const {player, archive} = await openMatch(review, testInfo);
+  const [clear] = await openPlots(player);
+  await player.evaluate(() => {
+    const game = window.atemporal;
+    const send = game.net.request.bind(game.net);
+    const hold = new Promise(resolve => { window.releaseChecker = resolve; });
+    game.net.request = async (...args) => {
+      const reply = await send(...args);
+      if (args[0].kind === 'compare_draft_check') await hold;
+      return reply;
+    };
+    game.placementPlanAtPlayhead = () => ({issue: () => 'Browser checker incorrectly rejected this tile.'});
+  });
+  await place(player, 'turret', clear);
+  await player.keyboard.press('Escape');
+  await player.evaluate(() => window.releaseChecker());
+  await reportFromToast(player, archive);
+  await expect(player.locator('#toast')).toContainText('plan changed before the action could be retried');
+  await expect(player.locator('#draft-list li')).toHaveCount(0);
+  await review.capture('reported-late-approval-does-not-change-draft', player);
 });
 
 test('a failed incident write never claims the checker was reported', async ({review}, testInfo) => {
