@@ -77,3 +77,19 @@ cargo run --release -p atemporal-server --example replay_opponent -- seed:42 tac
 ```
 
 The replay evaluator retains the recorded human's seat, map, starting state, timestamps and command identities, replacing the other seat from round one. Each bot plans against the previous published state before the next human commands enter the simulation. Both policies use the release's game rules and unit stats. The evaluator prints the opponent's commands with a missing recipient alongside each timeline score. If a recorded order references a unit that failed to spawn in a changed timeline, the engine handles the missing target. The original scoreboard target stays pinned. Seeded runs use generated maps, the release defaults and Standard 1.0 in the opposite seat. The release adds only aggregate results. The raw November export stays outside the repository.
+
+## Wall firing in the two November 21 matches
+
+Both matches paired WillM (seat 0) with Tactical 2.0 (seat 1), first to three. The control reproduced all nine archived revisions under rules 13, including both opening states. Final state hashes, command outcomes, simulation outcomes and cumulative scores matched the archives. A second run reused the same requests and enabled only allied-wall fire and turret fire over constructed walls and rock. Both seats kept every recorded order and intervention tick. Factory output reservations and bot planning changes were disabled for this comparison.
+
+| Match | Round | Archived result | Wall-fire result | Terminal tick, old → new |
+| --- | ---: | --- | --- | ---: |
+| First | 1 | WillM | WillM | 2,266 → 2,635 |
+| First | 2 | WillM | WillM | 3,662 → 1,949 |
+| First | 3 | WillM | WillM | 3,862 → 3,473 |
+| Second | 1 | Draw | WillM | 20,000 → 20,000 |
+| Second | 2 | WillM | WillM | 20,000 → 5,914 |
+| Second | 3 | WillM | WillM | 20,000 → 20,000 |
+| Second | 4 | WillM | Match already won | 5,828 in archive |
+
+WillM won both matches 3–0. In the second match the wall change moved the deciding point from round four to round three. Its first combat divergence was Tactical’s turret at (41, 38) firing across map rock at WillM’s scout on tick 252. Tactical was then eliminated at tick 1,229 in the changed opening. The simulation continued to the 20,000-tick cap. The experiment measures the combined firing change against these fixed plans.
