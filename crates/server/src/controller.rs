@@ -834,10 +834,17 @@ impl Controller {
             .ok_or("no parent revision")?;
         let earliest = turns
             .iter()
-            .filter(|t| t.round == round)
+            .filter(|t| t.round == round && !t.commands.is_empty())
             .map(|t| t.tick)
             .min()
-            .unwrap_or(0);
+            // A pass changes the scoreboard ledger but has no simulation input.
+            // Re-run the final step so the original stopping condition is evaluated.
+            .unwrap_or_else(|| {
+                parent
+                    .outcome
+                    .as_ref()
+                    .map_or(0, |outcome| outcome.terminal_state_tick.saturating_sub(1))
+            });
         let (base_tick, checkpoint) = parent
             .checkpoints
             .range(..=earliest)
@@ -3214,6 +3221,40 @@ pub(crate) mod tests {
             loaded,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn passing_at_tick_zero_reuses_the_verified_prefix() {
+        let mut c = started(false, |_| {});
+        let original = &c.revisions[&0];
+        let outcome = original.outcome.clone().unwrap();
+        let hash = original.final_hash.clone();
+        let expected_base = *original
+            .checkpoints
+            .range(..outcome.terminal_state_tick)
+            .next_back()
+            .unwrap()
+            .0;
+        assert!(expected_base > 0);
+        let turns = (0..2)
+            .map(|player| AcceptedTurn {
+                round: 1,
+                player,
+                tick: 0,
+                commands: vec![],
+                duration_ms: 1u64.try_into().unwrap(),
+            })
+            .collect();
+        let rx = c
+            .start_job(1, turns, vec![identity::round_precedence(1, 2).unwrap()])
+            .unwrap();
+        run_round(&mut c, rx);
+        let revised = &c.revisions[&1];
+        assert_eq!(revised.base_tick, expected_base);
+        assert_eq!(revised.final_hash, hash);
+        assert_eq!(revised.outcome.as_ref(), Some(&outcome));
+        assert_eq!(revised.turns.len(), 2);
+        assert!(revised.score.is_some());
     }
 
     #[test]
