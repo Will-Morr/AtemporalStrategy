@@ -50,6 +50,7 @@ export class Renderer {
     // Keep world positions stable on screen when the contextual workspace changes height.
     this.camera.x += (this.map.width-oldWidth)/(2*this.camera.scale);
     this.camera.y += (this.map.height+this.headerHeight-oldHeight-oldHeader)/(2*this.camera.scale);
+    this.clamp();
     this.map.style.height = `${this.map.height}px`;
     this.minimap.width = this.minimap.clientWidth || 200;
     this.minimap.height = this.minimap.clientHeight || 200;
@@ -66,18 +67,12 @@ export class Renderer {
     this.camera.y = y;
     this.clamp();
   }
-  /** Keep the map on screen: it may slide within the viewport but never leave it entirely. */
+  /** Keep the viewport center on the map, allowing half the viewport past each edge. */
   clamp(): void {
     const t = this.game.terrain;
     if (!t) return;
-    const vw = this.map.width / this.camera.scale, vh = (this.map.height - this.headerHeight) / this.camera.scale;
-    const margin = 2;
-    const range = (view: number, size: number, value: number) => {
-      const a = view / 2 - margin, b = size - view / 2 + margin;
-      return Math.max(Math.min(a, b), Math.min(Math.max(a, b), value));
-    };
-    this.camera.x = range(vw, t.width, this.camera.x);
-    this.camera.y = range(vh, t.height, this.camera.y);
+    this.camera.x = Math.max(0, Math.min(t.width, this.camera.x));
+    this.camera.y = Math.max(0, Math.min(t.height, this.camera.y));
   }
   /** Initial zoom: the whole map above the bottom panels when possible, centered; returns whether it fits. */
   fit(): boolean {
