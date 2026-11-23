@@ -81,3 +81,5 @@ Provide a test-server flag that adds a homescreen button labeled **DEBUG_TEST**.
 ## Tactical openings and recovery
 
 Tactical should contest a strong opening and recover when its first plan fails. Evaluate its opening and its subsequent interventions against the recorded human plans that beat it in effectively one turn.
+
+Game results should arrive promptly, including while a release builds. Give live game work priority over deployment builds. Diagnose unusually slow turns against recorded matches.

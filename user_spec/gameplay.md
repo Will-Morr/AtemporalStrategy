@@ -14,7 +14,7 @@ Map generation should be fresh for every game (or at least drawn from a pool of 
 
 The map centre must always be passable. Most maps otherwise form two matching routes and which one units take is pseudorandom; the main path should always go through the centre, with additional winding paths available off to the sides. Most maps should have at least three lanes with the centre the shortest; a strict one-lane structure is fine for some maps but must not be overrepresented (map decision, 2026-09-13). The layout itself should not be one large open area with a few insignificant columns and a handful of dead-end tunnels (map decision, 2026-09-13).
 
-A miner claims the tile it is mining. Other miners sent to the same area path through or around claimed tiles instead of all converging on the closest one, so a group fills out a fillable area rather than clustering on its entry corner (playtest decision, 2026-09-13).
+A miner with a Mine order should keep working when reachable unclaimed ore remains. A blocked route should prompt another routing attempt. A miner claims the tile it is mining. Other miners sent to the same area path through or around claimed tiles instead of all converging on the closest one, so a group fills out a fillable area rather than clustering on its entry corner (playtest decision, 2026-09-13).
 
 ## Elimination and simulation outcomes
 
