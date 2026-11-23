@@ -321,3 +321,5 @@ failed-write notices. Reports and traces are in
 `artifacts/ui/checker-incidents-continuation-peripheral` for the inputs-only
 relay. The focused checks did not repeat the full browser suite or inject
 discrepancies into a live deployment.
+
+The landing-page Chromium scenario opens Patch Notes in its own tab and checks all five category filters. It clears every checkbox, selects Docs, then adds Bot update and verifies individual notes and commit links. Desktop and 390-pixel-wide screenshots were inspected. The filtered mobile frame is in `artifacts/ui/category-filters-final`.

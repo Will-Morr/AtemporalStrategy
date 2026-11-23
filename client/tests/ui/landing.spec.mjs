@@ -71,6 +71,21 @@ test('landing navigation, content-backed explainer and retry after creation fail
   await notes.setViewportSize({width:390,height:844});
   expect(await notes.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await notes.screenshot({path:testInfo.outputPath('patch-notes-mobile.png')});
+  const categories=notes.getByRole('checkbox');
+  await expect(categories).toHaveCount(5);
+  for(const category of await categories.all()){
+    await expect(category).toBeChecked();
+    await category.uncheck();
+  }
+  await expect(notes.locator('article:visible')).toHaveCount(0);
+  await notes.getByRole('checkbox',{name:'Docs',exact:true}).check();
+  const originalRelease=notes.locator('#commit-85402ff');
+  await expect(originalRelease.getByText('Added patch notes',{exact:false})).toBeVisible();
+  await expect(originalRelease.getByText('Quick play now uses Tactical 2.0.',{exact:false})).toBeHidden();
+  await notes.getByRole('checkbox',{name:/bot update/i}).check();
+  await expect(originalRelease.getByText('Quick play now uses Tactical 2.0.',{exact:false})).toBeVisible();
+  await expect(originalRelease.getByText('Added patch notes',{exact:false})).toBeVisible();
+  await review.capture('patch-notes-docs-and-bots',notes);
   await notes.close();
   await page.getByRole('link',{name:'Game Docs',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Game Docs',exact:true})).toBeVisible();
