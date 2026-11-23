@@ -52,11 +52,7 @@ export class Experience {
     pathLabel.append(pathToggle,' Show path previews');settings.append(pathLabel);
     const pathHelp=document.createElement('small');pathHelp.textContent='Uncheck for straight order lines. Cyan: treads · gold: walker. Routes use each unit’s movement type. Routes may change with traffic or combat.';settings.append(pathHelp);toolbar.append(settings);
     const advanced=document.createElement('div');const planning=document.createElement('div');planning.className='action-group';advanced.append(planning);toolbar.querySelector('.planning')!.append(advanced);
-    planning.append(button('Rebase draft here', () => {
-      if (g.current !== g.latest || g.playhead < g.editableFrom) { g.toast('Choose an editable live tick.'); return; }
-      g.draft.undo.push({commands:[...g.draft.commands],tick:g.draft.tick}); g.draft.redo = [];
-      g.draft.tick = g.draft.commands.length ? Math.floor(g.playhead) : null; g.updatePanels();
-    }));
+    planning.append(button('Rebase draft here', () => g.rebaseDraft()));
     planning.append(button('Discard all uncommitted changes', () => g.clearDraft()));
     planning.append(button('Delete selected', () => g.key(new KeyboardEvent('keydown', { key: 'Delete' }))));
     const guide = document.createElement('a'); guide.href = guideUrl; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);

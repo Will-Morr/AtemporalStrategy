@@ -4194,6 +4194,16 @@
         "lifecycle": {
           "$ref": "#/$defs/Lifecycle"
         },
+        "output_direction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CardinalDirection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "silo": {
           "anyOf": [
             {

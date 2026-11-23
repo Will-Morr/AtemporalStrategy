@@ -1094,6 +1094,31 @@ mod tests {
     }
 
     #[test]
+    fn peripheral_retains_the_controller_rules_version() {
+        let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))
+            .unwrap()
+            .match_defaults;
+        config.seed = 42u64.try_into().unwrap();
+        let content = load_content(include_str!("../../../config/content.yaml")).unwrap();
+        let initial = atemporal_sim::map::generate(&config, &content).unwrap();
+        let local = fingerprint(&config, &content).unwrap();
+        for rules in [7, 9, 10, 11, 12, 13, RULES_VERSION] {
+            let mut remote = local.clone();
+            remote.sim_build = format!("atemporal-sim 0.1.0 rules {rules}");
+            let store = Store::new(
+                "test".into(),
+                remote.clone(),
+                config.clone(),
+                content.clone(),
+                initial.clone(),
+                1 << 26,
+            )
+            .unwrap();
+            assert_eq!(store.fingerprint, remote);
+        }
+    }
+
+    #[test]
     fn unpublished_inputs_can_be_replaced_and_reopened_without_reusing_a_preview() {
         let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))
             .unwrap()

@@ -25,6 +25,8 @@ pub struct Sim {
     pub(crate) legacy_rules: bool,
     pub(crate) alternate_treads: bool,
     pub(crate) breach_enemy_structures: bool,
+    pub(crate) reserve_factory_outputs: bool,
+    fire_through_walls: bool,
     pub(crate) terrain_corner_scores: Option<std::sync::Arc<[i32]>>,
     pub(crate) artillery_retreat_margin: f64,
     pub(crate) artillery_retreat_enabled: bool,
@@ -132,10 +134,9 @@ impl Sim {
         }
         let mut sim = Self {
             legacy_rules,
-            breach_enemy_structures: build
-                .rsplit_once(" rules ")
-                .and_then(|(_, version)| version.parse::<u32>().ok())
-                .is_none_or(|version| version >= 13),
+            breach_enemy_structures: rules_at_least(build, 13),
+            reserve_factory_outputs: rules_at_least(build, 14),
+            fire_through_walls: rules_at_least(build, 14),
             alternate_treads: !legacy_rules && !public_rules8,
             terrain_corner_scores: (!public_rules8
                 && ![" rules 7", " rules 9", " rules 10", " rules 11"]
@@ -396,8 +397,31 @@ impl Sim {
         );
         visible
     }
-    /// Symmetric line traversal for direct fire. Current games include constructed walls.
+    /// Weapon obstruction is independent of the visibility projected for a player.
+    pub(crate) fn firing_line(&self, shooter: usize, target: Tile) -> bool {
+        let entity = &self.state.entities[shooter];
+        if !self.fire_through_walls {
+            return self.line_of_sight(entity.tile, target);
+        }
+        if entity.type_key == "turret" {
+            return true;
+        }
+        self.line_clear(entity.tile, target, |tile| {
+            self.state
+                .entities
+                .get(self.occ[self.idx(tile)] as usize)
+                .is_some_and(|wall| {
+                    wall.type_key == "wall" && self.hostile(entity.owner, wall.owner)
+                })
+        })
+    }
+
     pub(crate) fn line_of_sight(&self, a: Tile, b: Tile) -> bool {
+        self.line_clear(a, b, |tile| self.built_wall(tile))
+    }
+
+    /// Symmetric line traversal with a configurable constructed-wall obstruction.
+    fn line_clear(&self, a: Tile, b: Tile, blocks: impl Fn(Tile) -> bool) -> bool {
         let (a, b) = if a <= b { (a, b) } else { (b, a) };
         let (mut x, mut y) = (i32::from(a.x), i32::from(a.y));
         let (x1, y1) = (i32::from(b.x), i32::from(b.y));
@@ -423,7 +447,7 @@ impl Sim {
             let blocked = |x: i32, y: i32| {
                 self.state.terrain.cells[(y * self.width() + x) as usize] == TerrainCell::Wall
                     || (!self.legacy_rules
-                        && self.built_wall(Tile {
+                        && blocks(Tile {
                             x: x as u16,
                             y: y as u16,
                         }))

@@ -1,5 +1,5 @@
 //! Canonical command application at the start of a tick: round, precedence rank, then index.
-use crate::world::{Sim, cardinal_offset};
+use crate::world::Sim;
 use crate::*;
 
 impl Sim {
@@ -33,6 +33,18 @@ impl Sim {
             }
         }
         Ok(())
+    }
+
+    fn is_factory_output(&self, tile: Tile) -> bool {
+        self.state.entities.iter().any(|entity| {
+            entity.production.as_ref().is_some_and(|production| {
+                production.silo.is_none() && production.output_tile == tile
+            })
+        }) || self.state.blueprints.iter().any(|blueprint| {
+            blueprint.output_direction.is_some_and(|direction| {
+                placement::output_tile(&self.state.terrain, blueprint.tile, direction) == Some(tile)
+            })
+        })
     }
 
     fn skip(&self, entity: Option<EntityId>, reason: SkipReason) -> SkippedTarget {
@@ -318,15 +330,15 @@ impl Sim {
                     .unwrap_or(usize::from(player)) as u8;
                 for (index, tile) in tiles.iter().enumerate() {
                     let id = identity::blueprint(&committed.id, index as u32)?;
-                    let legal = self.in_bounds(i32::from(tile.x), i32::from(tile.y))
-                        && self.floor(*tile)
-                        && !self
+                    let blocked = !placement::in_bounds(&self.state.terrain, *tile)
+                        || !self.traversable(*tile)
+                        || self
                             .state
                             .blueprints
                             .iter()
                             .any(|b| b.tile == *tile && b.owner == player)
-                        && self.traversable(*tile);
-                    if !legal {
+                        || (self.reserve_factory_outputs && self.is_factory_output(*tile));
+                    if blocked {
                         outcome
                             .skipped
                             .push(self.skip(Some(id), SkipReason::Blocked));
@@ -335,19 +347,14 @@ impl Sim {
                     let mut output = None;
                     if produces {
                         let wanted = output_directions.as_ref().map(|d| d[index]);
-                        let candidates: Vec<CardinalDirection> = match wanted {
-                            Some(d) => vec![d],
-                            None => vec![
-                                CardinalDirection::N,
-                                CardinalDirection::E,
-                                CardinalDirection::S,
-                                CardinalDirection::W,
-                            ],
-                        };
-                        output = candidates.into_iter().find(|d| {
-                            let (dx, dy) = cardinal_offset(*d);
-                            self.offset(*tile, dx, dy)
-                                .is_some_and(|t| self.traversable(t))
+                        output = placement::output_directions(wanted).find(|d| {
+                            placement::output_tile(&self.state.terrain, *tile, *d).is_some_and(
+                                |t| {
+                                    self.traversable(t)
+                                        && (!self.reserve_factory_outputs
+                                            || !self.state.blueprints.iter().any(|b| b.tile == t))
+                                },
+                            )
                         });
                         if output.is_none() {
                             outcome

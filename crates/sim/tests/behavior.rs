@@ -1348,3 +1348,162 @@ fn attack_move_keeps_visible_target_when_a_distant_turret_fires() {
     assert!(!run.attacks(&grunt).is_empty());
     assert_checkpoint_equivalence(&w, &run);
 }
+
+#[test]
+fn factory_outputs_reserve_building_tiles_without_reserving_movement() {
+    let mut w = World::new(&OPEN);
+    w.spawn(0, "factory", 2, 2);
+    let mover = w.spawn_with(0, "miner", 3, 3, attack_move(3, 2));
+    let place = |key: &str, x, y, direction: Option<CardinalDirection>| Command::PlaceBlueprints {
+        type_key: key.into(),
+        tiles: vec![tile(x, y)],
+        priority: Priority::Medium,
+        output_directions: direction.map(|direction| vec![direction]),
+    };
+    let round = w.turn(
+        1,
+        0,
+        0,
+        vec![
+            place("wall", 3, 2, None),
+            place("factory", 4, 2, Some(CardinalDirection::W)),
+            place("factory", 5, 2, Some(CardinalDirection::E)),
+            place("wall", 6, 2, None),
+            place("factory", 7, 2, Some(CardinalDirection::W)),
+            place("wall", 9, 2, None),
+            place("factory", 10, 2, Some(CardinalDirection::W)),
+            Command::CancelBlueprints {
+                blueprint_ids: vec![
+                    identity::blueprint(&identity::command_id(1, 0, 2), 0).unwrap(),
+                    identity::blueprint(&identity::command_id(1, 0, 4), 0).unwrap(),
+                ],
+            },
+            place("wall", 6, 2, None),
+        ],
+    );
+    let mut request = w.request();
+    request.end_tick_exclusive = 2;
+    let updated = run_request(&request);
+    for i in [0, 3, 6] {
+        assert_eq!(
+            updated.outcome(&round[i]).skipped[0].reason,
+            SkipReason::Blocked
+        );
+    }
+    for i in [1, 2, 4, 5, 8] {
+        assert_eq!(updated.outcome(&round[i]).applied_entities.len(), 1);
+    }
+    assert_eq!(entity(&w.at(2), &mover).tile, tile(3, 2));
+
+    request.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 13".into();
+    let historical = run_request(&request);
+    for i in [0, 3, 6] {
+        assert_eq!(historical.outcome(&round[i]).applied_entities.len(), 1);
+    }
+}
+
+#[test]
+fn simultaneous_placements_keep_footprint_contention_but_reserve_outputs() {
+    let mut w = World::new(&OPEN);
+    let round = identity::round_precedence(1, w.config.player_count).unwrap();
+    let [first, second] = round.players.as_slice() else {
+        panic!("expected two players")
+    };
+    let place = |key: &str, tiles, output_directions| Command::PlaceBlueprints {
+        type_key: key.into(),
+        tiles,
+        priority: Priority::Medium,
+        output_directions,
+    };
+    let first = w.turn(
+        1,
+        *first,
+        0,
+        vec![place(
+            "factory",
+            vec![tile(5, 3)],
+            Some(vec![CardinalDirection::E]),
+        )],
+    );
+    let second = w.turn(
+        1,
+        *second,
+        0,
+        vec![place("wall", vec![tile(5, 3), tile(6, 3)], None)],
+    );
+    let mut request = w.request();
+    request.end_tick_exclusive = 1;
+    let result = run_request(&request);
+    assert_eq!(result.outcome(&first[0]).applied_entities.len(), 1);
+    assert_eq!(
+        result.outcome(&second[0]).applied_entities,
+        vec![identity::blueprint(&second[0], 0).unwrap(),]
+    );
+    assert_eq!(
+        result.outcome(&second[0]).skipped[0].reason,
+        SkipReason::Blocked
+    );
+}
+
+#[test]
+fn allied_walls_allow_unit_fire_and_turrets_can_fire_over_rock() {
+    let mut w = World::new(&[
+        "..............",
+        "..............",
+        "...#..........",
+        "..............",
+        "..............",
+        "..............",
+        "..............",
+        "..............",
+    ]);
+    let grunt = w.spawn(0, "grunt", 1, 0);
+    w.spawn(0, "wall", 2, 0);
+    let wall = w.spawn(0, "wall", 3, 0);
+    let teammate_wall = w.entity_mut(&wall);
+    teammate_wall.id = identity::genesis(2, 0).unwrap();
+    teammate_wall.owner = 2;
+    for player_id in 2..4 {
+        let mut player = w.state.players[1].clone();
+        player.player_id = player_id;
+        w.state.players.push(player);
+    }
+    w.config.player_count = 4;
+    w.config.multiplayer = Multiplayer::Teams {
+        assignments: (0..4)
+            .map(|player_id| TeamAssignment {
+                player_id,
+                team_id: if player_id % 2 == 0 { "blue" } else { "red" }.into(),
+            })
+            .collect(),
+    };
+    let miner = w.spawn(1, "miner", 4, 0);
+    let turret = w.spawn(0, "turret", 1, 2);
+    let behind_rock = w.spawn(1, "miner", 4, 2);
+    let enemy_wall = w.spawn(1, "wall", 2, 3);
+    let turret_behind_wall = w.spawn(0, "turret", 1, 3);
+    let behind_enemy_wall = w.spawn(1, "miner", 4, 3);
+    let other_grunt = w.spawn(0, "grunt", 1, 7);
+    w.spawn(1, "wall", 3, 7);
+    let screened_miner = w.spawn(1, "miner", 4, 7);
+    w.entity_mut(&turret).engaged_target = Some(behind_rock.clone());
+    w.entity_mut(&turret_behind_wall).engaged_target = Some(behind_enemy_wall.clone());
+    let mut request = w.request();
+    request.end_tick_exclusive = 1;
+    let result = run_request(&request);
+    let hits = |run: &Run, shooter: &EntityId, target: &EntityId| {
+        run.events.iter().any(|event| {
+            matches!(&event.event, PresentationEvent::Attack { attacker_id, target_id, .. }
+            if attacker_id == shooter && target_id == target)
+        })
+    };
+    assert!(hits(&result, &grunt, &miner));
+    assert!(hits(&result, &turret, &behind_rock));
+    assert!(hits(&result, &turret_behind_wall, &behind_enemy_wall));
+    assert!(!hits(&result, &other_grunt, &screened_miner));
+    request.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 13".into();
+    let old = run_request(&request);
+    assert!(!hits(&old, &grunt, &miner));
+    assert!(!hits(&old, &turret, &behind_rock));
+    assert!(hits(&old, &turret_behind_wall, &enemy_wall));
+}

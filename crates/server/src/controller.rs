@@ -126,7 +126,7 @@ pub fn fingerprint(config: &MatchConfig, content: &Content) -> Result<Fingerprin
     })
 }
 
-/// Rules 7 and 9–12 retain their original behavior. Rules 8 had two incompatible
+/// Rules 7 and 9–13 retain their original behavior. Rules 8 had two incompatible
 /// implementations, and only the stock public build can be identified unambiguously.
 pub fn supports_build(recorded: &Fingerprint, current: &Fingerprint) -> bool {
     let Some(((old_build, old_rules), (new_build, new_rules))) = recorded
@@ -138,12 +138,13 @@ pub fn supports_build(recorded: &Fingerprint, current: &Fingerprint) -> bool {
     };
     old_build == new_build
         && if old_rules == "8" {
-            matches!(new_rules, "12" | "13") && atemporal_sim::is_public_rules8(recorded)
+            matches!(new_rules, "12" | "13" | "14") && atemporal_sim::is_public_rules8(recorded)
         } else {
             old_rules == new_rules
                 || (matches!(old_rules, "7" | "9" | "10" | "11")
-                    && matches!(new_rules, "12" | "13"))
-                || (old_rules == "12" && new_rules == "13")
+                    && matches!(new_rules, "12" | "13" | "14"))
+                || (old_rules == "12" && matches!(new_rules, "13" | "14"))
+                || (old_rules == "13" && new_rules == "14")
         }
 }
 
@@ -1334,6 +1335,42 @@ impl Controller {
             Ok(e)
         };
         let def = |key: &str| self.content.types.iter().find(|t| t.key == key);
+        // Hidden blockers and competing turns are resolved by the simulation.
+        let mut structures = if rules_at_least(&self.fingerprint.sim_build, 14)
+            && commands
+                .iter()
+                .any(|command| matches!(command, Command::PlaceBlueprints { .. }))
+        {
+            let frame = player_timeline::project(state, player, &self.config, &self.content)?;
+            let mut known = BTreeMap::new();
+            for blueprint in state.blueprints.iter().filter(|b| b.owner == player) {
+                let output = blueprint.output_direction.and_then(|direction| {
+                    placement::output_tile(&state.terrain, blueprint.tile, direction)
+                });
+                known.insert(
+                    blueprint.id.clone(),
+                    (blueprint.type_key.as_str(), blueprint.tile, output),
+                );
+            }
+            for entity in &state.entities {
+                if (entity.owner == player || frame.sees(entity.tile))
+                    && def(&entity.type_key).is_some_and(|d| d.kind == TypeKind::Structure)
+                {
+                    let output = entity
+                        .production
+                        .as_ref()
+                        .filter(|p| p.silo.is_none())
+                        .map(|p| p.output_tile);
+                    known.insert(
+                        entity.id.clone(),
+                        (entity.type_key.as_str(), entity.tile, output),
+                    );
+                }
+            }
+            Some(known)
+        } else {
+            None
+        };
         for (command_index, command) in commands.iter().enumerate() {
             match command {
                 Command::ClearFutureOrders {} => {}
@@ -1384,7 +1421,10 @@ impl Controller {
                     }
                 }
                 Command::PlaceBlueprints {
-                    type_key, tiles, ..
+                    type_key,
+                    tiles,
+                    output_directions,
+                    ..
                 } => {
                     let d = def(type_key).ok_or("unknown structure type")?;
                     if d.kind != TypeKind::Structure {
@@ -1393,17 +1433,70 @@ impl Controller {
                     if tiles.is_empty() {
                         return Err("no placement tiles".into());
                     }
-                    for t in tiles {
-                        if t.x >= state.terrain.width || t.y >= state.terrain.height {
+                    for (index, &tile) in tiles.iter().enumerate() {
+                        if !placement::in_bounds(&state.terrain, tile) {
                             return Err("placement outside the map".into());
                         }
-                        let i =
-                            usize::from(t.y) * usize::from(state.terrain.width) + usize::from(t.x);
-                        if state.terrain.cells[i] != TerrainCell::Floor {
+                        if !placement::is_floor(&state.terrain, tile) {
                             return Err("cannot place on rock".into());
                         }
-                        if state.entities.iter().any(|e| {
-                            e.tile == *t
+                        if let Some(known) = &mut structures {
+                            let at = |target| known.values().find(|(_, tile, _)| *tile == target);
+                            if let Some((key, _, _)) = at(tile) {
+                                return Err(format!(
+                                    "Cannot place {type_key} at ({}, {}). A {key} already occupies that tile.",
+                                    tile.x, tile.y
+                                ));
+                            }
+                            if let Some((key, origin, _)) =
+                                known.values().find(|(_, _, output)| *output == Some(tile))
+                            {
+                                return Err(format!(
+                                    "Cannot place {type_key} at ({}, {}). It is the output of the {key} at ({}, {}).",
+                                    tile.x, tile.y, origin.x, origin.y
+                                ));
+                            }
+                            let mut output = None;
+                            if d.production.is_some() && d.silo.is_none() {
+                                let wanted = output_directions
+                                    .as_ref()
+                                    .and_then(|dirs| dirs.get(index).copied());
+                                for direction in placement::output_directions(wanted) {
+                                    let Some(candidate) =
+                                        placement::output_tile(&state.terrain, tile, direction)
+                                            .filter(|&out| {
+                                                placement::is_floor(&state.terrain, out)
+                                            })
+                                    else {
+                                        continue;
+                                    };
+                                    if let Some((key, _, _)) = at(candidate) {
+                                        if wanted.is_some() {
+                                            return Err(format!(
+                                                "The output for {type_key} at ({}, {}) is blocked by a {key} at ({}, {}).",
+                                                tile.x, tile.y, candidate.x, candidate.y
+                                            ));
+                                        }
+                                        continue;
+                                    }
+                                    output = Some(candidate);
+                                    break;
+                                }
+                                if output.is_none() {
+                                    return Err(format!(
+                                        "No clear output for {type_key} at ({}, {}).",
+                                        tile.x, tile.y
+                                    ));
+                                }
+                            }
+                            let command =
+                                identity::command_id(self.round, player, command_index as u32);
+                            known.insert(
+                                identity::blueprint(&command, index as u32)?,
+                                (type_key, tile, output),
+                            );
+                        } else if state.entities.iter().any(|e| {
+                            e.tile == tile
                                 && def(&e.type_key).is_some_and(|d| d.kind == TypeKind::Structure)
                         }) {
                             return Err("tile already holds a structure".into());
@@ -1480,6 +1573,17 @@ impl Controller {
                                 })
                         {
                             return Err("blueprint is not yours or does not exist".into());
+                        }
+                        if let Some(known) = &mut structures {
+                            known.remove(id);
+                            if let Some(site) = state
+                                .blueprints
+                                .iter()
+                                .find(|b| b.id == *id)
+                                .and_then(|b| b.site_id.as_ref())
+                            {
+                                known.remove(site);
+                            }
                         }
                     }
                 }
@@ -3456,6 +3560,54 @@ pub(crate) mod tests {
         };
         assert!(events.is_empty());
     }
+    #[test]
+    fn placement_names_visible_blockers_and_reserves_draft_outputs_until_cancelled() {
+        let c = started(false, |_| {});
+        let mut state = c.revisions[&0].checkpoints[&0].clone();
+        let turret = state
+            .entities
+            .iter()
+            .find(|e| e.owner == 0 && e.type_key == "turret")
+            .unwrap();
+        let turret_tile = turret.tile;
+        let factory_tile = Tile { x: 2, y: 2 };
+        let output_tile = Tile { x: 3, y: 2 };
+        state.terrain.cells.fill(TerrainCell::Floor);
+        state
+            .entities
+            .retain(|e| e.tile != factory_tile && e.tile != output_tile);
+        let place = |key: &str, tile, output_directions| Command::PlaceBlueprints {
+            type_key: key.into(),
+            tiles: vec![tile],
+            priority: Priority::Medium,
+            output_directions,
+        };
+        let error = c
+            .validate_against_state(0, &[place("wall", turret_tile, None)], &state)
+            .unwrap_err();
+        assert!(error.contains("turret already occupies"));
+        assert!(error.contains(&format!("({}, {})", turret_tile.x, turret_tile.y)));
+
+        let factory = place("factory", factory_tile, Some(vec![CardinalDirection::E]));
+        let wall = place("wall", output_tile, None);
+        let error = c
+            .validate_against_state(0, &[factory.clone(), wall.clone()], &state)
+            .unwrap_err();
+        assert!(error.contains("output of the factory at (2, 2)"));
+        let error = c
+            .validate_against_state(0, &[wall.clone(), factory.clone()], &state)
+            .unwrap_err();
+        assert!(error.contains("blocked by a wall at (3, 2)"));
+
+        let cancel = Command::CancelBlueprints {
+            blueprint_ids: vec![
+                identity::blueprint(&identity::command_id(c.round, 0, 0), 0).unwrap(),
+            ],
+        };
+        c.validate_against_state(0, &[factory, cancel, wall], &state)
+            .unwrap();
+    }
+
     #[test]
     fn draft_blueprints_can_be_configured_and_cancelled_without_weakening_ownership() {
         let c = started(false, |_| {});

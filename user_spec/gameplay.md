@@ -140,3 +140,7 @@ Factory experiments should compare each unit head-to-head and explore every two-
 For each map, show all single-unit and two-unit rosters against each other in a color-coded chart. Each cell gives the row roster’s average health-weighted surviving matter against the column opponent. Count a destroyed force as zero. Use solid black for exact zero in the reviewer and exported plots. Sort both axes by average surviving matter. Fit the full width of the comparison chart on screen. Also compare rankings across maps by the number of opposing rosters each roster beats. The balance goal is a diversity of leaders across maps.
 
 Use a map with a single snaking corridor between the two bases to calibrate balance in narrow spaces. Size the passage using the corridors found in actual generated games, and compare how geometry changes combat outcomes.
+
+## Wall combat
+
+A unit can fire through walls owned by its player or a teammate. Turrets can fire over any constructed wall and over map walls. These firing rules apply independently of movement.

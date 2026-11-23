@@ -161,10 +161,10 @@ export class SightMemory {
       if (!appearance || appearance.index !== e.index || appearance.owner !== e.owner ||
           appearance.type_key !== e.type_key || appearance.x !== e.x || appearance.y !== e.y ||
           appearance.facing !== e.facing || appearance.lifecycle !== e.lifecycle ||
-          appearance.hp !== e.hp || appearance.maxHp !== e.maxHp) {
+          appearance.hp !== e.hp || appearance.maxHp !== e.maxHp || appearance.outputDirection !== e.outputDirection) {
         appearance = {
           key, index:e.index, id:e.id, owner:e.owner, type_key:e.type_key, x:e.x, y:e.y,
-          facing:e.facing, lifecycle:e.lifecycle, hp:e.hp, maxHp:e.maxHp,
+          facing:e.facing, lifecycle:e.lifecycle, hp:e.hp, maxHp:e.maxHp, outputDirection:e.outputDirection,
           activity:'last seen', engaged:null, remembered:true,
         };
         this.latestAppearance.set(key, appearance);

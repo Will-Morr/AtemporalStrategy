@@ -1629,6 +1629,7 @@ export interface SampleEntity {
   hp: number;
   index: number;
   lifecycle: Lifecycle;
+  output_direction?: CardinalDirection | null;
   silo?: SiloState | null;
   tile: Tile;
 }

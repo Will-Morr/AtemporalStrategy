@@ -617,7 +617,9 @@ record!(EntityRef {
     owner: PlayerId,
     type_key: TypeKey
 });
-record!(SampleEntity { index: u32, tile: Tile, hp: f64, facing: Direction, lifecycle: Lifecycle, activity: Activity, engaged: Option<u32>, #[serde(default, skip_serializing_if = "Option::is_none")] silo: Option<SiloState> });
+record!(SampleEntity { index: u32, tile: Tile, hp: f64, facing: Direction, lifecycle: Lifecycle, activity: Activity, engaged: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] silo: Option<SiloState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] output_direction: Option<CardinalDirection> });
 record!(SamplePlayer {
     player_id: PlayerId,
     bank: f64,

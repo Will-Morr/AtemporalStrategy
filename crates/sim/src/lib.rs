@@ -8,6 +8,7 @@ mod commands;
 mod fields;
 pub mod map;
 mod output;
+pub mod placement;
 pub mod player_timeline;
 mod silo;
 mod tick;
@@ -19,7 +20,14 @@ pub use output::{Output, RunResult};
 pub use world::Sim;
 
 /// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
-pub const RULES_VERSION: u32 = 13;
+pub const RULES_VERSION: u32 = 14;
+
+pub fn rules_at_least(build: &str, version: u32) -> bool {
+    build
+        .rsplit_once(" rules ")
+        .and_then(|(_, recorded)| recorded.parse::<u32>().ok())
+        .is_none_or(|recorded| recorded >= version)
+}
 
 /// The stock public build used rules 8 before alternate tread movement and retreat.
 pub fn is_public_rules8(fingerprint: &Fingerprint) -> bool {

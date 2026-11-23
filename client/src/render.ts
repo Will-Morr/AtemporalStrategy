@@ -1,5 +1,6 @@
 import {OrderPreviews} from './order-preview';
 import {drawMissileOverlays} from './missile-render';
+import {outputTile} from './placement';
 import type { CardinalDirection, Tile } from './contracts.generated';
 import { idKey, type EntityView, type Game } from './game';
 
@@ -267,6 +268,13 @@ export class Renderer {
       this.drawEntity(ctx, v, s, byIndex,gunAngle);
     }
     this.gunAngles=nextAngles;
+    for (const v of views) {
+      const def = this.game.types.get(v.type_key);
+      if (v.remembered || !v.outputDirection || !def?.production || def.silo) continue;
+      const output = outputTile(v, v.outputDirection);
+      if (v.owner !== this.game.player && !sees(output)) continue;
+      this.drawFactoryOutput(ctx, output, v.outputDirection, '#d7efff');
+    }
     const review = this.game.experience.review;
     if (review.active) review.update();
     ctx.save();
@@ -312,37 +320,90 @@ export class Renderer {
     }
     this.orderPreviews.draw(this.game,this,ctx,views);
     drawMissileOverlays(this.game,this,ctx);
-    // Placement preview with output arrow.
-    if (this.game.mode.kind === 'place' && this.game.hover) {
-      const h = this.game.hover;
-      const [px, py] = this.screen(h.x, h.y);
-      ctx.strokeStyle = this.game.validPlacement(h,!!this.game.types.get(this.game.mode.type_key)?.production && !this.game.types.get(this.game.mode.type_key)?.silo) ? '#ffffff' : '#ff5252';
-      ctx.strokeRect(px + 1, py + 1, s - 2, s - 2);
-      if (this.game.types.get(this.game.mode.type_key)?.production && !this.game.types.get(this.game.mode.type_key)?.silo) {
-        const [dx, dy] = OFFSET[this.outputDirection];
-        const [qx, qy] = this.screen(h.x + dx, h.y + dy);
-        ctx.strokeStyle = this.game.validPlacement(h,true) ? '#81c784' : '#ff5252';
-        ctx.strokeRect(qx + 3, qy + 3, s - 6, s - 6);
-        ctx.beginPath();ctx.moveTo(px+s/2,py+s/2);ctx.lineTo(qx+s/2,qy+s/2);ctx.stroke();
+    const d = this.game.drag;
+    if (this.game.mode.kind === 'place' && (this.game.hover || d)) {
+      const h = d ? this.tileAt(d.x1, d.y1) : this.game.hover!;
+      const type = this.game.mode.type_key;
+      const def = this.game.types.get(type);
+      const tiles = d && type === 'wall' ? this.game.placementTiles(this.tileAt(d.x0,d.y0), h) : [h];
+      const blocked = this.game.placementIssue(type, tiles);
+      const color = blocked ? '#ff5252' : '#ffffff';
+      ctx.strokeStyle = color;
+      for (const tile of tiles) {
+        const [x, y] = this.screen(tile.x, tile.y);
+        ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      }
+      if (def?.production && !def.silo) {
+        const [px, py] = this.screen(h.x + .5, h.y + .5);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.globalAlpha = .65;
+        this.drawFactoryBody(ctx, s, this.outputDirection, blocked ? color : this.game.color(this.game.player ?? 0));
+        ctx.restore();
+        this.drawFactoryOutput(ctx, outputTile(h, this.outputDirection), this.outputDirection, blocked ? color : '#81e4ad');
       }
     }
     // Drag rectangle.
-    const d = this.game.drag;
-    if (d && this.game.mode.kind === 'place') {
-      for (const tile of this.game.placementTiles(this.tileAt(d.x0,d.y0),this.tileAt(d.x1,d.y1))) { const [x,y]=this.screen(tile.x,tile.y); ctx.strokeStyle=this.game.validPlacement(tile,false)?'#ffca28':'#ff5252';ctx.strokeRect(x+1,y+1,s-2,s-2); }
-    }
     if (d && this.game.mode.kind === 'area') {
       // Show exactly the tiles the order will cover.
       const a = this.tileAt(d.x0, d.y0), b = this.tileAt(d.x1, d.y1);
       const [x0, y0] = this.screen(Math.min(a.x, b.x), Math.min(a.y, b.y)), [x1, y1] = this.screen(Math.max(a.x, b.x) + 1, Math.max(a.y, b.y) + 1);
       ctx.strokeStyle = '#ffca28';
       ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-    } else if (d) {
+    } else if (d && this.game.mode.kind !== 'place') {
       ctx.strokeStyle = '#ffffff';
       ctx.strokeRect(Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0));
     }
     this.drawMinimap(views);
     this.drawTimeline();
+  }
+
+  private drawFactoryBody(ctx: CanvasRenderingContext2D, s: number, direction: CardinalDirection | undefined, color: string): void {
+    // The base sprite's loading bay opens south before rotation.
+    if (direction) {
+      const [dx, dy] = OFFSET[direction];
+      ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2);
+    }
+    ctx.strokeStyle = '#071019';
+    ctx.lineWidth = Math.max(1, s * .06);
+    ctx.fillStyle = color;
+    ctx.fillRect(-.4 * s, -.4 * s, .8 * s, .8 * s);
+    ctx.strokeRect(-.4 * s, -.4 * s, .8 * s, .8 * s);
+    ctx.fillStyle = '#d7efff';
+    for (const x of [-.25, .1]) {
+      ctx.fillRect(x * s, -.23 * s, .15 * s, .3 * s);
+      ctx.strokeRect(x * s, -.23 * s, .15 * s, .3 * s);
+    }
+    if (!direction) return;
+    ctx.fillStyle = '#071019';
+    ctx.fillRect(-.19 * s, .16 * s, .38 * s, .25 * s);
+    ctx.fillStyle = '#d7efff';
+    ctx.fillRect(-.15 * s, .34 * s, .3 * s, .05 * s);
+  }
+
+  private drawFactoryOutput(ctx: CanvasRenderingContext2D, tile: Tile, direction: CardinalDirection, color: string): void {
+    const s = this.camera.scale;
+    if (s < 8) return;
+    const [x, y] = this.screen(tile.x, tile.y);
+    if (x + s < 0 || y + s < this.headerHeight || x > this.map.width || y > this.map.height) return;
+    const [dx, dy] = OFFSET[direction];
+    const inset = Math.max(2, s * .12);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + inset, y + inset, s - 2 * inset, s - 2 * inset);
+    // The arrow stays near the incoming edge so a unit on the output tile remains readable.
+    const ax = x + s * (.5 - dx * .23), ay = y + s * (.5 - dy * .23);
+    ctx.moveTo(ax - (dx + dy) * s * .09, ay - (dy - dx) * s * .09);
+    ctx.lineTo(ax + dx * s * .09, ay + dy * s * .09);
+    ctx.lineTo(ax - (dx - dy) * s * .09, ay - (dy + dx) * s * .09);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2.5, s * .12);
+    ctx.strokeStyle = '#071019';
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, s * .045);
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawEntity(ctx: CanvasRenderingContext2D, v: EntityView, s: number, byIndex: Map<number, EntityView>, gunAngle?: number): void {
@@ -352,7 +413,6 @@ export class Renderer {
     const team = this.game.profiles[v.owner]?.profile?.team_id;
     if (team) { ctx.strokeStyle=color;ctx.strokeRect(px-2,py-2,s+4,s+4); } 
     ctx.fillStyle = color;
-    ctx.globalAlpha = v.lifecycle === 'site' ? 0.45 : 1;
     const ghost = v.lifecycle === 'blueprint' || v.lifecycle === 'site';
     ctx.globalAlpha = v.remembered ? .48 : ghost ? .5 : 1;
     ctx.save();
@@ -365,12 +425,13 @@ export class Renderer {
     const box = (x:number,y:number,w:number,h:number) => {ctx.fillRect(x*s,y*s,w*s,h*s);ctx.strokeRect(x*s,y*s,w*s,h*s);};
     const circle = (x:number,y:number,r:number) => {ctx.beginPath();ctx.arc(x*s,y*s,r*s,0,Math.PI*2);ctx.fill();ctx.stroke();};
     const triangle = (w:number,h:number) => {ctx.beginPath();ctx.moveTo(0,-h*s);ctx.lineTo(w*s,h*s);ctx.lineTo(-w*s,h*s);ctx.closePath();ctx.fill();ctx.stroke();};
-    if (def?.kind === 'structure') {
+    if (def?.kind === 'structure' && def.production && !def.silo) {
+      this.drawFactoryBody(ctx, s, v.outputDirection, color);
+    } else if (def?.kind === 'structure') {
       box(-.4,-.4,.8,.8);
       ctx.fillStyle='#d7efff';
       if(v.type_key==='turret'){rotateGun();circle(0,0,.25);box(-.06,-.43,.12,.43);}
       else if(v.type_key==='silo'){circle(-.18,0,.15);circle(.18,0,.15);ctx.strokeStyle='#34485c';ctx.beginPath();ctx.moveTo(-.18,-.15);ctx.lineTo(-.18,.15);ctx.moveTo(.18,-.15);ctx.lineTo(.18,.15);ctx.stroke();}
-      else if(v.type_key==='factory'){box(-.25,-.23,.15,.3);box(.1,-.23,.15,.3);ctx.fillStyle='#071019';box(-.19,.17,.38,.23);}
       else {ctx.fillStyle='#ffffff55';box(-.36,-.04,.72,.08);}
     } else if(v.type_key==='scout') {triangle(.29,.4);ctx.fillStyle='#d7efff';triangle(.1,.2);}
     else if(v.type_key==='tank') {

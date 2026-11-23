@@ -1,5 +1,6 @@
 import {packDraft, unpackDraft, type Draft} from './draft-storage';
 import {practice} from './practice';
+import {PlacementPlan} from './placement';
 import {GroundVision, SightMemory, playerSeesEntity, playerVisibility} from './vision';
 import {guideUrl} from './session';
 import {updateOrderWarnings} from './order-warnings';
@@ -8,7 +9,7 @@ import {missileName, queueLaunch} from './silo';
 import { unitIcon } from './icons';
 import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type {
-  Activity, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
+  Activity, CardinalDirection, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   TypeDefinition, WorldEvent, WorldState,
 } from './contracts.generated';
 import type { Net } from './net';
@@ -59,7 +60,7 @@ export interface EntityView {
   blueprint?: DraftItemRef;
   remembered?: boolean;
   settings?: BlueprintSettings;
-  outputDirection?: import('./contracts.generated').CardinalDirection;
+  outputDirection?: CardinalDirection;
   silo?: import('./contracts.generated').SiloState | null;
   exact?: WorldState['entities'][number];
 }
@@ -464,6 +465,7 @@ export class Game {
         lifecycle: e.lifecycle,
         activity: e.activity,
         engaged: e.engaged ?? null,
+        outputDirection: this.sampleOutputDirection(rev, ref, e),
         silo: e.silo,
       };
     });
@@ -471,6 +473,14 @@ export class Game {
 
   private exactEntities(rev:RevisionView, state:WorldState):EntityView[] {
     const dictionary = new Map(rev.dictionary.map((d, i) => [idKey(d.id), i]));
+    let outputs = this.exactOutputs.get(rev);
+    if (!outputs) {
+      outputs = new Map();
+      this.exactOutputs.set(rev, outputs);
+    }
+    for (const e of state.entities) {
+      if (e.production && !this.types.get(e.type_key)?.silo) outputs.set(idKey(e.id), e.production.output_direction);
+    }
     return state.entities.map(e => ({
       index: dictionary.get(idKey(e.id)) ?? -1,
       id: e.id,
@@ -485,8 +495,25 @@ export class Game {
       activity: activityOf(e),
       engaged: e.engaged_target ? (dictionary.get(idKey(e.engaged_target)) ?? null) : null,
       exact: e,
+      outputDirection: e.production && !this.types.get(e.type_key)?.silo ? e.production.output_direction : undefined,
       silo: e.production?.silo,
     }));
+  }
+
+  private exactOutputs = new WeakMap<RevisionView, Map<string, CardinalDirection>>();
+
+  private sampleOutputDirection(rev: RevisionView, ref: EntityRef | undefined, sample: Sample['entities'][number]): CardinalDirection | undefined {
+    if (sample.output_direction || !ref) return sample.output_direction ?? undefined;
+    const def = this.types.get(ref.type_key);
+    if (!def?.production || def.silo) return undefined;
+    // Older cached samples omitted the orientation. It is fixed once the placement succeeds.
+    const known = this.exactOutputs.get(rev)?.get(idKey(ref.id));
+    if (known) return known;
+    const birth = ref.id.birth_command.command;
+    if (birth.round === 0) return 'e';
+    const turn = this.experience.turns.get(rev.revision)?.find(t => t.round === birth.round && t.player === birth.player);
+    const placement = turn?.commands.find(c => c.id.index === birth.index)?.command;
+    return placement?.kind === 'place_blueprints' ? placement.output_directions?.[ref.id.item_index] : undefined;
   }
 
   entities(): EntityView[] {
@@ -586,7 +613,7 @@ export class Game {
       const views=sample.entities.flatMap(entity=>{
         const ref=rev.dictionary[entity.index];
         const def=ref && this.types.get(ref.type_key);
-        return def ? [{...ref,...entity,...entity.tile,maxHp:def.max_hp,engaged:null}] : [];
+        return def ? [{...ref,...entity,...entity.tile,maxHp:def.max_hp,engaged:null,outputDirection:this.sampleOutputDirection(rev,ref,entity)}] : [];
       });
       const visible = playerVisibility(this.sampleGroundVision, this.terrain!, views,
         {missiles:sample.missiles??[], recon:sample.recon??[]}, this.types, this.config.multiplayer,
@@ -702,9 +729,8 @@ export class Game {
 
   removeDraftCommand(index: number): void {
     const removed=this.draft.commands[index];if(!removed)return;
-    this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});this.draft.redo=[];
     // Removing a placement/queue append also removes its local references, never dangling them.
-    this.draft.commands=this.draft.commands.flatMap((d,i)=>{
+    const commands=this.draft.commands.flatMap((d,i)=>{
       if(i===index)return [];
       const c=d.command;
       if(c.kind==='configure_blueprints' || c.kind==='cancel_blueprints') {
@@ -717,7 +743,15 @@ export class Game {
       }
       return [d];
     });
-    this.draft.selected=null;if(!this.draft.commands.length)this.draft.tick=null;this.updatePanels();
+    if (removed.command.kind === 'cancel_blueprints' && this.current === this.latest &&
+        this.exact?.revision === this.current && this.exact.tick === this.draft.tick) {
+      const issue = this.blueprintDraftIssue(this.exact.state, commands);
+      if (issue) { this.toast(issue); return; }
+    }
+    this.draft.undo.push({commands:this.draft.commands,tick:this.draft.tick});
+    this.draft.redo=[];
+    this.draft.commands=commands;
+    this.draft.selected=null;if(!commands.length)this.draft.tick=null;this.updatePanels();
   }
 
   effectiveOrder(v: EntityView): Order | undefined {
@@ -809,7 +843,8 @@ export class Game {
     $('map').focus();
   }
 
-  canStage(): { ok: boolean; reason: string } {
+  canStage(rebasing = false): { ok: boolean; reason: string } {
+    if (this.turnRequestPending) return {ok: false, reason: 'Waiting for the server to confirm your turn.'};
     if (this.preview) return {ok:false,reason:'Simulation is still running. Replay is read-only until verification finishes.'};
     if (this.replayErrors.has(this.current)) return {ok: false, reason: 'Replay verification failed. Restart the peripheral and refresh.'};
     if (!this.net.connected) return { ok:false, reason:'Disconnected. Draft retained; reconnect before staging.' };
@@ -818,7 +853,7 @@ export class Game {
     if (!this.phase || this.phase.revision !== this.current) return { ok: false, reason: 'Planning is not open.' };
     if (this.committed.includes(this.player ?? -1)) return { ok: false, reason: 'You already committed this round.' };
     const tick = Math.floor(this.playhead);
-    if (this.draft.tick !== null && tick !== this.draft.tick) return { ok: false, reason: `Draft is at tick ${this.draft.tick}; press T to return or clear the draft.` };
+    if (!rebasing && this.draft.tick !== null && tick !== this.draft.tick) return { ok: false, reason: `Draft is at tick ${this.draft.tick}; press T to return or clear the draft.` };
     if (tick < this.editableFrom || tick > this.availableThrough) return { ok: false, reason: `Editable ticks are ${this.editableFrom}–${this.availableThrough}.` };
     if (!this.exact || this.exact.revision !== this.current || this.exact.tick !== tick) return { ok: false, reason: 'Exact state is still loading.' };
     return { ok: true, reason: '' };
@@ -856,15 +891,19 @@ export class Game {
     finally {this.factoryEditing=false;this.updatePanels();}
   }
 
-  stage(command: Command, policy: FutureOrderPolicy = 'keep'): void {
+  stage(command: Command, policy: FutureOrderPolicy = 'keep'): boolean {
     const gate = this.canStage();
     if (!gate.ok) {
       this.toast(gate.reason);
-      return;
+      return false;
     }
     if (!this.factoryEditing && this.config.control_limit === 'single_order' && this.draft.commands.length >= 1) {
       this.toast('Single-order mode: delete the staged command first.');
-      return;
+      return false;
+    }
+    if (command.kind === 'place_blueprints') {
+      const issue = this.placementPlanAtPlayhead()?.issue(command);
+      if (issue) { this.toast(issue); return false; }
     }
     // One shared payload remains one protocol command for disjoint recipients.
     if(this.factoryEditing){
@@ -876,7 +915,7 @@ export class Game {
         const payload=(c:Record<string,unknown>)=>JSON.stringify({...c,[field]:undefined});
         if(left&&payload(old)===payload(next)&&!left.some(a=>right.some(b=>JSON.stringify(a)===JSON.stringify(b)))){
           this.draft.commands[this.draft.commands.length-1]={...previous,command:{...previous.command,[field]:[...left,...right]} as DraftCommand['command']};
-          return;
+          return true;
         }
       }
     }
@@ -898,6 +937,7 @@ export class Game {
     }
     this.draft.commands = [...this.draft.commands, { local_id: `d${Date.now()}-${this.draft.commands.length}`, command: command as DraftCommand['command'], future_orders: policy }];
     if (!this.factoryEditing) this.updatePanels();
+    return true;
   }
 
   undo(): void {
@@ -970,20 +1010,45 @@ export class Game {
     finally { this.turnRequestPending = false; this.updatePanels(); }
   }
 
-  async checkBlueprintDraft(tick: number): Promise<void> {
-    if(!this.draft.commands.some(d=>d.command.kind==='cancel_blueprints'||d.command.kind==='configure_blueprints'))return;
-    const state=this.exact?.revision===this.current && this.exact.tick===tick ? this.exact.state :
-      (await this.net.request({kind:'get_exact_state',revision:this.current,tick},'exact_state',m=>m.revision===this.current&&m.tick===tick)).snapshot;
+  rebaseDraft(): void {
+    if (!this.draft.commands.length) return;
+    const gate = this.canStage(true);
+    if (!gate.ok) { this.toast(gate.reason); return; }
+    const issue = this.blueprintDraftIssue(this.exact!.state, this.draft.commands);
+    if (issue) { this.toast(issue); return; }
+    this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
+    this.draft.redo = [];
+    this.draft.tick = Math.floor(this.playhead);
+    this.updatePanels();
+  }
+
+  private blueprintDraftIssue(state: WorldState, commands: DraftCommand[]): string | null {
+    if (!commands.some(d => ['place_blueprints', 'cancel_blueprints', 'configure_blueprints'].includes(d.command.kind))) return null;
+    const placement = this.placementPlan(state);
     const key=(ref:DraftItemRef)=>ref.kind==='persistent'?idKey(ref.id):`${ref.local_id}:${ref.item_index}`;
     const available=new Map(state.blueprints.filter(b=>b.owner===this.player).map(b=>[idKey(b.id),!b.site_id]));
-    for(const d of this.draft.commands){const c=d.command;
-      if(c.kind==='place_blueprints')c.tiles.forEach((_,i)=>available.set(`${d.local_id}:${i}`,true));
+    for(const d of commands){const c=d.command;
+      if(c.kind==='place_blueprints') {
+        const issue = placement.issue(c);
+        if (issue) return issue;
+        c.tiles.forEach((_,i)=>available.set(`${d.local_id}:${i}`,true));
+      }
       if(c.kind==='cancel_blueprints'||c.kind==='configure_blueprints')for(const ref of c.blueprint_ids){
         const exists=available.get(key(ref));
-        if(exists===undefined || (c.kind==='configure_blueprints'&&!exists))throw new Error(`A blueprint in this plan is unavailable at tick ${tick}. Return the draft to its original tick or remove that blueprint change.`);
+        if(exists===undefined || (c.kind==='configure_blueprints'&&!exists))return `A blueprint in this plan is unavailable at tick ${state.tick}. Review that blueprint change before continuing.`;
         if(c.kind==='cancel_blueprints')available.delete(key(ref));
       }
+      placement.apply(d);
     }
+    return null;
+  }
+
+  async checkBlueprintDraft(tick: number, commands = this.draft.commands, revision = this.current): Promise<void> {
+    if (!commands.some(d => ['place_blueprints', 'cancel_blueprints', 'configure_blueprints'].includes(d.command.kind))) return;
+    const state = this.exact?.revision === revision && this.exact.tick === tick ? this.exact.state :
+      (await this.net.request({kind:'get_exact_state',revision,tick},'exact_state',m=>m.revision===revision&&m.tick===tick)).snapshot;
+    const issue = this.blueprintDraftIssue(state, commands);
+    if (issue) throw new Error(issue);
   }
 
   async commit(): Promise<void> {
@@ -1001,8 +1066,14 @@ export class Game {
     const submittedRound = this.round;
     const request_id = `${this.player}-${this.round}-${Date.now()}`;
     try {
-      await this.checkBlueprintDraft(tick);
-      await this.net.request({ kind: 'commit', request: { request_id, slot_token: this.session.token, draft: { based_on_revision: this.current, tick, commands: this.draft.commands } } }, 'commit_accepted', m => m.request_id === request_id);
+      const commands = this.draft.commands;
+      const revision = this.current;
+      const draftTick = this.draft.tick;
+      await this.checkBlueprintDraft(tick, commands, revision);
+      if (this.draft.commands !== commands || this.draft.tick !== draftTick || this.current !== revision || this.round !== submittedRound) {
+        throw new Error('The plan changed during validation. Review your draft and commit again.');
+      }
+      await this.net.request({ kind: 'commit', request: { request_id, slot_token: this.session.token, draft: { based_on_revision: revision, tick, commands } } }, 'commit_accepted', m => m.request_id === request_id);
       if (this.round === submittedRound && !this.committed.includes(this.player!)) this.committed.push(this.player!);
       this.clearDraft();
       this.toast('Turn committed. Waiting for the other players…');
@@ -1191,12 +1262,8 @@ export class Game {
 
   placeAt(tile: Tile, end: Tile = tile, repeat = false): void {
     if (this.mode.kind !== 'place') return;
-    const type_key = this.mode.type_key;
-    const def = this.types.get(type_key);
-    const tiles = this.placementTiles(tile, end);
-    if (tiles.some(t => !this.validPlacement(t, !!def?.production && !def.silo))) { this.toast('Placement blocked: choose clear floor and an open factory output.'); return; }
-    const command: Command = { kind: 'place_blueprints', type_key, tiles, priority: 'medium', output_directions: def?.production && !def.silo ? tiles.map(() => this.renderer.outputDirection) : null };
-    this.stage(command);
+    const command = this.placementCommand(this.mode.type_key, this.placementTiles(tile, end));
+    if (!this.stage(command)) return;
     if (!repeat) this.mode = { kind: 'none' };
     this.updateMode();
   }
@@ -1214,12 +1281,44 @@ export class Game {
     }
     return tiles.sort((a, b) => a.y - b.y || a.x - b.x);
   }
+  private placementCommand(type_key: string, tiles: Tile[]): Extract<Command, {kind: 'place_blueprints'}> {
+    const def = this.types.get(type_key);
+    const output_directions = def?.production && !def.silo ? tiles.map(() => this.renderer.outputDirection) : null;
+    return {kind: 'place_blueprints', type_key, tiles, priority: 'medium', output_directions};
+  }
+
+  private placementPlan(state: WorldState): PlacementPlan {
+    const visible = playerVisibility(
+      this.groundVision, state.terrain,
+      state.entities.map(e => ({...e.tile, type_key: e.type_key, owner: e.owner, lifecycle: e.lifecycle})),
+      {missiles: state.missiles ?? [], recon: state.recon ?? []}, this.types, this.config.multiplayer,
+      this.player, state.tick, this.net.rulesVersion === 7,
+    );
+    return new PlacementPlan(state.terrain, this.types, state, this.player, visible, this.fullVision, this.net.rulesVersion >= 14);
+  }
+
+  private placementCache?: {state: WorldState; player: number | null; fullVision: boolean; commands: DraftCommand[] | null; plan: PlacementPlan};
+
+  private placementPlanAtPlayhead(): PlacementPlan | undefined {
+    const tick = Math.floor(this.playhead);
+    if (this.exact?.revision !== this.current || this.exact.tick !== tick) return;
+    const state = this.exact.state;
+    const commands = this.current === this.latest && this.draft.tick === tick ? this.draft.commands : null;
+    const cache = this.placementCache;
+    if (cache && cache.state === state && cache.commands === commands && cache.player === this.player && cache.fullVision === this.fullVision) return cache.plan;
+    const plan = this.placementPlan(state);
+    for (const command of commands ?? []) plan.apply(command);
+    this.placementCache = {state, commands, player: this.player, fullVision: this.fullVision, plan};
+    return plan;
+  }
+
+  placementIssue(typeKey: string, tiles: Tile[]): string | null {
+    const plan = this.placementPlanAtPlayhead();
+    return plan ? plan.issue(this.placementCommand(typeKey, tiles)) : 'Exact state is still loading.';
+  }
+
   validPlacement(tile: Tile, factory: boolean): boolean {
-    const terrain = this.terrain;
-    const clear = (t: Tile) => !!terrain && t.x >= 0 && t.y >= 0 && t.x < terrain.width && t.y < terrain.height && terrain.cells[t.y * terrain.width + t.x] === 'floor' && !this.entityAt(t);
-    const offsets = { n: [0,-1], e: [1,0], s: [0,1], w: [-1,0] };
-    const [dx,dy] = offsets[this.renderer.outputDirection];
-    return clear(tile) && (!factory || clear({ x: tile.x + dx, y: tile.y + dy }));
+    return this.placementIssue(factory ? 'factory' : 'wall', [tile]) === null;
   }
   timelineEnd(): number {
     return Math.max(1, this.viewingPreview ? this.preview!.end_tick : this.rev()?.outcome.terminal_state_tick ?? 1, ...(this.experience?.turns.get(this.current) ?? []).filter(t => t.commands.length).map(t => t.tick));

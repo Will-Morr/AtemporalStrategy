@@ -136,7 +136,7 @@ impl Sim {
             .find(|(distance, _, o)| {
                 let target = self.state.entities[*o].tile;
                 if need_los {
-                    return self.line_of_sight(e.tile, target);
+                    return self.firing_line(i, target);
                 }
                 if self.legacy_rules {
                     return true;
@@ -144,7 +144,7 @@ impl Sim {
                 if *distance > radius * radius {
                     return false;
                 }
-                if self.line_of_sight(e.tile, target) {
+                if self.firing_line(i, target) {
                     return true;
                 }
                 indirect_tiles
@@ -166,11 +166,14 @@ impl Sim {
             .map(|c| c.2)
     }
 
-    fn target_in_sight(&self, from: Tile, to: Tile, radius: f64, direct: bool) -> bool {
+    fn target_in_sight(&self, shooter: usize, to: Tile, radius: f64, direct: bool) -> bool {
         if direct {
-            self.line_of_sight(from, to)
+            self.firing_line(shooter, to)
         } else {
-            self.legacy_rules || self.ground_sees(from, to, radius)
+            self.legacy_rules
+                || (Self::dist2(self.state.entities[shooter].tile, to) <= radius * radius
+                    && (self.firing_line(shooter, to)
+                        || self.ground_sees(self.state.entities[shooter].tile, to, radius)))
         }
     }
 
@@ -178,7 +181,7 @@ impl Sim {
         let (a, b) = (&self.state.entities[i], &self.state.entities[j]);
         self.hostile(a.owner, b.owner)
             && Self::dist2(a.tile, b.tile) <= radius * radius + EPS
-            && self.target_in_sight(a.tile, b.tile, radius, need_los)
+            && self.target_in_sight(i, b.tile, radius, need_los)
     }
 
     /// Fewer armed entities than this run intents serially: per-tick scoped spawns cost more

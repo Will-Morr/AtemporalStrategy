@@ -16,6 +16,16 @@ pub struct VisibleEntity {
     pub lifecycle: Lifecycle,
     pub last_move_direction: Direction,
     pub activity: Activity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_direction: Option<CardinalDirection>,
+}
+
+fn visible_output_direction(entity: &EntityState) -> Option<CardinalDirection> {
+    entity
+        .production
+        .as_ref()
+        .filter(|p| p.silo.is_none())
+        .map(|p| p.output_direction)
 }
 
 impl VisibleEntity {
@@ -28,6 +38,7 @@ impl VisibleEntity {
             && self.lifecycle == entity.lifecycle
             && self.last_move_direction == entity.last_move_direction
             && self.activity == crate::output::activity_of(entity)
+            && self.output_direction == visible_output_direction(entity)
     }
 }
 
@@ -42,6 +53,7 @@ impl From<&EntityState> for VisibleEntity {
             lifecycle: entity.lifecycle,
             last_move_direction: entity.last_move_direction,
             activity: crate::output::activity_of(entity),
+            output_direction: visible_output_direction(entity),
         }
     }
 }

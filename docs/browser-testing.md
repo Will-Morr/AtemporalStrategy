@@ -256,3 +256,23 @@ The rules 13 release passed `combat-facing.spec.mjs`. Inspected frames in `artif
 ### Replay retention verification, November 21, 2026
 
 The desktop Chromium coordinator and landing suites passed all nine scenarios. The retention scenario opens a real bot recording, seeds six legacy winning ledgers in a tombstoned lobby, and restarts the coordinator. A fresh browser sees the five newest completion times and opens the newest replay read-only. The sixth replay and the live lobby return 404. The inactivity scenario ages the saved activity timestamp to test the 24-hour boundary without waiting a day. Screenshot review covered the lobby list, replay cards at desktop and 390px widths, and read-only playback. Other browser engines were not exercised.
+
+## Factory placement and output direction
+
+`factory-placement.spec.mjs` ran against the authoritative server with seed 42
+in desktop Chromium 153 at 1920×1080 and 40 pixels per tile. At revision 0,
+tick 0, a staged turret blocked a factory's east output. Chromium checked that
+the red marker outlined the output tile, the message named the turret
+blueprint, and the attempt left the existing draft intact.
+
+A second scenario used R and mouse clicks to stage all four orientations. It
+checked the canvas markers in each placement preview and across the four draft
+ghosts, then assigned a constructor and queued a grunt per factory. In revision
+1 it verified orientation on a construction site at tick 5 and on all four
+completed factories at tick 45. It resumed playback and checked the rendered
+bays and markers using compact samples between exact seeks. At tick 85 the
+authoritative state placed each newborn on the marked tile. Full-frame preview,
+blocked-placement, ghost, site, completed-factory and newborn screenshots were
+inspected. Screenshots and traces are under
+`artifacts/ui/factory-placement-chromium`. The scenario used one browser worker
+and exercised the authoritative transport.

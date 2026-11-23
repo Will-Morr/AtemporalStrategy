@@ -141,3 +141,7 @@ Keep artillery’s distinct long gun/turret from the design pass, but make its b
 Provide a view of previous timelines. Offer an optional visualization of the commands and events at each tick. Spectators and players reviewing a finished game can inspect both players’ plans, see which units or buildings received orders, and inspect the production queue of a selected enemy building. Allow new tick submissions in a replay of a completed or abandoned game to explore whether different orders could have won. Preserve the original recording and result.
 
 Keep playback controls in place when stepping back one tick. At match end, show every round’s result in a color-coded list and let players jump directly into a round by clicking its result.
+
+## Building placement and factory outputs
+
+Show a placement error as soon as the player attempts an illegal order. Identify the blocking building and its tile. Keep factory outputs clear of buildings, and orient each factory toward the tile where its units spawn.

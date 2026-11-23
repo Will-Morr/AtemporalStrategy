@@ -122,6 +122,11 @@ impl Sim {
             .iter()
             .map(|e| SampleEntity {
                 silo: e.production.as_ref().and_then(|p| p.silo.clone()),
+                output_direction: e
+                    .production
+                    .as_ref()
+                    .filter(|p| p.silo.is_none())
+                    .map(|p| p.output_direction),
                 index: self.dictionary[&e.id],
                 tile: e.tile,
                 hp: e.hp,
