@@ -223,16 +223,7 @@ pub(super) fn develop(
         .chain(state.visible_entities.iter().map(|e| e.tile))
         .chain(state.own_blueprints.iter().map(|b| b.tile))
         .collect();
-    occupied.extend(state.own_blueprints.iter().filter_map(|b| {
-        b.output_direction
-            .and_then(|d| adjacent(b.tile, d, terrain))
-    }));
-    occupied.extend(
-        state
-            .own_entities
-            .iter()
-            .filter_map(|e| e.production.as_ref().map(|p| p.output_tile)),
-    );
+    let mut outputs: BTreeSet<_> = super::reserved_factory_outputs(state, terrain).collect();
     let free = |tile: Tile, occupied: &BTreeSet<Tile>| {
         let i = usize::from(tile.y) * usize::from(terrain.width) + usize::from(tile.x);
         terrain.cells[i] == TerrainCell::Floor
@@ -272,7 +263,7 @@ pub(super) fn develop(
                     .and_then(|d| d.get(i))
                     .and_then(|d| adjacent(*tile, *d, terrain))
                 {
-                    occupied.insert(out);
+                    outputs.insert(out);
                 }
             }
         }
@@ -317,6 +308,7 @@ pub(super) fn develop(
             .iter()
             .filter(|(t, _)| {
                 free(**t, &occupied)
+                    && !outputs.contains(t)
                     && (structure != "factory"
                         || adjacent(**t, output, terrain).is_some_and(|out| free(out, &occupied)))
             })
@@ -363,7 +355,7 @@ pub(super) fn develop(
         if structure == "factory"
             && let Some(out) = adjacent(tile, output, terrain)
         {
-            occupied.insert(out);
+            outputs.insert(out);
         }
         *counts.entry(structure.into()).or_default() += 1;
         let id = append(

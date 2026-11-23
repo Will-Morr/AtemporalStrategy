@@ -203,6 +203,31 @@ fn occupied(frame: &PlayerFrame, tile: Tile) -> bool {
             .any(|entity| entity.tile == tile)
 }
 
+fn reserved_factory_outputs(frame: &PlayerFrame, terrain: &Terrain) -> impl Iterator<Item = Tile> {
+    use atemporal_sim::placement::output_tile;
+    frame
+        .own_entities
+        .iter()
+        .filter_map(|e| {
+            e.production
+                .as_ref()
+                .filter(|p| p.silo.is_none())
+                .map(|p| p.output_tile)
+        })
+        .chain(
+            frame
+                .visible_entities
+                .iter()
+                .filter_map(|e| output_tile(terrain, e.tile, e.output_direction?)),
+        )
+        .chain(
+            frame
+                .own_blueprints
+                .iter()
+                .filter_map(|b| output_tile(terrain, b.tile, b.output_direction?)),
+        )
+}
+
 fn allied(config: &MatchConfig, a: PlayerId, b: PlayerId) -> bool {
     if a == b {
         return true;
@@ -524,27 +549,24 @@ fn plan_frame_with_rally(
         } else {
             CardinalDirection::E
         };
+        let outputs: std::collections::BTreeSet<_> =
+            reserved_factory_outputs(state, terrain).collect();
         let site = (0..terrain.height)
             .flat_map(|y| (0..terrain.width).map(move |x| Tile { x, y }))
             .filter(|t| {
                 let i = usize::from(t.y) * usize::from(terrain.width) + usize::from(t.x);
-                let Some(out) = tactical::adjacent(*t, direction, terrain) else {
-                    return false;
-                };
-                let output_index =
-                    usize::from(out.y) * usize::from(terrain.width) + usize::from(out.x);
                 distance(*t, home) <= 64
                     && terrain.cells[i] == TerrainCell::Floor
-                    && terrain.cells[output_index] == TerrainCell::Floor
                     && ore_at(state, i) == 0.0
                     && !occupied(state, *t)
                     && !state.own_blueprints.iter().any(|b| b.tile == *t)
-                    && !state
-                        .own_entities
-                        .iter()
-                        .any(|e| e.production.as_ref().is_some_and(|p| p.output_tile == *t))
-                    && !occupied(state, out)
-                    && !state.own_blueprints.iter().any(|b| b.tile == out)
+                    && !outputs.contains(t)
+                    && (structure != "factory"
+                        || tactical::adjacent(*t, direction, terrain).is_some_and(|out| {
+                            atemporal_sim::placement::is_floor(terrain, out)
+                                && !occupied(state, out)
+                                && !state.own_blueprints.iter().any(|b| b.tile == out)
+                        }))
             })
             .min_by_key(|t| (distance(*t, home), t.y, t.x));
         if let Some(tile) = site {
