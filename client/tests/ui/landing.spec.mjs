@@ -13,6 +13,10 @@ test('landing page starts a default bot match with one click and retains the pla
   await expect(page.locator('footer.description')).toContainText('Note: This is very much an experiment.');
   expect(await page.locator('footer.description').evaluate(el=>!!(document.querySelector('.actions').compareDocumentPosition(el)&Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
   await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await expect(page.locator('.actions .button:visible span:first-child')).toHaveText([
+    'Play Against Bot','View Lobby','View Replay','Game Docs','Patch Notes','Code'
+  ]);
+  await expect(page.getByRole('link',{name:'Code',exact:true})).toHaveAttribute('href','https://github.com/Will-Morr/AtemporalStrategy');
   await review.capture('landing-desktop',page);
   await page.setViewportSize({width:1366,height:768});await review.capture('landing-1366',page);
   await page.setViewportSize({width:390,height:844});
@@ -51,7 +55,7 @@ test('landing navigation, content-backed explainer and retry after creation fail
   const server=await isolatedServer(testInfo,small,content=>{content.types.find(t=>t.key==='miner').max_hp=137;},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url);
   const popup=page.waitForEvent('popup');
-  await page.getByRole('link',{name:'Patch notes',exact:true}).click();
+  await page.getByRole('link',{name:'Patch Notes',exact:true}).click();
   const notes=await popup;
   await expect(notes).toHaveURL(server.url+'patch-notes.html');
   await expect(page).toHaveURL(server.url);

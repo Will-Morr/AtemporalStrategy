@@ -185,7 +185,7 @@ test('five completed recordings survive lobby expiry, migration and restart',asy
 
   const guest=await(await review.newContext('replay-visitor')).newPage();
   await guest.goto(server.url);
-  await guest.getByRole('link',{name:'Replays',exact:true}).click();
+  await guest.getByRole('link',{name:'View Replay',exact:true}).click();
   const links=guest.getByRole('link',{name:'View replay',exact:true});
   await expect(links).toHaveCount(5);
   for(let n=1;n<=5;n++)await expect(links.nth(n-1)).toHaveAttribute('href',new RegExp('/match-'+n+'/$'));
