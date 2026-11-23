@@ -346,5 +346,9 @@ and after verified replay handoff. The controller uses 1366 × 768 and the
 inputs-only peripheral uses 1920 × 1080. Both use seed 42 and capture the
 preview and final replay at tick 73. Inspected the final controller frames and
 the open Game info menu at 1366 × 768 in
-`artifacts/ui/2026-11-23T21-39-59.187Z-1770043`. Long readouts can ellipsize
-at narrower widths.
+`artifacts/ui/2026-11-23T21-39-59.187Z-1770043` and the final peripheral
+frames with matching rules 15 binaries in
+`artifacts/ui/2026-11-23T21-42-38.377Z-1776692`. The rematch check also
+passed and its full frame shows the Match review control and dialog in
+`artifacts/ui/2026-11-23T21-41-43.215Z-1774429`. Long readouts can
+ellipsize at narrower widths. Other browser engines were outside this pass.
