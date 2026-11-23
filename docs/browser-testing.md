@@ -211,6 +211,12 @@ game. Inspected frames are in
 `artifacts/ui/2026-11-23T21-55-31.339Z-1796560` and
 `artifacts/ui/2026-11-23T21-56-16.573Z-1798217`.
 
+The final idle, partial-turn and unattended all-bot scenarios passed in
+`artifacts/ui/2026-11-23T22-03-35.733Z-1807558`. A separate Linux process
+check replaced a disposable coordinator executable while it was running.
+The next lobby worker started successfully from the original executable
+inode. Other operating systems were outside this pass.
+
 ### Home page and quick play
 
 `landing.spec.mjs` covers the first-visit landing page, one-click default-bot startup, real commits and refresh, lobby/guide navigation, existing names, retry after a failed creation response and generated stats from modified server content. It captures desktop, laptop and narrow landing layouts. Coordinator scenarios now open `/lobbies/` to test the directory; standalone workers still open directly into their game lobby. The guide assertions use the Game Docs heading. See the [verification record](integration-verification.md#home-page-quick-play-and-explainer--2026-11-10) for results and screenshot review.
