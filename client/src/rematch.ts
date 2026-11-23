@@ -69,7 +69,7 @@ export function updateRematch(g:Game):void {
     document.getElementById('game')!.append(menu);
     const opener=document.createElement('button');
     opener.id='new-game-open';opener.textContent='Match review';opener.onclick=()=>{menu!.hidden=false;};
-    document.getElementById('top')!.append(opener);
+    document.getElementById('top-controls')!.append(opener);
   }
   const start=document.getElementById('new-game-start') as HTMLButtonElement|null;
   if(start) start.disabled=!botOnly && (g.player===null || g.profiles.find(p=>p.claimed)?.slot!==g.player || !g.net.connected);

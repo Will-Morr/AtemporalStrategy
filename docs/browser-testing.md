@@ -323,3 +323,28 @@ relay. The focused checks did not repeat the full browser suite or inject
 discrepancies into a live deployment.
 
 The landing-page Chromium scenario opens Patch Notes in its own tab and checks all five category filters. It clears every checkbox, selects Docs, then adds Bot update and verifies individual notes and commit links. Desktop and 390-pixel-wide screenshots were inspected. The filtered mobile frame is in `artifacts/ui/category-filters-final`.
+
+## Camera, reconnect, and top bar
+
+`map-camera.spec.mjs` exercises Shift+wheel and middle-button drag at seed
+42, revision 0 and tick 0 in desktop Chromium. It checks the camera limits
+at 26 and 1 pixels per tile and keeps dragging across both the command deck
+and top bar. Inspected frames show the northwest edge at opening zoom and
+the southeast edge at minimum zoom in
+`artifacts/ui/2026-11-23T21-34-24.779Z-1757688`.
+
+`connection-notice.spec.mjs` closes the live socket during an exact seek
+and waits for tick 111 to load without a connection warning or replay
+toast. Chromium then stays offline long enough to show the warning and
+reload button, and restores the same revision on reconnect. Inspected
+warning and recovery frames are in
+`artifacts/ui/2026-11-23T21-37-40.710Z-1761776`.
+
+`progressive.spec.mjs` compares top-bar readout, button and scoreboard
+bounds before simulation, during playback and exact seeks into the preview,
+and after verified replay handoff. The controller uses 1366 × 768 and the
+inputs-only peripheral uses 1920 × 1080. Both use seed 42 and capture the
+preview and final replay at tick 73. Inspected the final controller frames and
+the open Game info menu at 1366 × 768 in
+`artifacts/ui/2026-11-23T21-39-59.187Z-1770043`. Long readouts can ellipsize
+at narrower widths.

@@ -8,8 +8,13 @@ for(const peripheral of [false,true]) test(`progressive replay: ${peripheral?'pe
   const server=peripheral?await isolatedPeripheral(testInfo,edit,env):await isolatedServer(testInfo,edit,()=>{},[],env);
   review.afterClose(server.stop);
   const [a,b]=await players(review,server.url);
+  if (!peripheral) await a.setViewportSize({width:1366,height:768});
   await a.getByRole('button',{name:'Start match',exact:true}).click();
   await revision(a,0);await revision(b,0);
+  const topBounds = () => a.evaluate(() =>
+    ['top-phase','top-tick','top-bank','switch-player','game-info','scoreboard'].map(id =>
+      document.getElementById(id).getBoundingClientRect().toJSON()));
+  const initialTop = await topBounds();
   const start=await a.evaluate(()=>{const e=window.atemporal.entities().find(e=>e.owner===0&&e.type_key==='constructor');return{x:e.x,y:e.y};});
   await tile(a,start);await a.keyboard.press('f');await tile(a,{x:start.x+2,y:start.y});
   await a.locator('#commit').click();await b.locator('#commit').click();
@@ -18,6 +23,7 @@ for(const peripheral of [false,true]) test(`progressive replay: ${peripheral?'pe
   await a.keyboard.press('End');const edge=await a.evaluate(()=>window.atemporal.playhead);
   await a.locator('#play').click();
   await expect.poll(()=>a.evaluate(()=>window.atemporal.playhead)).toBeGreaterThan(edge);
+  expect(await topBounds()).toEqual(initialTop);
   await a.locator('#play').click();
   const before=await a.evaluate(()=>window.atemporal.preview.through_tick);
   await a.fill('#tick-input','73');
@@ -33,6 +39,7 @@ for(const peripheral of [false,true]) test(`progressive replay: ${peripheral?'pe
   await expect(a.locator('#timeline')).toHaveAttribute('data-available-through',/\d+/);
   await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-wins','0');
   await expect(a.locator('#scoreboard')).toContainText('result pending');
+  expect(await topBounds()).toEqual(initialTop);
   await review.capture('viewing-completed-prefix',a);
   await a.locator('#play').click();
   await expect.poll(()=>a.evaluate(()=>window.atemporal.playhead)).toBeGreaterThan(73);
@@ -44,6 +51,7 @@ for(const peripheral of [false,true]) test(`progressive replay: ${peripheral?'pe
   expect(await a.evaluate(()=>{const g=window.atemporal;const e=g.entities().find(e=>e.owner===0&&e.type_key==='constructor');const [x,y]=g.renderer.screen(e.x+.5,e.y+.5);return x>0&&x<innerWidth&&y>110&&y<document.getElementById('panels').getBoundingClientRect().top;})).toBe(true);
   await review.capture('preview-after-refresh',a);
   await revision(a,1);await revision(b,1);
+  expect(await topBounds()).toEqual(initialTop);
   expect(await a.evaluate(()=>window.atemporal.playhead)).toBe(73);
   await seek(a,73);
   expect(await a.evaluate(()=>window.atemporal.exact.state)).toEqual(snapshot);

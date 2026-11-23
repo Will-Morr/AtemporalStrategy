@@ -59,7 +59,7 @@ export class Experience {
     const guide = document.createElement('a'); guide.href = guideUrl; guide.target = '_blank'; guide.textContent = 'Guide'; planning.append(guide);
     const info=document.createElement('details');info.id='game-info';const infoTitle=document.createElement('summary');infoTitle.textContent='Game info';info.append(infoTitle);
     const patch=document.createElement('a');patch.href='/patch-notes.html';patch.target='_blank';patch.rel='noopener';patch.textContent='Patch notes ↗';info.append(patch);
-    $('top').append(info);
+    $('top-controls').append(info);
     const options=document.createElement('div');options.id='mode-options';$('timeline-wrap').append(options);
     planning.append(button('Clear output binding', () => this.bind(null)),button('Esc Cancel', () => g.key(new KeyboardEvent('keydown',{key:'Escape'}))));
     toolbar.addEventListener('click',event=>{if((event.target as HTMLElement).closest('button'))for(const menu of Array.from(toolbar.querySelectorAll('details')))menu.open=false;});

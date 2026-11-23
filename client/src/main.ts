@@ -9,6 +9,7 @@ setFingerprint();
 if (matchMedia('(pointer: coarse)').matches && !sessionStorage.getItem('atemporal-mobile-warned')) { sessionStorage.setItem('atemporal-mobile-warned', '1'); alert('Heads up: this is really not optimized for mobile, it might work a little but no promises'); }
 
 const status = document.getElementById('status') as HTMLParagraphElement;
+const controls = document.getElementById('top-controls')!;
 const net = new Net();
 let game: Game | null = null;
 let stale = false;
@@ -53,12 +54,12 @@ net.on('match_reset', () => {
   showConnection('Opening the next game. Your player slot is retained. ');
   location.reload();
 });
-const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=!!practice || location.pathname.includes('/replays/'); document.getElementById('top')!.append(switchPlayer);
+const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=!!practice || location.pathname.includes('/replays/'); controls.append(switchPlayer);
 
 async function boot(): Promise<void> {
   if (location.pathname.startsWith('/games/')) {
     (document.getElementById('guide-link') as HTMLAnchorElement).href=`${location.pathname.match(/^\/games\/[^/]+/)![0]}/guide/`;
-    for (const parent of [document.getElementById('lobby'),document.getElementById('top')]) {
+    for (const parent of [document.getElementById('lobby'),controls]) {
       const link=document.createElement('a');link.href=location.pathname.includes('/replays/')?'/replays/':'/lobbies/';link.textContent=location.pathname.includes('/replays/')?'Replays':'All games';link.style.pointerEvents='auto';parent?.prepend(link);
     }
     const identity=await fetch('/api/directory').then(r=>r.json());
@@ -101,7 +102,7 @@ async function boot(): Promise<void> {
     game.playhead = practice.tick;
     const back = document.createElement('a');
     back.href = location.pathname; back.textContent = 'Exit practice'; back.id = 'exit-practice';
-    document.getElementById('top')!.prepend(back);
+    controls.prepend(back);
     document.title = 'Practice replay · Atemporal Strategy';
   }
   await game.start();

@@ -58,6 +58,8 @@ A replacement constructor order must clear the earlier action visually and mecha
 
 Show stored matter clearly at the viewed tick. Timeline markers include every tick with an authoritative applied order affecting any selected unit. Unit vision determines battlefield visibility with fog of war even though timeline inspection may disclose other information.
 
+Keep the top bar's readouts and controls in place as simulation and replay advance.
+
 Hide full-health bars. Use distinct layered geometric silhouettes with readable direction: square factories, circular turrets on square bases, and distinguishable combinations for mobile units. Group related input buttons in left-aligned columns. Emphasize construction/production discovery and key game information over secondary diagnostics. Show unmistakable color-coded win/loss results and clearly explain continued simulation after elimination and playback after match end.
 
 Complete and commit these fixes before implementing multiplayer, single-order, and recovery browser coverage. The user requested a separate implementation branch and worktree, and completion for real players without an intermediate human-playtest gate.
