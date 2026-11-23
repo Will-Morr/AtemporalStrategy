@@ -834,19 +834,25 @@ impl Controller {
             .revisions
             .get(&parent_rev)
             .ok_or("no parent revision")?;
+        // Empty turns change the score ledger without changing the simulated world.
+        // Only published passes can reuse the final prefix. Jobs without new
+        // turns (genesis or an explicit regeneration) start at the opening.
+        let latest_safe_pass_tick = parent
+            .outcome
+            .as_ref()
+            .map_or(0, |outcome| outcome.terminal_state_tick.saturating_sub(1));
         let earliest = turns
             .iter()
-            .filter(|t| t.round == round && !t.commands.is_empty())
-            .map(|t| t.tick)
+            .filter(|t| t.round == round)
+            .map(|t| {
+                if t.commands.is_empty() {
+                    latest_safe_pass_tick
+                } else {
+                    t.tick
+                }
+            })
             .min()
-            // A pass changes the scoreboard ledger but has no simulation input.
-            // Re-run the final step so the original stopping condition is evaluated.
-            .unwrap_or_else(|| {
-                parent
-                    .outcome
-                    .as_ref()
-                    .map_or(0, |outcome| outcome.terminal_state_tick.saturating_sub(1))
-            });
+            .unwrap_or(0);
         let (base_tick, checkpoint) = parent
             .checkpoints
             .range(..=earliest)

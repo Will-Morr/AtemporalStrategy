@@ -141,35 +141,47 @@ pub fn drive(
     {
         app.controller.lock().unwrap().last_activity_ms = last;
     }
-    tokio::spawn(async move {
-        let mut saved = String::new();
-        let mut attempts = BTreeMap::new();
-        loop {
-            if let Err(e) = step(&app, &bots, &mut attempts, debug_opening).await {
-                eprintln!("bot: {e}");
-            }
-            {
-                let c = app.controller.lock().unwrap();
-                let value = serde_json::json!({"last_activity_ms":c.last_activity_ms,"match_id":c.match_id,"phase":c.phase,"round":c.round,"slots":c.lobby.slots,"lobby_revision":c.lobby.revision,"objective":c.config.objective});
-                let text = value.to_string();
-                if text != saved {
-                    if let Some(path) = &status
-                        && let Err(e) = atomic_json(path, &value)
-                    {
-                        eprintln!("worker status: {e}");
+    // A bot can spend a full replay computing its next turn. Keep advertising
+    // the actual match phase to the coordinator throughout that computation.
+    if status.is_some() || lobby_file.is_some() {
+        let controller = app.controller.clone();
+        tokio::spawn(async move {
+            let mut saved = String::new();
+            loop {
+                {
+                    let c = controller.lock().unwrap();
+                    let value = serde_json::json!({"last_activity_ms":c.last_activity_ms,"match_id":c.match_id,"phase":c.phase,"round":c.round,"slots":c.lobby.slots,"lobby_revision":c.lobby.revision,"objective":c.config.objective});
+                    let text = value.to_string();
+                    if text != saved {
+                        if let Some(path) = &status
+                            && let Err(e) = atomic_json(path, &value)
+                        {
+                            eprintln!("worker status: {e}");
+                        }
+                        if c.phase == Phase::Lobby
+                            && let Some(path) = &lobby_file
+                            && let Err(e) = atomic_json(path, &c.open_lobby_record())
+                        {
+                            eprintln!("lobby persistence: {e}");
+                        }
+                        saved = text;
                     }
-                    if c.phase == Phase::Lobby
-                        && let Some(path) = &lobby_file
-                        && let Err(e) = atomic_json(path, &c.open_lobby_record())
-                    {
-                        eprintln!("lobby persistence: {e}");
-                    }
-                    saved = text;
                 }
+                tokio::time::sleep(Duration::from_millis(750)).await;
             }
-            tokio::time::sleep(Duration::from_millis(750)).await;
-        }
-    });
+        });
+    }
+    if bots.slots.iter().any(Option::is_some) || debug_opening {
+        tokio::spawn(async move {
+            let mut attempts = BTreeMap::new();
+            loop {
+                if let Err(e) = step(&app, &bots, &mut attempts, debug_opening).await {
+                    eprintln!("bot: {e}");
+                }
+                tokio::time::sleep(Duration::from_millis(750)).await;
+            }
+        });
+    }
 }
 async fn step(
     app: &ws::App,
