@@ -327,7 +327,6 @@ fn several_units_following_the_same_lane_suggest_scouting_instead_of_a_strike() 
 #[test]
 fn one_speculative_site_programs_only_one_missile_across_current_and_planned_silos() {
     let mut world = contact_world(&[13, 16, 19], tile(16, 17));
-    world.spawn(0, "silo", 3, 11);
     world.spawn(0, "constructor", 2, 7);
     let input = input(world, 25);
     let draft = published_plan(&input, Style::Tactical);
@@ -372,4 +371,53 @@ fn old_ingress_stays_on_the_scouting_map_but_no_longer_prompts_a_strike() {
         "{army:?}"
     );
     assert_eq!(missile, None);
+}
+
+#[test]
+fn observed_factory_can_be_targeted_before_the_silo_finishes() {
+    let enemy_factory = tile(16, 17);
+    for funded in [false, true] {
+        let mut world = contact_world(&[], enemy_factory);
+        let initial_silo = world
+            .state
+            .entities
+            .iter()
+            .position(|e| e.type_key == "silo")
+            .unwrap();
+        let production = world.state.entities.remove(initial_silo).production;
+        let id = world.site(0, "silo", 3, 8, 20.);
+        if funded {
+            world.state.entities.last_mut().unwrap().production = production;
+        } else {
+            world.state.entities.pop();
+            world.state.blueprints.last_mut().unwrap().site_id = None;
+        }
+        world
+            .state
+            .entities
+            .iter_mut()
+            .find(|e| e.type_key == "miner")
+            .unwrap()
+            .tile = tile(16, 12);
+        let draft = published_plan(&input(world, 25), Style::Tactical);
+        assert!(draft.commands.iter().any(|row| {
+            let plan = match &row.command {
+                Command::SetSiloPlan { silos, plan } if funded && silos.contains(&id) => Some(plan),
+                Command::ConfigureBlueprints {
+                    blueprint_ids,
+                    settings,
+                } if !funded
+                    && blueprint_ids.contains(&DraftItemRef::Persistent { id: id.clone() }) =>
+                {
+                    settings.silo_plan.as_ref()
+                }
+                _ => None,
+            };
+            plan.is_some_and(|plan| {
+                plan.launches
+                    .iter()
+                    .any(|shot| shot.type_key == "tac_nuke" && shot.target == enemy_factory)
+            })
+        }));
+    }
 }

@@ -56,7 +56,7 @@ impl Style {
     pub fn name(self) -> &'static str {
         match self {
             Self::Standard => "Standard 1.0",
-            Self::Tactical => "Tactical 2.0",
+            Self::Tactical => "Tactical 2.1",
         }
     }
     fn interval(self) -> Tick {
@@ -294,6 +294,11 @@ impl PolicyTimeline {
 pub fn intervention(input: &PolicyTimeline, style: Style) -> Tick {
     let editable = input.editable_ticks();
     let (editable_from, available_through) = (*editable.start(), *editable.end());
+    if style == Style::Tactical
+        && let Some(previous) = input.timeline.turns.iter().max_by_key(|turn| turn.round)
+    {
+        return tactical::intervention(input, previous.tick);
+    }
     let wanted = input
         .last_turn()
         .map_or(editable_from, |tick| tick.saturating_add(style.interval()))
@@ -328,12 +333,6 @@ pub fn intervention(input: &PolicyTimeline, style: Style) -> Tick {
                 .is_some_and(|frame| has_mobile_weapons(frame, minimum))
         })
     };
-    if style == Style::Tactical
-        && input.stalemate()
-        && let Some(tick) = first_army(500, 20)
-    {
-        return tick;
-    }
     first_army(style.interval(), 1).unwrap_or(wanted)
 }
 
@@ -582,12 +581,12 @@ fn plan_frame_with_rally(
                 if factory_count == 0 && can_train("miner") {
                     queue.extend(std::iter::repeat_n(
                         "miner".into(),
-                        if style == Style::Tactical { 6 } else { 2 },
+                        if style == Style::Tactical { 12 } else { 2 },
                     ));
                 }
                 let flags = if style == Style::Tactical && factory_count == 0 {
                     let loop_start = queue.len();
-                    for key in ["miner", "miner", "constructor", "grunt"] {
+                    for key in ["miner", "miner"] {
                         if can_train(key) {
                             queue.push(key.into());
                         }
@@ -672,6 +671,9 @@ fn plan_frame_with_rally(
                 p.stored_order.clone()
             } else if feeding_economy {
                 Order::Mine { area: area.clone() }
+            } else if style == Style::Tactical && matches!(p.stored_order, Order::AttackMove { .. })
+            {
+                p.stored_order.clone()
             } else {
                 Order::AttackMove {
                     destination: target,

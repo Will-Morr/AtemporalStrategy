@@ -32,6 +32,12 @@ fn bot_turn(
     )
     .expect("bot draft precheck");
     let tick = draft.tick;
+    if std::env::var_os("ATEMPORAL_BALANCE_TRACE").is_some() {
+        eprintln!(
+            "round {round} player {bot} plans {} commands at tick {tick}",
+            draft.commands.len()
+        );
+    }
     let state = reconstruct(&c.exact_request(c.current, tick).unwrap(), tick).unwrap();
     let resolved = draft::resolve_local_references(&draft, round, bot).unwrap();
     if let Err(error) = c.validate_against_state(bot, &resolved, &state) {

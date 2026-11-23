@@ -424,6 +424,35 @@ mod tests {
         assert!(structure_count(&tactical, "factory") >= 3);
         assert!(structure_count(&tactical, "silo") >= 1);
         assert!(tactical.commands.iter().any(|d|matches!(&d.command, Command::ConfigureBlueprints{settings,..} if settings.queue==["artillery"] && settings.queue_loop_flags==[true])));
+        let settings: Vec<_> = tactical
+            .commands
+            .iter()
+            .filter_map(|d| {
+                if let Command::ConfigureBlueprints { settings, .. } = &d.command {
+                    Some(settings)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(
+            settings
+                .iter()
+                .any(|s| s.queue.iter().filter(|key| *key == "miner").count() >= 10)
+        );
+        assert!(
+            settings
+                .iter()
+                .any(|s| matches!(s.order, Order::Construct { .. })
+                    && s.queue.iter().any(|key| key == "constructor"))
+        );
+        let launches: Vec<_> = settings
+            .iter()
+            .filter_map(|s| s.silo_plan.as_ref())
+            .flat_map(|plan| &plan.launches)
+            .collect();
+        assert_eq!(launches.len(), 1);
+        assert_eq!(launches[0].type_key, "satellite");
     }
     #[test]
     fn hidden_enemy_state_cannot_change_a_plan() {
