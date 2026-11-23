@@ -202,6 +202,16 @@ Resuming this extreme 4.3 GiB cache took approximately 59 seconds. Final high-wa
 
 Raw measurements and rendered evidence are in `target/integration-performance/summary.json`, `dense-battlefield.png`, `dense-playback.png`, `dense-player.png` and `trace.zip`. `--review-only` resumes the existing stress archive and repeats browser review without rerunning the simulation workload.
 
+### November 23 work-order pathfinding
+
+The hosted human-versus-Tactical round reproduced a slow simulation on a 48×48 map. From the tick-500 checkpoint it reached the 20,000-tick cap with 499 entities and a stalemate. The one-vCPU server took 800.899 seconds to simulate and 807.536 seconds from commit to publication, including 6.531 seconds of persistence. No release build was running during the slowdown.
+
+Release builds of the engine ran the same saved checkpoint and accepted orders on one logical CPU of a local Intel Core i7-9750H, with the simulation outputs discarded after emission. Through tick 12,000, the original rules 14 took 300.600 seconds and the optimized rules 14 took 6.431 seconds. Both produced SHA-256 `d0a9bd497fd087489873732de8ac68ed97736d39d188c409d3dd825cb57619b3`. The full optimized run took 11.016 seconds and matched the hosted archive's terminal SHA-256 `44d23b80c3df1ef9ab452549b087d5485a2d76b98cc31fb5361e941a31ad8163`. The same checkpoint and orders under rules 15 took 9.363 seconds, reached the cap, and ended with 346 entities under the new miner behavior. The local runs measure engine time with all outputs generated but no disk writes or result publication.
+
+CPU sampling on the October [sustained-pressure recording](../fixtures/bots/sustained-pressure.json) attributed about 89% of the original engine's sampled cycles to path fields and traversability checks. Workers now request path fields only after finding a usable work candidate. Broad mining orders share a sparse scan of remaining deposits within each tick. Target distance and tie-breaking remain the same.
+
+The hosted supervisor and workers originally ran at nice 10, as did release builds when active. A local one-CPU contention check used three CPU-bound processes, each doing one second of CPU work. With all three at nice 10, the game stand-in finished in about 3.05 seconds. With two build stand-ins at nice 19, it finished in about 1.29 seconds. This checks scheduler priority under contention.
+
 ## Verification limits
 
 Chromium is the verified browser. Firefox/WebKit, touchscreen-only play and WAN behavior were not tested. Narrow layouts support keyboard/mouse input with scrolling command panels; the primary play surface is desktop. Fog limits battlefield rendering and selection, while replay/statistical data remain inspectable. Local draft lock estimates are deliberately non-authoritative; published command outcomes are the source of truth. Heavy current revisions can exceed configured retention budgets as measured above.
