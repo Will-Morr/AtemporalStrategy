@@ -93,3 +93,14 @@ Both matches paired WillM (seat 0) with Tactical 2.0 (seat 1), first to three. T
 | Second | 4 | WillM | Match already won | 5,828 in archive |
 
 WillM won both matches 3–0. In the second match the wall change moved the deciding point from round four to round three. Its first combat divergence was Tactical’s turret at (41, 38) firing across map rock at WillM’s scout on tick 252. Tactical was then eliminated at tick 1,229 in the changed opening. The simulation continued to the 20,000-tick cap. The experiment measures the combined firing change against these fixed plans.
+
+## Tactical 2.1 on the same recorded openings
+
+The bot-policy comparison used rules 14 for both opponents and replayed the human turns in order. Tactical chose its own orders from each resulting player-visible timeline. The baseline retained Tactical 2.0’s policy with the placement adjustments required for rules 14. Scores below list the human first.
+
+| Recording | Previous bot | Tactical 2.1 | Tactical 2.1 round outcomes |
+| --- | --- | --- | --- |
+| First, three human turns | 3–0 | 1–0 | Loss, draw, draw |
+| Second, four human turns | 3–0 | 1–2 | Draw, loss, win, win |
+
+Neither 2.1 run reached the first-to-three target before the recorded human turns ended. In the second game Tactical intervened at tick 1,156, won the rewritten timeline at tick 1,618, and kept that winning timeline on the next round. All bot drafts passed validation. These two plans informed development. On a separate map, seed 296108, Tactical in seat 1 beat Standard 3–0.
