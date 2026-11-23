@@ -6,7 +6,14 @@ use atemporal_sim::{
     PlayerId, Result, Revision, SimRequest, Tick,
     player_timeline::{self, PlayerTimeline},
 };
-use std::{borrow::Cow, collections::BTreeMap, sync::atomic::AtomicBool};
+use std::{
+    borrow::Cow,
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 struct Entry {
     summary: PublishedRound,
@@ -23,10 +30,15 @@ pub(crate) struct PublishedHistory {
     entries: BTreeMap<Revision, Entry>,
     markers: Vec<TurnMarker>,
     player: PlayerId,
+    cancel: Arc<AtomicBool>,
 }
 
 impl PublishedHistory {
-    pub(super) fn capture(c: &Controller, player: PlayerId) -> Result<Self> {
+    pub(super) fn capture(
+        c: &Controller,
+        player: PlayerId,
+        cancel: Arc<AtomicBool>,
+    ) -> Result<Self> {
         if player >= c.config.player_count {
             return Err("player outside match".into());
         }
@@ -64,10 +76,14 @@ impl PublishedHistory {
             entries,
             markers,
             player,
+            cancel,
         })
     }
 }
 impl History for PublishedHistory {
+    fn cancelled(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed)
+    }
     fn revisions(&self) -> Box<dyn Iterator<Item = Revision> + '_> {
         Box::new(self.entries.keys().copied())
     }
@@ -84,6 +100,9 @@ impl History for PublishedHistory {
     /// Analyze a published revision for this seat, including evicted replay
     /// bodies. The result is independent of subsequent revisions' sightings.
     fn analyze(&self, revision: Revision) -> Result<PlayerTimeline> {
+        if self.cancelled() {
+            return Err("canceled".into());
+        }
         let entry = self
             .entries
             .get(&revision)
@@ -102,7 +121,7 @@ impl History for PublishedHistory {
         player_timeline::build_verified(
             &request,
             &[self.player],
-            &AtomicBool::new(false),
+            &self.cancel,
             terminal,
             &entry.final_hash,
         )?

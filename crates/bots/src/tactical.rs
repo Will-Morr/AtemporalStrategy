@@ -467,6 +467,7 @@ pub(super) fn intervention(input: &PolicyTimeline, previous: Tick) -> Tick {
         for frame in input
             .timeline
             .frames()
+            .take_while(|_| !input.cancelled())
             .filter(|frame| editable.contains(&frame.tick))
             .step_by(20)
         {
@@ -512,6 +513,7 @@ pub(super) fn intervention(input: &PolicyTimeline, previous: Tick) -> Tick {
         }
     };
     (wanted..=through)
+        .take_while(|_| !input.cancelled())
         .find(|&tick| input.timeline().frame(tick).is_some_and(ready))
         .unwrap_or(wanted)
 }
@@ -523,6 +525,13 @@ pub(super) fn plan(
     params: TacticalParams,
 ) -> TurnDraft {
     let intel = intel::Intel::scan(input, params.fresh_entry_ticks);
+    if input.cancelled() {
+        return TurnDraft {
+            based_on_revision: input.revision(),
+            tick: view.tick,
+            commands: vec![],
+        };
+    }
     let rally = intel.rally(input, view, params.rally_distance_band);
     let mut draft = super::plan_frame_with_rally(
         view,
@@ -643,7 +652,7 @@ fn direct_silos(
     known.retain(|&tile, _| !already_in_flight(tile));
     let viable = |center| safe(center) && !already_in_flight(center);
     let mut targets = Vec::new();
-    while targets.len() < 4 {
+    while !input.cancelled() && targets.len() < 4 {
         let candidates: BTreeSet<_> = if forecast.is_some() {
             known
                 .keys()
@@ -914,6 +923,9 @@ fn search_stalemate(
     let mut flood = VecDeque::new();
     let mut previous: Option<&PlayerFrame> = None;
     for frame in input.timeline.frames() {
+        if input.cancelled() {
+            return;
+        }
         let own_changed =
             previous.is_none_or(|old| !Arc::ptr_eq(&old.own_entities, &frame.own_entities));
         let visible_changed =
@@ -942,7 +954,7 @@ fn search_stalemate(
     } else {
         targets.len().max(2)
     };
-    while targets.len() < party_count {
+    while !input.cancelled() && targets.len() < party_count {
         while let Some(tile) = flood.pop_front() {
             let d = distances[index(tile)] + 1;
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {

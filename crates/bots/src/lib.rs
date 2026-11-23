@@ -107,6 +107,10 @@ pub struct PublishedRound {
 }
 
 pub trait History: Send + Sync {
+    fn cancelled(&self) -> bool {
+        false
+    }
+
     fn revisions(&self) -> Box<dyn Iterator<Item = Revision> + '_>;
     fn round(&self, revision: Revision) -> Option<&PublishedRound>;
     fn turns(&self, revision: Revision) -> Option<&[TurnMarker]>;
@@ -158,6 +162,10 @@ impl PolicyTimeline {
 
     pub fn history(&self) -> &dyn History {
         self.history.as_ref()
+    }
+
+    fn cancelled(&self) -> bool {
+        self.history.cancelled()
     }
 
     pub fn revision(&self) -> Revision {
@@ -326,12 +334,14 @@ pub fn intervention(input: &PolicyTimeline, style: Style) -> Tick {
     };
     let first_army = |lookahead, minimum| {
         let through = wanted.saturating_add(lookahead).min(available_through);
-        (wanted..=through).find(|&tick| {
-            input
-                .timeline
-                .frame(tick)
-                .is_some_and(|frame| has_mobile_weapons(frame, minimum))
-        })
+        (wanted..=through)
+            .take_while(|_| !input.cancelled())
+            .find(|&tick| {
+                input
+                    .timeline
+                    .frame(tick)
+                    .is_some_and(|frame| has_mobile_weapons(frame, minimum))
+            })
     };
     first_army(style.interval(), 1).unwrap_or(wanted)
 }

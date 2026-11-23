@@ -24,6 +24,8 @@ Tactical scans the published replay for enemy units moving out of fog. It follow
 
 Verification covers coordinator process isolation, passwords, multiple games and identity retention, restart, replay browsing, bot fairness/legality, and real-browser input scenarios with inspected screenshots. See the [verification record](integration-verification.md#game-coordinator-users-and-basic-bots--2026-10-24) for results and limits.
 
+In games with humans, bot planning pauses when all human seats have disconnected and no human turn is committed for the round. A five-second grace period lets brief reconnects keep their in-progress plan. Reconnecting starts planning again automatically. Human commitments still trigger the remaining bot work and ordinary round simulation. Bot-only playtests continue without connected players.
+
 ## Developing a bot
 
 Strategy code lives in `crates/bots`. Its input is a `PolicyTimeline` scoped to one player and one published revision. It has the match rules, the editable tick range, and the player's observations. Its output is a `TurnDraft`. The server adapter owns the controller, replays the published inputs, and validates the submitted draft. Pending turns never enter the replay. To change a policy, work against the observations in this interface.

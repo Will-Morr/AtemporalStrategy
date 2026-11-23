@@ -3,6 +3,7 @@ use super::{PolicyTimeline, history::PublishedHistory};
 use crate::controller::Controller;
 use atemporal_bots::{History, MatchRules, PublishedWindow};
 use atemporal_sim::{PlayerId, Result};
+use std::sync::{Arc, atomic::AtomicBool};
 
 pub(super) struct PublishedRequest {
     rules: MatchRules,
@@ -11,8 +12,8 @@ pub(super) struct PublishedRequest {
 }
 
 impl PublishedRequest {
-    pub(super) fn new(c: &Controller, player: PlayerId) -> Result<Self> {
-        let history = PublishedHistory::capture(c, player)?;
+    pub(super) fn new(c: &Controller, player: PlayerId, cancel: Arc<AtomicBool>) -> Result<Self> {
+        let history = PublishedHistory::capture(c, player, cancel)?;
         Ok(Self {
             rules: MatchRules {
                 config: c.config.clone(),
@@ -35,5 +36,5 @@ impl PublishedRequest {
 
 /// Materialize the same published input used by live bots for an offline caller.
 pub fn published_timeline(c: &Controller, player: PlayerId) -> Result<PolicyTimeline> {
-    PublishedRequest::new(c, player)?.build()
+    PublishedRequest::new(c, player, Arc::default())?.build()
 }

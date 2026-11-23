@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -25,6 +29,10 @@ fn default_rounds() -> u32 {
     20
 }
 impl BotConfig {
+    fn all_bot(&self) -> bool {
+        !self.slots.is_empty() && self.slots.iter().all(Option::is_some)
+    }
+
     pub fn validate(&self, count: u8) -> Result<()> {
         if !self.slots.is_empty() && self.slots.len() != usize::from(count) {
             return Err("Choose a human or bot for each slot.".into());
@@ -33,10 +41,7 @@ impl BotConfig {
         {
             return Err("Keep slot 0 human in games with human players.".into());
         }
-        if !self.slots.is_empty()
-            && self.slots.iter().all(Option::is_some)
-            && !(1..=1000).contains(&self.playtest_rounds)
-        {
+        if self.all_bot() && !(1..=1000).contains(&self.playtest_rounds) {
             return Err("Bot-only playtests need a round budget between 1 and 1000.".into());
         }
         Ok(())
@@ -94,6 +99,37 @@ struct BotAttempt {
     draft: Option<TurnDraft>,
     failures: u32,
     retry_at: Instant,
+}
+
+const BOT_POLL: Duration = Duration::from_millis(750);
+const RECONNECT_GRACE: Duration = Duration::from_secs(5);
+
+#[derive(Default)]
+enum PlanningDemand {
+    #[default]
+    Unobserved,
+    Needed,
+    Absent(Instant),
+}
+
+impl PlanningDemand {
+    fn allows(&mut self, c: &Controller, bots: &BotConfig, debug_opening: bool) -> bool {
+        let needed = bots.all_bot()
+            || (debug_opening && c.round == 1)
+            || c.lobby.slots.iter().enumerate().any(|(slot, state)| {
+                bots.slots.get(slot).is_none_or(Option::is_none)
+                    && (state.connected || c.has_commit(slot as u8))
+            });
+        if needed {
+            *self = Self::Needed;
+            return true;
+        }
+        // An already empty worker can stay quiet immediately after startup.
+        if matches!(self, Self::Needed) {
+            *self = Self::Absent(Instant::now());
+        }
+        matches!(self, Self::Absent(since) if since.elapsed() < RECONNECT_GRACE)
+    }
 }
 
 impl BotAttempt {
@@ -174,11 +210,12 @@ pub fn drive(
     if bots.slots.iter().any(Option::is_some) || debug_opening {
         tokio::spawn(async move {
             let mut attempts = BTreeMap::new();
+            let mut demand = PlanningDemand::default();
             loop {
-                if let Err(e) = step(&app, &bots, &mut attempts, debug_opening).await {
+                if let Err(e) = step(&app, &bots, &mut attempts, &mut demand, debug_opening).await {
                     eprintln!("bot: {e}");
                 }
-                tokio::time::sleep(Duration::from_millis(750)).await;
+                tokio::time::sleep(BOT_POLL).await;
             }
         });
     }
@@ -187,9 +224,10 @@ async fn step(
     app: &ws::App,
     bots: &BotConfig,
     attempts: &mut BTreeMap<PlayerId, BotAttempt>,
+    demand: &mut PlanningDemand,
     debug_opening: bool,
 ) -> Result<()> {
-    if !bots.slots.is_empty() && bots.slots.iter().all(Option::is_some) {
+    if bots.all_bot() {
         let pending = {
             let mut c = app.controller.lock().unwrap();
             if c.phase == Phase::Lobby && c.lobby.can_start {
@@ -208,6 +246,12 @@ async fn step(
         };
         if let Some(rx) = pending {
             ws::drive_job(app.clone(), rx);
+        }
+    }
+    {
+        let c = app.controller.lock().unwrap();
+        if !demand.allows(&c, bots, debug_opening) {
+            return Ok(());
         }
     }
     for (slot, style) in bots.slots.iter().enumerate() {
@@ -233,7 +277,9 @@ async fn step(
         if Instant::now() < attempt.retry_at {
             continue;
         }
-        if let Err(error) = step_player(app, player, style, attempt).await {
+        if let Err(error) =
+            step_player(app, player, style, attempt, demand, bots, debug_opening).await
+        {
             attempt.defer();
             eprintln!(
                 "bot {} player {player} revision {revision}: {error}",
@@ -249,30 +295,49 @@ async fn step_player(
     player: PlayerId,
     style: Style,
     attempt: &mut BotAttempt,
+    demand: &mut PlanningDemand,
+    bots: &BotConfig,
+    debug_opening: bool,
 ) -> Result<()> {
     let revision = attempt.revision;
     if attempt.draft.is_none() {
+        let cancel = Arc::new(AtomicBool::new(false));
         let published = {
             let c = app.controller.lock().unwrap();
-            if !attempt.is_current(&c, player) {
+            if !attempt.is_current(&c, player) || !demand.allows(&c, bots, debug_opening) {
                 return Ok(());
             }
-            published::PublishedRequest::new(&c, player)?
+            published::PublishedRequest::new(&c, player, cancel.clone())?
         };
-        let draft = tokio::task::spawn_blocking(move || {
+        let mut task = tokio::task::spawn_blocking(move || {
             published
                 .build()
                 .map(|timeline| published_plan(&timeline, style))
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+        });
+        let draft = loop {
+            tokio::select! {
+                result = &mut task => break result.map_err(|e| e.to_string())??,
+                () = tokio::time::sleep(BOT_POLL) => {
+                    let needed = {
+                        let c = app.controller.lock().unwrap();
+                        demand.allows(&c, bots, debug_opening) && attempt.is_current(&c, player)
+                    };
+                    if !needed {
+                        cancel.store(true, Ordering::Relaxed);
+                        // Wait for cancellation before allowing another plan to start.
+                        let _ = task.await.map_err(|e| e.to_string())?;
+                        return Ok(());
+                    }
+                }
+            }
+        };
         attempt.draft = Some(draft);
     }
     let draft = attempt.draft.as_ref().unwrap().clone();
     let tick = draft.tick;
     let (cached, exact) = {
         let c = app.controller.lock().unwrap();
-        if !attempt.is_current(&c, player) {
+        if !attempt.is_current(&c, player) || !demand.allows(&c, bots, debug_opening) {
             return Ok(());
         }
         let cached = c.cached_exact(revision, tick);
@@ -290,7 +355,7 @@ async fn step_player(
     };
     let job = {
         let mut c = app.controller.lock().unwrap();
-        if !attempt.is_current(&c, player) {
+        if !attempt.is_current(&c, player) || !demand.allows(&c, bots, debug_opening) {
             return Ok(());
         }
         let mut request = CommitRequest {
@@ -522,6 +587,95 @@ mod tests {
         let job = c.start_job(0, vec![], vec![]).unwrap();
         run_round(&mut c, job);
         (c, human)
+    }
+
+    fn human_and_tactical() -> BotConfig {
+        BotConfig {
+            slots: vec![None, Some(Style::Tactical)],
+            playtest_rounds: 20,
+        }
+    }
+
+    #[test]
+    fn disconnected_human_commit_keeps_bot_planning_needed() {
+        let (mut c, human) = published_opening();
+        let bots = human_and_tactical();
+        let mut demand = PlanningDemand::default();
+        c.disconnect(0);
+        assert!(!demand.allows(&c, &bots, false));
+        c.connect(Some(&human));
+        assert!(demand.allows(&c, &bots, false));
+        c.disconnect(0);
+        assert!(demand.allows(&c, &bots, false));
+        demand = PlanningDemand::Absent(Instant::now() - RECONNECT_GRACE);
+        assert!(!demand.allows(&c, &bots, false));
+        let request = CommitRequest {
+            request_id: "accepted-before-disconnect".into(),
+            slot_token: human,
+            draft: TurnDraft {
+                based_on_revision: c.current,
+                tick: c.editable_from,
+                commands: vec![],
+            },
+        };
+        assert!(c.accept_commit(0, &request, vec![]).unwrap().1.is_none());
+        assert!(demand.allows(&c, &bots, false));
+        assert!(PlanningDemand::default().allows(
+            &c,
+            &BotConfig {
+                slots: vec![Some(Style::Standard), Some(Style::Tactical)],
+                playtest_rounds: 20,
+            },
+            false
+        ));
+    }
+
+    #[test]
+    fn abandoned_bot_stays_pending_until_a_human_reconnects() {
+        let (mut c, human) = published_opening();
+        c.disconnect(0);
+        let app = ws::App {
+            controller: Arc::new(std::sync::Mutex::new(c)),
+            client_dir: PathBuf::new(),
+            guide_dir: PathBuf::new(),
+            inputs_only: false,
+        };
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let bots = human_and_tactical();
+                let mut demand = PlanningDemand::default();
+                let mut attempts = BTreeMap::new();
+                step(&app, &bots, &mut attempts, &mut demand, false)
+                    .await
+                    .unwrap();
+                assert!(attempts.is_empty());
+                assert!(app.controller.lock().unwrap().bot_pending(1));
+                app.controller.lock().unwrap().connect(Some(&human));
+                step(&app, &bots, &mut attempts, &mut demand, false)
+                    .await
+                    .unwrap();
+                assert!(app.controller.lock().unwrap().has_commit(1));
+            });
+    }
+
+    #[test]
+    fn live_published_history_observes_shared_cancellation() {
+        let (c, _) = published_opening();
+        let canceled = Arc::new(AtomicBool::new(false));
+        let input = published::PublishedRequest::new(&c, 1, canceled.clone())
+            .unwrap()
+            .build()
+            .unwrap();
+        assert!(!input.history().cancelled());
+        canceled.store(true, Ordering::Relaxed);
+        assert!(input.history().cancelled());
+        assert_eq!(
+            input.history().analyze(c.current).err().as_deref(),
+            Some("canceled")
+        );
     }
 
     #[test]

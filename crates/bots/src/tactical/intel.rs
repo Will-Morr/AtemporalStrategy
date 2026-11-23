@@ -178,6 +178,9 @@ fn latest_visibility(input: &PolicyTimeline) -> Vec<Option<Tick>> {
     let mut remaining = terrain.cells.len();
     let mut previous = &[][..];
     for frame in input.timeline.frames().rev() {
+        if input.cancelled() {
+            break;
+        }
         let words = frame.visible_tile_words();
         if std::ptr::eq(words, previous) {
             continue;
@@ -287,6 +290,9 @@ impl Intel {
         let mut previous: Option<&PlayerFrame> = None;
         let mut struck = vec![None; terrain.cells.len()];
         for frame in input.timeline.frames() {
+            if input.cancelled() {
+                break;
+            }
             for event in &frame.events {
                 if let PresentationEvent::MissileImpact {
                     owner,
@@ -368,6 +374,9 @@ impl Intel {
             .retain(|s| struck[index(terrain, s.tile)].is_none_or(|tick| tick <= s.sight_tick));
         let mut votes = BTreeMap::<(PlayerId, Tile), Votes>::new();
         for entry in sightings.into_values().filter(|e| e.steps == 2) {
+            if input.cancelled() {
+                break;
+            }
             let arrival = input
                 .timeline
                 .frame(entry.appear - 1)

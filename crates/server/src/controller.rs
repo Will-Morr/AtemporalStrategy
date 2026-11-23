@@ -386,6 +386,9 @@ impl Controller {
     pub fn bot_pending(&self, player: PlayerId) -> bool {
         self.phase == Phase::Planning && !self.committed.contains_key(&player)
     }
+    pub(crate) fn has_commit(&self, player: PlayerId) -> bool {
+        self.committed.contains_key(&player)
+    }
     pub fn open_lobby_record(&self) -> serde_json::Value {
         serde_json::json!({"match_id":self.match_id,"lobby":self.lobby,"tokens":self.tokens})
     }
