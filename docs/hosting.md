@@ -63,6 +63,17 @@ System journals and Caddy logs are not part of this job; their own rotation limi
 
 Lobbies lists games with a connected human player. Show inactive games also lists open or in-progress games whose players disconnected. Finished and explicitly archived matches appear under Replays.
 
+Workers for unvisited lobbies and disconnected lobbies or replays stop after a
+five-second reconnect grace and the next maintenance check. An open game,
+spectator or replay WebSocket keeps its worker alive. Reopening the same URL
+starts a worker and restores the saved lobby, match or recording. Live workers
+finish in-flight requests, simulations and bot replies due on a submitted
+human turn. All-bot playtests run to completion without a browser. At
+coordinator startup, the saved manifests and turn and round files identify
+work that still has to run, including submissions newer than the last
+directory status sample. A partial round waiting for another human resumes
+with its accepted turns when someone opens it again.
+
 After 24 hours without game activity the coordinator closes the live game and stops its live worker. It persists that decision across restarts. The five most recently completed matches across all players remain available through their read-only replay URLs, with the original lobby password where applicable. Rematches count separately. The ranking uses the winning round’s original file time, including for older logs. Recently stopped unfinished matches are also reviewable for 24 hours after stopping and do not use any of the five places. The hourly job keeps the entire game folder for each protected match and checksum-verifies other eligible logs against the local mirror before removing them.
 
 Activity includes successful lobby/connection changes, accepted turns, uncommits and published simulation results. Merely fetching the directory, viewing a replay, seeking or keeping a tab open does not extend retention. Local unsubmitted edits are not sent to the server and cannot count. Activity timestamps survive restarts; records without timestamps fall back to game creation. Maintenance runs every two seconds, with access checks also enforcing the deadline. Worker activity/presence status is sampled every 750 ms. These definitions and the update grace are implementation choices, not additional user requirements.

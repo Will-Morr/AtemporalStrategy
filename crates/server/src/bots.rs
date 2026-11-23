@@ -29,7 +29,7 @@ fn default_rounds() -> u32 {
     20
 }
 impl BotConfig {
-    fn all_bot(&self) -> bool {
+    pub(crate) fn all_bot(&self) -> bool {
         !self.slots.is_empty() && self.slots.iter().all(Option::is_some)
     }
 
@@ -91,6 +91,26 @@ impl BotConfig {
         }
         Ok(())
     }
+}
+
+pub(crate) fn status_record(c: &Controller) -> serde_json::Value {
+    serde_json::json!({"last_activity_ms":c.last_activity_ms,"match_id":c.match_id,"phase":c.phase,"round":c.round,"slots":c.lobby.slots,"lobby_revision":c.lobby.revision,"objective":c.config.objective})
+}
+
+pub(crate) fn has_pending_bot_work(c: &Controller, bots: &BotConfig, debug_opening: bool) -> bool {
+    (bots.all_bot() && matches!(c.phase, Phase::Lobby | Phase::Planning))
+        || (c.phase == Phase::Planning
+            && ((debug_opening && c.round == 1)
+                || ((0..c.config.player_count).any(|player| {
+                    bots.slots
+                        .get(usize::from(player))
+                        .is_none_or(Option::is_none)
+                        && c.has_commit(player)
+                }) && bots
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .any(|(slot, bot)| bot.is_some() && c.bot_pending(slot as PlayerId)))))
 }
 struct BotAttempt {
     match_id: String,
@@ -186,7 +206,7 @@ pub fn drive(
             loop {
                 {
                     let c = controller.lock().unwrap();
-                    let value = serde_json::json!({"last_activity_ms":c.last_activity_ms,"match_id":c.match_id,"phase":c.phase,"round":c.round,"slots":c.lobby.slots,"lobby_revision":c.lobby.revision,"objective":c.config.objective});
+                    let value = status_record(&c);
                     let text = value.to_string();
                     if text != saved {
                         if let Some(path) = &status
@@ -639,6 +659,7 @@ mod tests {
             client_dir: PathBuf::new(),
             guide_dir: PathBuf::new(),
             inputs_only: false,
+            managed: None,
         };
         tokio::runtime::Builder::new_current_thread()
             .enable_all()

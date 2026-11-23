@@ -19,7 +19,9 @@ use std::{
     path::PathBuf,
     process::{Child, Command as Process, Stdio},
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::Message as RemoteMessage;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -52,16 +54,82 @@ struct ReplayListing {
     locked: bool,
     players: Vec<String>,
 }
+const WORKER_IDLE_GRACE: Duration = Duration::from_secs(5);
+const WORKER_START_TIMEOUT: Duration = Duration::from_secs(60);
+
 struct Worker {
     child: Child,
     port: u16,
     readers: usize,
+    idle_since: Instant,
 }
 impl Drop for Worker {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+struct WorkerLease {
+    workers: Arc<Mutex<BTreeMap<String, Worker>>>,
+    key: String,
+    pid: u32,
+    port: u16,
+}
+
+impl WorkerLease {
+    fn new(
+        workers: Arc<Mutex<BTreeMap<String, Worker>>>,
+        key: String,
+        worker: &mut Worker,
+    ) -> Self {
+        worker.readers += 1;
+        Self {
+            workers,
+            key,
+            pid: worker.child.id(),
+            port: worker.port,
+        }
+    }
+
+    fn running(&self) -> bool {
+        self.workers
+            .lock()
+            .unwrap()
+            .get_mut(&self.key)
+            .is_some_and(|worker| {
+                worker.child.id() == self.pid
+                    && worker.child.try_wait().is_ok_and(|status| status.is_none())
+            })
+    }
+}
+
+impl Drop for WorkerLease {
+    fn drop(&mut self) {
+        if let Some(worker) = self.workers.lock().unwrap().get_mut(&self.key)
+            && worker.child.id() == self.pid
+        {
+            worker.readers -= 1;
+            if worker.readers == 0 {
+                worker.idle_since = Instant::now();
+            }
+        }
+    }
+}
+
+async fn live_worker_idle(port: u16) -> bool {
+    tokio::time::timeout(Duration::from_millis(500), async {
+        let mut socket = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
+        socket
+            .write_all(
+                b"GET /_worker/idle HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+            )
+            .await?;
+        let mut code = [0; 12];
+        socket.read_exact(&mut code).await?;
+        Ok::<_, std::io::Error>(&code == b"HTTP/1.1 204")
+    })
+    .await
+    .is_ok_and(|ready| ready.unwrap_or(false))
 }
 #[derive(Clone)]
 pub struct Coordinator {
@@ -146,7 +214,7 @@ impl Coordinator {
             workers: Arc::new(Mutex::new(BTreeMap::new())),
             admissions: Arc::new(Mutex::new(Admissions { count: 0 })),
         };
-        // Resume open/active games even if no browser has returned yet (bot playtests included).
+        // Recreate workers only for durable work that can advance without a browser.
         let games: Vec<_> = coordinator
             .directory
             .lock()
@@ -162,12 +230,7 @@ impl Coordinator {
                     crate::archive::migrate_completion(&entry.map_err(|e| e.to_string())?.path())?;
                 }
             }
-            if !coordinator.expired(&game, now_ms())
-                && !matches!(
-                    coordinator.status(&game.id)["phase"].as_str(),
-                    Some("finished" | "archived")
-                )
-            {
+            if !coordinator.expired(&game, now_ms()) && coordinator.needs_background_worker(&game) {
                 coordinator.worker(&game, None)?;
             }
         }
@@ -206,10 +269,11 @@ impl Coordinator {
     }
     /// Local supervisor handshake. No unauthenticated Internet restart endpoint.
     pub async fn maintain(self) {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+        let mut interval = tokio::time::interval(Duration::from_secs(2));
         let mut changed = false;
         loop {
             interval.tick().await;
+            self.park_idle_workers().await;
             let mut d = self.directory.lock().unwrap();
             for game in d.games.values_mut() {
                 if !game.expired && self.expired(game, now_ms()) {
@@ -241,6 +305,39 @@ impl Coordinator {
                 eprintln!("Update ready; server idle, exiting for supervisor");
                 self.workers.lock().unwrap().clear();
                 std::process::exit(75);
+            }
+        }
+    }
+    async fn park_idle_workers(&self) {
+        let candidates: Vec<_> = self
+            .workers
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, worker)| {
+                worker.readers == 0 && worker.idle_since.elapsed() >= WORKER_IDLE_GRACE
+            })
+            .map(|(key, worker)| {
+                (
+                    key.clone(),
+                    worker.child.id(),
+                    worker.port,
+                    worker.idle_since,
+                )
+            })
+            .collect();
+        for (key, pid, port, idle_since) in candidates {
+            let ready = !key.ends_with(":live") || live_worker_idle(port).await;
+            let mut workers = self.workers.lock().unwrap();
+            let Some(worker) = workers.get_mut(&key) else {
+                continue;
+            };
+            if worker.child.id() == pid
+                && worker.readers == 0
+                && worker.idle_since == idle_since
+                && (ready || worker.child.try_wait().is_ok_and(|exited| exited.is_some()))
+            {
+                workers.remove(&key);
             }
         }
     }
@@ -367,7 +464,73 @@ impl Coordinator {
             .and_then(|s| serde_json::from_slice(&s).ok())
             .unwrap_or(json!({"phase":"lobby","round":0}))
     }
-    fn worker(&self, game: &GameRecord, replay: Option<&str>) -> Result<u16> {
+    fn live_archive(&self, id: &str) -> Option<PathBuf> {
+        let dir = self.game_root(id);
+        let lobby_id = std::fs::read(dir.join("lobby.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .and_then(|lobby| lobby["match_id"].as_str().map(str::to_owned));
+        std::fs::read_dir(dir.join("replays"))
+            .ok()?
+            .flatten()
+            .filter(|entry| {
+                let file = entry.file_name();
+                let name = file.to_string_lossy();
+                valid_id(&name)
+                    && lobby_id
+                        .as_ref()
+                        .is_none_or(|lobby| name.as_ref() >= lobby.as_str())
+                    && entry.path().join("manifest.json").is_file()
+            })
+            .max_by_key(|entry| entry.file_name())
+            .map(|entry| entry.path())
+    }
+    fn needs_background_worker(&self, game: &GameRecord) -> bool {
+        let Some(archive) = self.live_archive(&game.id) else {
+            return game.bots.all_bot();
+        };
+        if archive.join("archive.json").is_file() || archive.join("completed.json").is_file() {
+            return false;
+        }
+        if game.bots.all_bot() {
+            return true;
+        }
+        // A status sample can predate a successful start/commit. Derive the next
+        // unfinished round from the files written before each acknowledgement.
+        let last_round = std::fs::read_dir(archive.join("rounds"))
+            .ok()
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|entry| {
+                entry
+                    .file_name()
+                    .to_str()?
+                    .strip_suffix(".json")?
+                    .parse::<u32>()
+                    .ok()
+            })
+            .max();
+        let Some(round) = last_round.map(|last| last.saturating_add(1)) else {
+            return true;
+        };
+        if self.test_server && game.debug_test && round == 1 {
+            return true;
+        }
+        let accepted =
+            |slot: PlayerId| archive.join(format!("turns/{round}-{slot}.json")).is_file();
+        let is_bot = |slot: PlayerId| {
+            game.bots
+                .slots
+                .get(usize::from(slot))
+                .is_some_and(Option::is_some)
+        };
+        let mut players = 0..game.setup.match_defaults.player_count;
+        players.clone().all(accepted)
+            || (players.clone().any(|slot| !is_bot(slot) && accepted(slot))
+                && players.any(|slot| is_bot(slot) && !accepted(slot)))
+    }
+    fn worker(&self, game: &GameRecord, replay: Option<&str>) -> Result<WorkerLease> {
         if game.setup.match_defaults.simulation_threads
             > self.defaults.match_defaults.simulation_threads
         {
@@ -381,7 +544,7 @@ impl Coordinator {
         if let Some(w) = workers.get_mut(&key)
             && w.child.try_wait().map_err(|e| e.to_string())?.is_none()
         {
-            return Ok(w.port);
+            return Ok(WorkerLease::new(self.workers.clone(), key, w));
         }
         workers.remove(&key);
         let dir = self.game_root(&game.id);
@@ -395,24 +558,11 @@ impl Coordinator {
         if !pinned_content.exists() {
             std::fs::copy(&self.content, &pinned_content).map_err(|e| e.to_string())?;
         }
-        let saved = self.status(&game.id);
         let latest = if let Some(r) = replay {
             Some(r.to_owned())
-        } else if saved["match_id"].as_str().is_none() {
-            let mut ids: Vec<_> = std::fs::read_dir(&replays)
-                .map_err(|e| e.to_string())?
-                .flatten()
-                .filter(|e| e.path().join("manifest.json").exists())
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .filter(|id| valid_id(id))
-                .collect();
-            ids.sort();
-            ids.pop()
         } else {
-            saved["match_id"]
-                .as_str()
-                .filter(|id| valid_id(id) && replays.join(id).join("manifest.json").exists())
-                .map(str::to_owned)
+            self.live_archive(&game.id)
+                .and_then(|path| path.file_name()?.to_str().map(str::to_owned))
         };
         if let Some(r) = &latest
             && (!valid_id(r) || !replays.join(r).join("manifest.json").exists())
@@ -469,15 +619,15 @@ impl Coordinator {
                 .arg(dir.join("lobby.json"));
         }
         let child = command.spawn().map_err(|e| e.to_string())?;
-        workers.insert(
-            key,
-            Worker {
-                child,
-                port,
-                readers: 0,
-            },
-        );
-        Ok(port)
+        let mut worker = Worker {
+            child,
+            port,
+            readers: 0,
+            idle_since: Instant::now(),
+        };
+        let lease = WorkerLease::new(self.workers.clone(), key.clone(), &mut worker);
+        workers.insert(key, worker);
+        Ok(lease)
     }
 }
 pub fn atomic_json(path: &std::path::Path, value: &impl Serialize) -> Result<()> {
@@ -685,7 +835,7 @@ async fn create(
     };
     let worker_c = c.clone();
     let worker_game = game.clone();
-    match tokio::task::spawn_blocking(move || worker_c.worker(&worker_game, None)).await {
+    match tokio::task::spawn_blocking(move || worker_c.worker(&worker_game, None).map(drop)).await {
         Ok(Ok(_)) => (
             [(
                 header::SET_COOKIE,
@@ -892,27 +1042,32 @@ async fn relay(
     c.log_visit(&h, if readonly { "replay" } else { "game" }, &worker_key);
     let wc = c.clone();
     let wg = game.clone();
-    let port = match tokio::task::spawn_blocking(move || wc.worker(&wg, replay.as_deref())).await {
+    let lease = match tokio::task::spawn_blocking(move || wc.worker(&wg, replay.as_deref())).await {
         Ok(Ok(p)) => p,
         _ => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
     };
     // Connect before upgrading, so a failed worker never leaves a half-open browser socket.
-    let mut remote = None;
-    for _ in 0..100 {
-        if let Ok((socket, _)) =
-            tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}{practice_route}")).await
-        {
-            remote = Some(socket);
-            break;
+    // A cold resume may have to regenerate an evicted result before binding its port.
+    let remote = tokio::time::timeout(WORKER_START_TIMEOUT, async {
+        let url = format!("ws://127.0.0.1:{}{practice_route}", lease.port);
+        loop {
+            match tokio_tungstenite::connect_async(&url).await {
+                Ok((socket, _)) => return Some(socket),
+                Err(tokio_tungstenite::tungstenite::Error::Io(error))
+                    if error.kind() == std::io::ErrorKind::ConnectionRefused && lease.running() => {
+                }
+                Err(_) => return None,
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-    let Some(remote) = remote else {
+    })
+    .await;
+    let Ok(Some(remote)) = remote else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     let user = cookie(&h, "atemporal-user");
     upgrade.max_message_size(64<<20).on_upgrade(move|mut browser|async move {
-        if let Some(worker) = c.workers.lock().unwrap().get_mut(&worker_key) && worker.port == port { worker.readers += 1; }
+        let _lease = lease;
         let (mut tx,mut rx)=remote.split();
         loop {
             tokio::select! {
@@ -956,11 +1111,6 @@ async fn relay(
         }
         let _=tx.close().await;
         let _=browser.close().await;
-        let mut workers = c.workers.lock().unwrap();
-        if let Some(worker) = workers.get_mut(&worker_key) && worker.port == port {
-            worker.readers = worker.readers.saturating_sub(1);
-            if readonly && worker.readers == 0 { workers.remove(&worker_key); }
-        }
     })
 }
 async fn guide(State(c): State<Coordinator>) -> Response {
@@ -1099,6 +1249,73 @@ mod tests {
         assert_eq!(c.admissions.lock().unwrap().count, 0);
         std::fs::remove_dir_all(root).unwrap();
     }
+    #[test]
+    fn startup_uses_durable_turns_when_the_lobby_status_is_stale() {
+        let root = std::env::temp_dir().join(format!(
+            "atemporal-idle-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let setup =
+            atemporal_content::load_setup(include_str!("../../../config/game.yaml")).unwrap();
+        let coordinator = Coordinator::new(
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            setup.clone(),
+            false,
+        )
+        .unwrap();
+        let mut game = GameRecord {
+            id: "game-idle".into(),
+            name: "Idle".into(),
+            password: String::new(),
+            setup,
+            bots: BotConfig::default(),
+            debug_test: false,
+            created: now_ms(),
+            expired: false,
+            members: BTreeMap::new(),
+        };
+        let game_root = coordinator.game_root(&game.id);
+        let archive = game_root.join("replays/match-1000");
+        for dir in ["rounds", "turns"] {
+            std::fs::create_dir_all(archive.join(dir)).unwrap();
+        }
+        atomic_json(
+            &game_root.join("status.json"),
+            &json!({"phase":"lobby","match_id":"match-999"}),
+        )
+        .unwrap();
+        assert!(!coordinator.needs_background_worker(&game));
+        std::fs::write(archive.join("manifest.json"), b"{}").unwrap();
+        assert!(coordinator.needs_background_worker(&game)); // Unpublished opening.
+        std::fs::write(archive.join("rounds/0.json"), b"{}").unwrap();
+        assert!(!coordinator.needs_background_worker(&game));
+        std::fs::write(archive.join("turns/1-0.json"), b"{}").unwrap();
+        assert!(!coordinator.needs_background_worker(&game)); // Waiting for another human.
+        let mut bots = vec![None; usize::from(game.setup.match_defaults.player_count)];
+        bots[1] = Some(crate::bots::DEFAULT_STYLE);
+        game.bots.slots = bots;
+        assert!(coordinator.needs_background_worker(&game)); // The human's bot reply is due.
+        std::fs::write(archive.join("turns/1-1.json"), b"{}").unwrap();
+        assert!(coordinator.needs_background_worker(&game)); // Both turns are on disk.
+        std::fs::write(archive.join("rounds/1.json"), b"{}").unwrap();
+        assert!(!coordinator.needs_background_worker(&game));
+        game.bots.slots.fill(Some(crate::bots::DEFAULT_STYLE));
+        assert!(coordinator.needs_background_worker(&game));
+        std::fs::write(archive.join("archive.json"), b"{}").unwrap();
+        assert!(!coordinator.needs_background_worker(&game));
+        atomic_json(
+            &game_root.join("lobby.json"),
+            &json!({"match_id":"match-2000"}),
+        )
+        .unwrap();
+        assert!(coordinator.live_archive(&game.id).is_none()); // New rematch lobby, old archive.
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[tokio::test]
     async fn public_creation_rejects_host_thread_amplification_before_spawning() {
         let root = std::env::temp_dir().join(format!(
@@ -1156,7 +1373,8 @@ mod tests {
         legacy.setup.match_defaults.simulation_threads = u16::MAX;
         assert!(
             c.worker(&legacy, None)
-                .unwrap_err()
+                .err()
+                .unwrap()
                 .contains("thread budget")
         );
         std::fs::remove_dir_all(root).unwrap();

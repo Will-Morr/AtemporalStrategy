@@ -20,6 +20,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -30,10 +31,52 @@ pub struct App {
     pub client_dir: PathBuf,
     pub guide_dir: PathBuf,
     pub inputs_only: bool,
+    pub managed: Option<Arc<ManagedWorker>>,
+}
+
+/// Private loopback lifecycle state for coordinator-owned live workers.
+pub struct ManagedWorker {
+    connections: std::sync::atomic::AtomicUsize,
+    bots: crate::bots::BotConfig,
+    status: PathBuf,
+    lobby: PathBuf,
+    debug_opening: bool,
+}
+
+impl ManagedWorker {
+    pub fn new(
+        bots: crate::bots::BotConfig,
+        status: PathBuf,
+        lobby: PathBuf,
+        debug_opening: bool,
+    ) -> Self {
+        Self {
+            connections: 0.into(),
+            bots,
+            status,
+            lobby,
+            debug_opening,
+        }
+    }
+}
+
+struct ManagedConnection(Arc<ManagedWorker>);
+
+impl ManagedConnection {
+    fn new(worker: Arc<ManagedWorker>) -> Self {
+        worker.connections.fetch_add(1, Ordering::SeqCst);
+        Self(worker)
+    }
+}
+
+impl Drop for ManagedConnection {
+    fn drop(&mut self) {
+        self.0.connections.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 pub fn router(app: App) -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/ws", get(ws_upgrade))
         .route("/ws/peripheral", get(peripheral_upgrade))
         .route(
@@ -43,8 +86,39 @@ pub fn router(app: App) -> Router {
         .route("/guide", get(guide_root))
         .route("/guide/", get(guide_root))
         .route("/guide/{*path}", get(guide_file))
-        .fallback(get(client_file))
-        .with_state(app)
+        .fallback(get(client_file));
+    if app.managed.is_some() {
+        router = router.route("/_worker/idle", get(worker_idle));
+    }
+    router.with_state(app)
+}
+
+async fn worker_idle(State(app): State<App>) -> StatusCode {
+    let Some(worker) = &app.managed else {
+        return StatusCode::NOT_FOUND;
+    };
+    let c = app.controller.lock().unwrap();
+    if worker.connections.load(Ordering::SeqCst) != 0
+        || c.phase == Phase::Simulating
+        || crate::bots::has_pending_bot_work(&c, &worker.bots, worker.debug_opening)
+    {
+        return StatusCode::CONFLICT;
+    }
+    // Leave the exact open lobby and current directory status after any last connection.
+    let saved = crate::coordinator::atomic_json(&worker.status, &crate::bots::status_record(&c))
+        .and_then(|()| {
+            if c.phase == Phase::Lobby {
+                crate::coordinator::atomic_json(&worker.lobby, &c.open_lobby_record())?;
+            }
+            Ok(())
+        });
+    match saved {
+        Ok(()) => StatusCode::NO_CONTENT,
+        Err(error) => {
+            eprintln!("worker idle state: {error}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
 }
 
 async fn guide_root(State(app): State<App>) -> Response {
@@ -93,8 +167,12 @@ pub async fn serve(root: &Path, relative: &str) -> Response {
 }
 
 async fn ws_upgrade(State(app): State<App>, ws: WebSocketUpgrade) -> Response {
+    let managed = app.managed.clone().map(ManagedConnection::new);
     ws.max_message_size(64 << 20)
-        .on_upgrade(move |socket| connection(app, socket, false))
+        .on_upgrade(move |socket| async move {
+            let _managed = managed;
+            connection(app, socket, false).await;
+        })
 }
 /// Bound the number of extra replay bodies retained by private sessions in this process.
 pub fn practice_permit() -> Option<tokio::sync::SemaphorePermit<'static>> {
@@ -167,6 +245,7 @@ pub fn serve_practice(
         client_dir: PathBuf::new(),
         guide_dir: PathBuf::new(),
         inputs_only: false,
+        managed: None,
     };
     ws.max_message_size(64 << 20)
         .on_upgrade(move |socket| async move {

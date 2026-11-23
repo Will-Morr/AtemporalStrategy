@@ -199,6 +199,18 @@ The focused `simple win game type can be selected and started` coordinator scena
 
 `coordinator.spec.mjs` also covers Show inactive games, an update restarting the server despite a live player (whose tab reloads onto the new server), same-address recovery, and 24-hour expiry blocking direct access to an abandoned incomplete game across restart. The expiry test ages the persisted activity timestamp. The replay scenarios cover the separate Replays tab and read-only playback. See the [2026-11-10 verification record](integration-verification.md#small-host-updates-and-game-lifetime--2026-11-10) for screenshots and actual test limits.
 
+The idle-worker scenarios in desktop Chromium use seed 42. They check the
+actual worker ports across an unvisited lobby, a quick reload, idle
+shutdown, a coordinator restart and returning to the same seat and map.
+They also reopen a replay after its disposable worker stops and compare
+the original round file byte-for-byte. Another scenario sleeps a partial
+human round and restores its accepted turn at revision 0, tick 0. It then
+uses that real turn with a bot opponent and an intentionally stale status
+file to verify startup publishes revision 1 without any browser in the
+game. Inspected frames are in
+`artifacts/ui/2026-11-23T21-55-31.339Z-1796560` and
+`artifacts/ui/2026-11-23T21-56-16.573Z-1798217`.
+
 ### Home page and quick play
 
 `landing.spec.mjs` covers the first-visit landing page, one-click default-bot startup, real commits and refresh, lobby/guide navigation, existing names, retry after a failed creation response and generated stats from modified server content. It captures desktop, laptop and narrow landing layouts. Coordinator scenarios now open `/lobbies/` to test the directory; standalone workers still open directly into their game lobby. The guide assertions use the Game Docs heading. See the [verification record](integration-verification.md#home-page-quick-play-and-explainer--2026-11-10) for results and screenshot review.

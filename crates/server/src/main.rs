@@ -219,6 +219,13 @@ fn run() -> Result<()> {
     };
     bots.install(&mut controller)?;
     let status_file = options.get("--status-file").map(PathBuf::from);
+    let debug_opening = options.contains_key("--debug-test-opening");
+    let managed = match (&status_file, &lobby_file) {
+        (Some(status), Some(lobby)) if options.contains_key("--managed") => Some(Arc::new(
+            ws::ManagedWorker::new(bots.clone(), status.clone(), lobby.clone(), debug_opening),
+        )),
+        _ => None,
+    };
     let bind = option("--bind", "0.0.0.0");
     let match_id = controller.match_id.clone();
     let app = ws::App {
@@ -226,6 +233,7 @@ fn run() -> Result<()> {
         client_dir,
         guide_dir: guide_dir.clone(),
         inputs_only: options.contains_key("--inputs-only"),
+        managed,
     };
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -249,7 +257,7 @@ fn run() -> Result<()> {
         if let Some(rx) = pending? {
             ws::drive_job(app.clone(), rx);
         }
-        bots::drive(app.clone(), bots, status_file, lobby_file, options.contains_key("--debug-test-opening"));
+        bots::drive(app.clone(), bots, status_file, lobby_file, debug_opening);
         axum::serve(listener, ws::router(app)).await.map_err(|e| e.to_string())
     })
 }

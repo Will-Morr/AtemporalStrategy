@@ -72,6 +72,8 @@ The hourly sync must run unattended across interactive SSH session expirations.
 
 Only game logs (the server's game state folder) need a local copy, kept as a single incrementally updated mirror rather than repeated snapshots. Cleanup preserves the full logs for the latest five completed matches. Other eligible game logs older than 24 hours may be deleted only after their local copy is confirmed. Old builds are cleared without a backup. Each game log records the server commit it was played on. See [hosting maintenance](../docs/hosting.md#hourly-game-log-maintenance) and the [backup rule](../AGENTS.md#game-log-backup-before-live-server-cleanup).
 
+Stop the worker process after a lobby or replay is left idle, including newly created lobbies people never join. Reopening the same URL restores the game or replay. Give briefly disconnected browsers a chance to reconnect. Continue simulations, all-bot playtests, and the bot replies owed to a human who already submitted their turn. Preserve any submitted turns when a game sleeps while waiting for another human.
+
 Review network-facing code for unintended code execution and similar host compromise, and fix and push concrete issues found. The user is not asking for anti-cheat protections; compromise of the trusted GitHub/repository update path is an accepted attack boundary. Keep the review and fixes appropriate to the small-server design.
 
 ## Test-server opening shortcut

@@ -1,6 +1,7 @@
 import {test,expect} from './fixtures.mjs';
 import {isolatedServer,revision,seek} from './game-helpers.mjs';
-import {readFile,readdir} from 'node:fs/promises';
+import {readFile,readdir,writeFile} from 'node:fs/promises';
+import {createConnection} from 'node:net';
 
 async function identify(page,name){await expect(page.getByRole('dialog')).toBeVisible();await page.getByLabel('Username',{exact:true}).fill(name);await page.getByRole('button',{name:'Continue',exact:true}).click();}
 async function create(page,name,{password='',bot='standard',all=false,rounds=4,edit=()=>{}}={}){
@@ -14,6 +15,121 @@ async function create(page,name,{password='',bot='standard',all=false,rounds=4,e
   await page.getByRole('button',{name:'Create lobby',exact:true}).click();await expect(page).toHaveURL(/\/games\/game-[^/]+\/$/);return page.url();
 }
 async function claim(page,slot=0){await expect(page.locator('#status')).toContainText('Claim a slot');await page.locator('#roster li',{hasText:`Slot ${slot}:`}).click();await expect(page.locator('#status')).toContainText(`You hold slot ${slot}`);}
+
+async function workerPorts(server, url) {
+  const id = new URL(url).pathname.split('/')[2];
+  try {
+    const log = await readFile(`${server.dir}/games/${id}/worker.log`, 'utf8');
+    return [...log.matchAll(/listening on http:\/\/127\.0\.0\.1:(\d+)/g)].map(match => Number(match[1]));
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+function workerListening(port) {
+  return new Promise(resolve => {
+    const socket = createConnection({port, host:'127.0.0.1'});
+    socket.setTimeout(1000);
+    const finish = listening => { socket.destroy(); resolve(listening); };
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.once('timeout', () => finish(false));
+  });
+}
+
+test('idle lobby workers stop and return with the same player and map', async ({page,review}, testInfo) => {
+  test.setTimeout(60000);
+  const server = await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);
+  review.afterClose(server.stop);
+  await page.goto(server.url+'lobbies/');
+  await identify(page,'Returning player');
+
+  const {defaults} = await (await page.request.get(server.url+'api/directory')).json();
+  const created = await page.request.post(server.url+'api/games', {data:{name:'Quiet lobby',setup:defaults}});
+  const url = new URL((await created.json()).url, server.url).href;
+  await expect.poll(() => workerPorts(server,url)).toHaveLength(1);
+  const [unvisited] = await workerPorts(server,url);
+  await expect.poll(() => workerListening(unvisited), {timeout:15000}).toBe(false);
+
+  await page.goto(url);
+  await claim(page);
+  await page.getByRole('button',{name:'Map 2',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Map 2',exact:true})).toHaveAttribute('aria-pressed','true');
+  const ports = await workerPorts(server,url);
+  expect(ports).toHaveLength(2);
+  const live = ports.at(-1);
+  await page.reload();
+  await expect(page.locator('#status')).toContainText('You hold slot 0');
+  expect(await workerPorts(server,url)).toEqual(ports);
+
+  await page.goto(server.url+'lobbies/');
+  await expect.poll(() => workerListening(live), {timeout:15000}).toBe(false);
+  await server.stop();
+  await server.start();
+  expect(await workerPorts(server,url)).toEqual(ports);
+
+  await page.goto(url);
+  await expect(page.locator('#status')).toContainText('You hold slot 0');
+  await expect(page.getByRole('button',{name:'Map 2',exact:true})).toHaveAttribute('aria-pressed','true');
+  expect(await workerPorts(server,url)).toHaveLength(3);
+  await review.capture('idle-lobby-player-and-map-restored',page);
+});
+
+test('a parked partial turn resumes and a durable human submission wakes its bot reply', async ({page,review}, testInfo) => {
+  test.setTimeout(90000);
+  const server = await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);
+  review.afterClose(server.stop);
+  const lobbyList = server.url+'lobbies/';
+  await page.goto(lobbyList);
+  await identify(page,'First player');
+  const url = await create(page,'Waiting for a turn',{bot:''});
+  await claim(page);
+  const opponent = await (await review.newContext('idle-opponent')).newPage();
+  await opponent.goto(lobbyList);
+  await identify(opponent,'Second player');
+  await opponent.goto(url);
+  await claim(opponent,1);
+  await page.getByRole('button',{name:'Start match',exact:true}).click();
+  await revision(page,0);
+  await expect(page.locator('#commit')).toBeEnabled();
+  const match = await page.evaluate(() => window.atemporal.net.matchId);
+  const id = new URL(url).pathname.split('/')[2];
+  const root = `${server.dir}/games`;
+  const archive = `${root}/${id}/replays/${match}`;
+  await page.locator('#commit').click();
+  await expect(page.locator('#commit')).toHaveText('Uncommit · edit my moves');
+  const turn = await readFile(`${archive}/turns/1-0.json`,'utf8');
+  const [firstPort] = await workerPorts(server,url);
+  await Promise.all([page.goto(lobbyList),opponent.goto(lobbyList)]);
+  await expect.poll(() => workerListening(firstPort), {timeout:15000}).toBe(false);
+  await page.goto(url);
+  await revision(page,0);
+  await expect(page.locator('#commit')).toHaveText('Uncommit · edit my moves');
+  await review.capture('idle-partial-turn-restored',page);
+  await page.goto(lobbyList);
+
+  // Reuse the real persisted turn to exercise startup after a human-vs-bot
+  // crash before its status sample caught up. Slot 1 has no accepted input.
+  await server.stop();
+  const directoryPath = `${root}/directory.json`;
+  const directory = JSON.parse(await readFile(directoryPath,'utf8'));
+  directory.games[id].bots.slots = [null,'standard'];
+  await writeFile(directoryPath,JSON.stringify(directory));
+  const statusPath = `${root}/${id}/status.json`;
+  const status = JSON.parse(await readFile(statusPath,'utf8'));
+  await writeFile(statusPath,JSON.stringify({...status,phase:'lobby',round:0,match_id:'match-stale'}));
+  await server.start();
+  await expect.poll(async () => {
+    try { return JSON.parse(await readFile(`${archive}/rounds/1.json`,'utf8')).revision; }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  }, {timeout:30000}).toBe(1);
+  expect(await readFile(`${archive}/turns/1-0.json`,'utf8')).toBe(turn);
+  expect(await workerPorts(server,url)).toHaveLength(3);
+  await page.goto(url);
+  await revision(page,1);
+  await review.capture('background-bot-reply-restored',page);
+});
 
 test('coordinator identities, passwords, parallel games, filters and same-address restart',async({page,review},testInfo)=>{
   test.setTimeout(240000);
@@ -55,11 +171,14 @@ test('coordinator identities, passwords, parallel games, filters and same-addres
 
 test('bot-only playtest archives at its budget and exposes read-only recent replay',async({page,review},testInfo)=>{
   test.setTimeout(180000);
-  const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);review.afterClose(server.stop);
-  await page.goto(server.url+'lobbies/');await identify(page,'Playtester');await create(page,'Standard bot practice',{all:true,bot:'standard',rounds:3,edit:c=>{c.match_defaults.objective.rules.victory_rule.points=10;}});
-  await page.getByRole('button',{name:'Spectate',exact:true}).click();
-  await expect.poll(()=>page.evaluate(()=>window.atemporal?.latest),{timeout:90000}).toBe(3);
-  await page.goto(server.url+'lobbies/');await expect(page.locator('.card')).toHaveCount(0);await page.getByRole('link',{name:'Replays',exact:true}).click();await expect(page.locator('.card')).toHaveCount(1);await expect(page.locator('.badge')).toHaveText('Archived');await review.capture('coordinator-recent-bot-playtest-replay',page);
+  const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator'],{ATEMPORAL_PREVIEW_TEST_DELAY_MS:'800'});review.afterClose(server.stop);
+  await page.goto(server.url+'lobbies/');await identify(page,'Playtester');const created=await create(page,'Standard bot practice',{all:true,bot:'standard',rounds:3,edit:c=>{c.match_defaults.objective.rules.victory_rule.points=10;c.match_defaults.stall_ticks=700;}});
+  // Leave before the opening finishes. The bot run must survive the idle grace
+  // and archive without a player or spectator connected.
+  await page.goto(server.url+'lobbies/');
+  await expect.poll(async () => (await (await page.request.get(server.url+'api/directory')).json()).replays.length, {timeout:90000}).toBe(1);
+  expect(await workerPorts(server,created)).toHaveLength(1);
+  await expect(page.locator('.card')).toHaveCount(0);await page.getByRole('link',{name:'Replays',exact:true}).click();await expect(page.locator('.card')).toHaveCount(1);await expect(page.locator('.badge')).toHaveText('Archived');await review.capture('coordinator-recent-bot-playtest-replay',page);
   await page.getByRole('link',{name:'View replay'}).click();await expect(page.getByRole('button',{name:'View replay',exact:true})).toBeEnabled();await expect(page.locator('#map-picker')).toBeHidden();await review.capture('coordinator-read-only-entry',page);await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);await expect(page.locator('#commit')).toBeDisabled();await expect(page.locator('#new-game-start')).toHaveCount(0);await page.getByRole('button',{name:'Keep viewing replay'}).click();
   const parts=new URL(page.url()).pathname.split('/');const token=JSON.parse(await readFile(`${server.dir}/games/${parts[2]}/replays/${parts[4]}/lobby.json`,'utf8')).tokens[0];
   await page.evaluate(async token=>{const g=window.atemporal;g.net.send({kind:'hello',protocol_version:2,last_revision:null,slot_token:token});await g.net.request({kind:'get_exact_state',revision:g.current,tick:0},'exact_state');},token);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);
@@ -70,7 +189,17 @@ test('bot-only playtest archives at its budget and exposes read-only recent repl
   await revision(page,0);await page.locator('#commit').click();await revision(page,1);
   expect(await readFile(sourceRound,'utf8')).toBe(recorded);
   await page.locator('#exit-practice').click();await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);
-
+  const replay = page.url();
+  const ports = await workerPorts(server,replay);
+  expect(ports).toHaveLength(2);
+  await page.goto(server.url+'replays/');
+  await expect.poll(() => workerListening(ports.at(-1)), {timeout:15000}).toBe(false);
+  await page.goto(replay);
+  await page.getByRole('button',{name:'View replay',exact:true}).click();
+  await revision(page,3);
+  expect(await workerPorts(server,replay)).toHaveLength(3);
+  expect(await readFile(sourceRound,'utf8')).toBe(recorded);
+  await review.capture('idle-replay-restored',page);
 });
 
 test('four bot teams obey single-order limits and advancing hybrid history',async({page,review},testInfo)=>{
