@@ -5,6 +5,8 @@ type Kind = ServerMessage['kind'];
 type Of<K extends Kind> = Extract<ServerMessage, { kind: K }>;
 type Waiter = { test: (m: ServerMessage) => boolean; resolve: (m: ServerMessage) => void; reject: (e: Error) => void };
 
+export class DisconnectedError extends Error {}
+
 /** Same-origin WebSocket with broadcast handlers and request/response matching by predicate. */
 export class Net {
   private ws!: WebSocket;
@@ -57,7 +59,7 @@ export class Net {
     };
     this.ws.onclose = () => {
       this.connected = false;
-      for (const w of this.waiters) w.reject(new Error('connection closed'));
+      for (const w of this.waiters) w.reject(new DisconnectedError('connection closed'));
       this.waiters = [];
       this.onClose();
     };
@@ -85,7 +87,7 @@ export class Net {
     return pending;
   }
   private performRequest<K extends Kind>(message: ClientMessage, kind: K, test: (m: Of<K>) => boolean = () => true, timeoutMs = 60000): Promise<Of<K>> {
-    if (!this.connected) return Promise.reject(new Error('Disconnected'));
+    if (!this.connected) return Promise.reject(new DisconnectedError('Disconnected'));
     const requestId = message.kind === 'commit' || message.kind === 'compare_draft_check'
       ? message.request.request_id : 'request_id' in message ? message.request_id : '';
     return new Promise((resolve, reject) => {

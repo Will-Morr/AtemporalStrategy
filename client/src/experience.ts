@@ -1,4 +1,5 @@
 import {TimelineReview} from './timeline-review';
+import {DisconnectedError} from './net';
 import {practice} from './practice';
 import {guideUrl} from './session';
 import {siloPanel} from './silo';
@@ -137,7 +138,9 @@ export class Experience {
         }
         if (revision === this.g.current && ($('replay') as HTMLDetailsElement).open) this.loadComparison();
         this.g.updatePanels(); this.drawGraph();
-      } catch (e) { this.g.toast(`Replay data: ${(e as Error).message}`); }
+      } catch (e) {
+        if (!(e instanceof DisconnectedError)) this.g.toast(`Replay data: ${(e as Error).message}`);
+      }
       finally { this.loading.delete(revision); }
     })();
     this.loading.set(revision,task); return task;

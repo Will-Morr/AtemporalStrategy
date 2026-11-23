@@ -13,6 +13,7 @@ const net = new Net();
 let game: Game | null = null;
 let stale = false;
 let reconnecting = false;
+let disconnectNotice: number | undefined;
 const connection = document.createElement('div'); connection.id = 'connection'; document.body.append(connection);
 const showConnection = (message: string) => {
   connection.replaceChildren(document.createTextNode(message));
@@ -25,17 +26,24 @@ net.onClose = () => {
   game?.updatePanels();
   if (stale || reconnecting) return;
   if (practice) {showConnection('Practice session closed. Reload to start again from the recording. '); return;}
-  showConnection('Disconnected. Reconnecting; your view and draft are retained. ');
+  if (disconnectNotice === undefined) {
+    // Give the first retry time to complete before covering the game with a warning.
+    disconnectNotice = window.setTimeout(() => {
+      if (!stale) showConnection('Disconnected. Reconnecting; your view and draft are retained. ');
+    }, 2000);
+  }
   reconnecting = true;
   window.setTimeout(async () => {
     try {
       if (!navigator.onLine) return;
       await net.connect();
-      const w = await net.request({kind:'hello',protocol_version:2,last_revision:game?.latest ?? null,slot_token:tabToken()},'welcome');
+      const w = await net.request({kind:'hello',protocol_version:2,last_revision:game?.terrain ? game.latest : null,slot_token:tabToken()},'welcome', undefined, 10000);
+      clearTimeout(disconnectNotice);
+      disconnectNotice = undefined;
       status.textContent = `Connected · ${w.phase}`;
-      if (!stale) connection.hidden = true;
+      if (!stale && !connection.hidden) connection.hidden = true;
       game?.updatePanels();
-    } catch { /* Retry while the same server is unavailable. */ }
+    } catch { if (net.connected) net.disconnect(); }
     finally { reconnecting = false; if (!net.connected && !stale) net.onClose(); }
   }, 1000);
 };

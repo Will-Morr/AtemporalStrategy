@@ -12,7 +12,7 @@ import type {
   Activity, CardinalDirection, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   DraftCheckSource, TurnDraft, TypeDefinition, WorldEvent, WorldState,
 } from './contracts.generated';
-import type { Net } from './net';
+import { DisconnectedError, type Net } from './net';
 import type { Session } from './lobby';
 import { Renderer } from './render';
 import { Experience } from './experience';
@@ -180,7 +180,12 @@ export class Game {
     $('game').style.setProperty('--timeline-height',`${Math.max(38,this.config.player_count*12+14)}px`);
     this.content = await (await fetch(`${guideUrl}content.json`)).json();
     for (const t of this.content.types) this.types.set(t.key, t);
-    this.net.on('revision_published', m => { void this.onPublished(m).catch(error => this.failReplay(m.revision, error)); });
+    this.net.on('revision_published', m => {
+      void this.onPublished(m).catch(error => {
+        if (error instanceof DisconnectedError) this.revisions.delete(m.revision);
+        else this.failReplay(m.revision, error);
+      });
+    });
     this.net.on('planning_opened', m => {
       if(this.preview && m.revision<this.preview.revision)this.clearPreview();
       if (this.phase?.round !== m.round) this.planningSince = performance.now();
@@ -222,6 +227,11 @@ export class Game {
       this.updateLobby(m.lobby);
       if(m.phase==='finished'||m.phase==='archived'){this.finished=m.phase==='archived'?'Match archived.':'Match complete.';this.updatePanels();}
       this.net.send({kind:'get_replay_progress'});
+      if (this.terrain) {
+        void this.ensureChunk(Math.floor(this.playhead / CHUNK));
+        this.requestExact();
+        void this.experience.loadRound(this.current);
+      }
     });
     this.net.on('match_archived', () => {
       this.clearPreview();
@@ -371,6 +381,7 @@ export class Game {
   }
 
   async ensureChunk(k: number): Promise<void> {
+    if (!this.net.connected) return;
     if(this.viewingPreview){if(k===Math.floor(this.playhead/CHUNK))void this.loadPreview();return;}
     const rev = this.rev();
     if (!rev || this.replayErrors.has(rev.revision) || rev.loading.has(k) || k * CHUNK > rev.outcome.terminal_state_tick) return;
@@ -401,13 +412,14 @@ export class Game {
       console.log(`chunk ${k} of revision ${rev.revision}: ${range.samples.length} samples, ${events.events.length} events in ${Math.round(performance.now() - t0)} ms`);
     } catch (err) {
       if (/mismatch/i.test(String(err))) this.failReplay(rev.revision, err);
-      else this.toast(`Loading replay: ${(err as Error).message}`);
+      else if (!(err instanceof DisconnectedError)) this.toast(`Loading replay: ${(err as Error).message}`);
     } finally {
       rev.loading.delete(k);
     }
   }
 
   requestExact(): void {
+    if (!this.net.connected) return;
     if(this.viewingPreview){void this.loadPreview();return;}
     const rev = this.rev();
     if (!rev || this.replayErrors.has(rev.revision)) return;
@@ -431,7 +443,7 @@ export class Game {
       .catch(err => {
         this.exactPending = null;
         if (/mismatch/i.test(String(err))) this.failReplay(rev.revision, err);
-        else this.toast(String(err.message ?? err));
+        else if (!(err instanceof DisconnectedError)) this.toast(String(err.message ?? err));
       });
   }
 
