@@ -276,3 +276,19 @@ blocked-placement, ghost, site, completed-factory and newborn screenshots were
 inspected. Screenshots and traces are under
 `artifacts/ui/factory-placement-chromium`. The scenario used one browser worker
 and exercised the authoritative transport.
+
+An adjacent authoritative run passed 19 scenarios covering factory queues and
+storage fallback, path previews, wall editing, construction spending, replay
+visibility, allied sight, repeat placement, rematches and output displacement.
+It used one pinned Chromium worker. The initial rebase scenario continued by
+clicking Commit after the checker had preserved the draft at its original
+tick. The corrected test verifies the immediate refusal and the unchanged
+draft, then commits deliberately at the original tick. It passed with all six
+coordinator scenarios, all three landing scenarios and both draft-ID
+scenarios. Inspected frames included the mixed factory routes, remaining wall
+pieces, Shift repeat placement, last-seen buildings, combined replay sight,
+lobby creation, landing actions and the rebase notice. The two runs are under
+`artifacts/ui/factory-placement-adjacent` and
+`artifacts/ui/factory-placement-coordinator-landing`. They used the release
+server built for the placement changes and did not verify later Tactical
+policy changes.

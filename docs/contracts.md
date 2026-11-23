@@ -197,7 +197,8 @@ Client -> Hello{protocol_version, last_revision?}
           ClaimSlot{slot, username, color, team_id?}, ReleaseSlot
           UpdateLobbyProfile{request_id, username?, color?, team_id?}
           StartMatch{based_on_lobby_revision}
-          Commit{CommitRequest}
+          Commit{request: CommitRequest, checker_approved?}
+          CompareDraftCheck{request: CommitRequest, source, issue}
           GetSnapshotRange{revision, from_tick, to_tick, stride}
           GetExactState{revision, tick}
           GetStats{revision, from_tick, to_tick, bucket_width}
@@ -211,6 +212,7 @@ Server -> Welcome{server_instance_id, match_id, config_summary, phase, lobby: Lo
                          committed_players, time_totals}
           CommitAccepted{request_id, round}
           CommitRejected{request_id, code, message}
+          DraftCheckCompared{request_id, issue?}
           SimulationProgress{revision, tick, end_tick}
           RevisionPublished{revision, outcome, timeline_index, score: RoundScore,
                             time_totals, time_ratios, sim_duration_ms}
@@ -250,9 +252,12 @@ replays/<match_id>/
   rounds/<round>.json          # turn references, precedence, parent/new revision,
                                # survivor/outcome record, per-side score deltas/totals, boundary, hashes, sim time
   results/<revision>/...        # compressed snapshots, stats and checkpoints
+  checker-incidents/<id>.json   # private checker discrepancies and exact inputs
 ```
 
 Each accepted player turn is atomically written and flushed before acknowledgement. In simultaneous mode a partial round survives restart; do not discard its committed player. Once all turns exist, simulation is retryable. Round result links every input turn to its result, satisfying per-turn replay inspection without copying the same large result into each turn file. Write results and a complete round record before publishing the revision; recovery uses complete round records as the commit point. Ignore incomplete temporary files, verify references/checksums, and regenerate missing cache data. Apply a score delta exactly once by round ID. Never replay archived input under changed content silently.
+
+The browser marks a commit checked after its local preflight. The WebSocket checks slot, phase, revision and tick before compiling the draft and validating against exact state. When the browser refuses a placement or draft preflight, a comparison can independently check the same inputs without changing the draft or committing a turn. A confirmed discrepancy records reproducible, sanitized inputs in the match archive and returns a report identifier only after a durable write. Ordinary blocked placements, unavailable recipients, stale revisions and transport errors use the usual action feedback. The comparison is available on resumed records regardless of pinned simulation rules.
 
 Persist thinking time periodically in a separate atomic planning record, with the interval documented. Record resume events and any operator action. Provide CLI replay verification/resume and browser replay loading as read-only spectator mode. Results are inspectable by round, not only the final rewritten timeline.
 

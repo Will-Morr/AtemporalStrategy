@@ -1,3 +1,4 @@
+import {readFile, readdir} from 'node:fs/promises';
 import {test, expect} from './fixtures.mjs';
 import {isolatedServer, players, revision, seek} from './game-helpers.mjs';
 
@@ -15,7 +16,7 @@ async function openMatch(review, testInfo) {
   await revision(a, 0);
   await revision(b, 0);
   const home = await a.evaluate(() => window.atemporal.exact.state.entities.find(e => e.owner === 0 && e.type_key === 'constructor').tile);
-  return {a, b, home};
+  return {a, b, home, server};
 }
 
 async function chooseBuilding(page, type) {
@@ -179,4 +180,152 @@ test('factory loading bays and spawn markers follow all four rotations through p
   expect(actual.outputs).toEqual(sites.map(({body, output}) => [body, output]));
   expect(actual.newborns).toEqual(expect.arrayContaining(sites.map(site => site.output)));
   await review.capture('newborns-on-four-marked-output-tiles', a);
+});
+
+async function eastFacingSites(page, home, count) {
+  return page.evaluate(({home, count}) => {
+    const game = window.atemporal;
+    const sites = [];
+    for (let y = home.y - 4; y <= home.y + 4; y++) {
+      for (let x = home.x - 4; x <= home.x + 4; x++) {
+        if (sites.some(site => Math.abs(site.x - x) <= 1 && site.y === y)) continue;
+        if (game.entityAt({x, y}) || game.entityAt({x: x + 1, y})) continue;
+        if (game.placementIssue('factory', [{x, y}])) continue;
+        sites.push({x, y});
+        if (sites.length === count) return sites;
+      }
+    }
+    throw new Error('Not enough clear sites for independent east-facing factories');
+  }, {home, count});
+}
+
+async function ownBlueprints(page) {
+  return page.evaluate(() => window.atemporal.exact.state.blueprints.filter(b => b.owner === 0));
+}
+
+test('replacing a draft factory preserves independent targeting in one clock tick', async ({review}, testInfo) => {
+  const {a, b, home} = await openMatch(review, testInfo);
+  await center(a, home);
+  const [first, removed, retained, added] = await eastFacingSites(a, home, 4);
+  await a.evaluate(() => {
+    const now = Date.now;
+    window.restoreDraftClock = () => { Date.now = now; };
+    Date.now = () => 1234567890000;
+  });
+  const stage = async body => {
+    await chooseBuilding(a, 'factory');
+    await a.mouse.click(...await point(a, body));
+  };
+  for (const body of [first, removed, retained]) await stage(body);
+  await a.mouse.click(...await point(a, removed));
+  await a.getByRole('button', {name: 'Delete selected blueprints', exact: true}).click();
+  await stage(added);
+  await a.evaluate(() => window.restoreDraftClock());
+
+  const placements = await a.evaluate(() => window.atemporal.draft.commands);
+  expect(placements.map(draft => draft.command.tiles[0])).toEqual([first, retained, added]);
+  expect(new Set(placements.map(draft => draft.local_id)).size).toBe(3);
+  await a.mouse.click(...await point(a, added));
+  await a.getByRole('button', {name: 'Queue grunt', exact: true}).click();
+  await a.mouse.click(...await point(a, retained));
+  await expect(a.locator('#queue')).toContainText('Queue empty');
+  await review.capture('retained-factory-keeps-empty-queue', a);
+
+  await a.locator('#commit').click();
+  await b.locator('#commit').click();
+  await revision(a, 1);
+  await seek(a, 1);
+  const blueprints = await ownBlueprints(a);
+  expect(blueprints.map(blueprint => [blueprint.tile, blueprint.settings?.queue ?? []])).toEqual([
+    [first, []], [retained, []], [added, ['grunt']],
+  ]);
+});
+
+test('reload preserves distinct legacy blueprint placements and reports an ambiguous edit', async ({review}, testInfo) => {
+  const {a, b, home, server} = await openMatch(review, testInfo);
+  const matchId = await a.evaluate(() => window.atemporal.net.matchId);
+  const reports = `${server.dir}/replays/${matchId}/checker-incidents`;
+  const sites = await eastFacingSites(a, home, 3);
+  await a.evaluate(sites => {
+    const game = window.atemporal;
+    const placement = (local_id, body) => ({
+      local_id, future_orders: 'keep', command: {
+        kind: 'place_blueprints', type_key: 'factory', tiles: [body], priority: 'medium', output_directions: ['e'],
+      },
+    });
+    const configure = (local_id, target, unit) => ({
+      local_id, future_orders: 'keep', command: {
+        kind: 'configure_blueprints',
+        blueprint_ids: [{kind: 'draft', local_id: target, item_index: 0}],
+        settings: {queue: [unit], queue_loop_flags: [], order: {kind: 'idle'}, priority: 'medium', loop_enabled: false},
+      },
+    });
+    const commands = [
+      placement('aliased', sites[0]), placement('aliased', sites[1]), placement('distinct', sites[2]),
+      configure('ambiguous-edit', 'aliased', 'miner'), configure('retained-edit', 'distinct', 'grunt'),
+    ];
+    sessionStorage.setItem(game.draftKey, JSON.stringify({
+      round: game.round, draft: {
+        states: [{keep: 0, append: commands.slice(0, 1), tick: 0}, {keep: 1, append: commands.slice(1), tick: 0}],
+        current: 1, policy: 'keep', selected: null,
+      },
+    }));
+  }, sites);
+  await a.reload();
+  await revision(a, 0);
+  await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.length)).toBe(4);
+  await expect(a.locator('#draft-recovery')).toContainText('Removed 1 blueprint or queue reference that could not be matched safely');
+  const backup = await a.evaluate(() => JSON.parse(sessionStorage.getItem(window.atemporal.draftKey)).recovery.original);
+  expect(backup.states.flatMap(state => state.append.map(entry => entry.local_id))).toEqual([
+    'aliased', 'aliased', 'distinct', 'ambiguous-edit', 'retained-edit',
+  ]);
+  let incidentFiles;
+  await expect.poll(async () => {
+    incidentFiles = await readdir(reports).catch(() => []);
+    return incidentFiles.length;
+  }).toBe(1);
+  const incidentPath = `${reports}/${incidentFiles[0]}`;
+  const incidentJson = await readFile(incidentPath, 'utf8');
+  const report = JSON.parse(incidentJson);
+  expect(report.checker.failure).toBe('draft_recovery');
+  expect(report.checker.reason).toContain('Draft commands 1 and 2 share a local ID');
+  expect(report.state.tick).toBe(0);
+  const reported = report.checker.draft.commands;
+  expect(reported).toHaveLength(5);
+  expect(reported[0].local_id).toBe(reported[1].local_id);
+  expect(reported[0].local_id).not.toBe('aliased');
+  expect(reported[3].command.blueprint_ids[0].local_id).toBe(reported[0].local_id);
+  await a.keyboard.press('Control+z');
+  await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.length)).toBe(1);
+  await a.keyboard.press('Control+u');
+  await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands.length)).toBe(4);
+  await a.reload();
+  await revision(a, 0);
+  await expect(a.locator('#draft-recovery')).toContainText('Removed 1 blueprint or queue reference');
+  const restored = await a.evaluate(() => window.atemporal.draft.commands);
+  expect(new Set(restored.map(draft => draft.local_id)).size).toBe(4);
+  expect(restored.slice(0, 3).map(draft => draft.command.tiles[0])).toEqual(sites);
+  expect(restored[3].command.blueprint_ids.map(ref => ref.local_id)).toEqual([restored[2].local_id]);
+  expect(restored[3].command.settings.queue).toEqual(['grunt']);
+  await review.capture('restored-draft-drops-ambiguous-edit', a);
+
+  await a.locator('#commit').click();
+  await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');
+  await a.locator('#commit').click();
+  await expect.poll(() => a.evaluate(() => window.atemporal.draft.commands)).toEqual(restored);
+  await expect(a.locator('#draft-recovery')).toBeHidden();
+  await a.locator('#commit').click();
+  await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');
+  await b.locator('#commit').click();
+  await revision(a, 1);
+  await seek(a, 1);
+  expect((await ownBlueprints(a)).map(blueprint => [blueprint.tile, blueprint.settings?.queue ?? []])).toEqual([
+    [sites[0], []], [sites[1], []], [sites[2], ['grunt']],
+  ]);
+  await server.stop();
+  await server.start(['--resume', matchId]);
+  await a.reload();
+  await revision(a, 1);
+  expect(await readdir(reports)).toEqual(incidentFiles);
+  expect(await readFile(incidentPath, 'utf8')).toBe(incidentJson);
 });

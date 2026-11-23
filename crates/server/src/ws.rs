@@ -2,7 +2,10 @@
 //! `/ws/peripheral` serves a trusted inputs-only peripheral: it receives the replay bootstrap,
 //! per-revision inputs and reference hashes and never world-state bodies; `--inputs-only` makes
 //! the ordinary route refuse those bodies too, so world state only exists through peripherals.
-use crate::controller::Controller;
+use crate::{
+    checker,
+    controller::{Controller, StateCheckIssue},
+};
 use atemporal_sim::*;
 use axum::{
     Router,
@@ -142,7 +145,11 @@ async fn practice_upgrade(
         base.clone(),
         player,
         c.sim.clone(),
-    );
+    )
+    .map(|mut branch| {
+        branch.set_practice_checker_root(c.checker_archive_root());
+        branch
+    });
     serve_practice(ws, permit, branch)
 }
 
@@ -345,6 +352,198 @@ fn reject(
     });
 }
 
+enum DraftIntent {
+    Commit {
+        checker_approved: bool,
+    },
+    Compare {
+        source: DraftCheckSource,
+        issue: String,
+    },
+}
+
+async fn handle_draft(
+    app: &App,
+    tx: &mpsc::UnboundedSender<ServerMessage>,
+    request: CommitRequest,
+    intent: DraftIntent,
+) {
+    let request_id = &request.request_id;
+    let (player, round, exact, compiled) = {
+        let c = app.controller.lock().unwrap();
+        let Some(player) = c.player_for(&request.slot_token) else {
+            return reject(tx, request_id, "unauthorized", "unknown slot token".into());
+        };
+        match c.precheck_commit_access(player, &request) {
+            Ok(Some(original)) if matches!(intent, DraftIntent::Commit { .. }) => {
+                let _ = tx.send(original);
+                return;
+            }
+            Ok(Some(_)) => {
+                return reject(
+                    tx,
+                    request_id,
+                    "stale",
+                    "already committed this round".into(),
+                );
+            }
+            Err(message) => return reject(tx, request_id, "invalid", message),
+            Ok(None) => {}
+        }
+        let compiled = c.compile_draft(player, &request.draft);
+        if let Err(message) = &compiled
+            && matches!(
+                intent,
+                DraftIntent::Commit {
+                    checker_approved: false
+                }
+            )
+        {
+            return reject(tx, request_id, "invalid", message.clone());
+        }
+        (
+            player,
+            c.round,
+            c.exact_request(c.current, request.draft.tick),
+            compiled,
+        )
+    };
+    let state = match exact {
+        Ok(exact) => {
+            exact_state(
+                app,
+                exact,
+                request.draft.based_on_revision,
+                request.draft.tick,
+            )
+            .await
+        }
+        Err(message) => Err(message),
+    };
+    let state = match state {
+        Ok(state) => state,
+        Err(message) => return reject(tx, request_id, "state_unavailable", message),
+    };
+    let (context, finding) = {
+        let mut c = app.controller.lock().unwrap();
+        if c.round != round || c.player_for(&request.slot_token) != Some(player) {
+            return reject(
+                tx,
+                request_id,
+                "stale",
+                "planning round or slot changed while validating".into(),
+            );
+        }
+        match c.precheck_commit_access(player, &request) {
+            Ok(Some(original)) if matches!(intent, DraftIntent::Commit { .. }) => {
+                let _ = tx.send(original);
+                return;
+            }
+            Ok(Some(_)) => {
+                return reject(
+                    tx,
+                    request_id,
+                    "stale",
+                    "already committed this round".into(),
+                );
+            }
+            Err(message) => return reject(tx, request_id, "stale", message),
+            Ok(None) => {}
+        }
+        let checked = compiled
+            .map_err(|reason| (Some(checker::Failure::CompilerRejected), reason))
+            .and_then(|commands| {
+                c.check_state(
+                    player,
+                    &commands,
+                    &state,
+                    matches!(intent, DraftIntent::Compare { .. }),
+                )
+                .map_err(|issue| match issue {
+                    StateCheckIssue::Unavailable(reason) => (None, reason),
+                    StateCheckIssue::Invalid(reason) => {
+                        (Some(checker::Failure::StateRejected), reason)
+                    }
+                })?;
+                Ok(commands)
+            });
+        let finding = match (intent, checked) {
+            (DraftIntent::Commit { .. }, Ok(commands)) => {
+                match c.accept_commit(player, &request, commands) {
+                    Ok((accepted, rx)) => {
+                        let _ = tx.send(accepted);
+                        if let Some(rx) = rx {
+                            drive_job(app.clone(), rx);
+                        }
+                    }
+                    Err(message) => reject(tx, request_id, "rejected", message),
+                }
+                return;
+            }
+            (
+                DraftIntent::Commit {
+                    checker_approved: false,
+                },
+                Err((_, reason)),
+            )
+            | (DraftIntent::Commit { .. }, Err((None, reason))) => {
+                return reject(tx, request_id, "rejected", reason);
+            }
+            (
+                DraftIntent::Commit {
+                    checker_approved: true,
+                },
+                Err((Some(failure), reason)),
+            ) => checker::Finding {
+                failure,
+                source: None,
+                reason,
+                browser_issue: None,
+            },
+            (
+                DraftIntent::Compare {
+                    source: DraftCheckSource::Recovery,
+                    issue,
+                },
+                Err((Some(checker::Failure::CompilerRejected), reason)),
+            ) => checker::Finding {
+                failure: checker::Failure::DraftRecovery,
+                source: Some(DraftCheckSource::Recovery),
+                reason,
+                browser_issue: Some(issue),
+            },
+            (DraftIntent::Compare { source, issue }, Ok(_))
+                if source != DraftCheckSource::Recovery =>
+            {
+                checker::Finding {
+                    failure: checker::Failure::ClientRejected,
+                    source: Some(source),
+                    reason: "The browser declined a draft the authoritative check accepted.".into(),
+                    browser_issue: Some(issue),
+                }
+            }
+            (DraftIntent::Compare { .. }, _) => {
+                let _ = tx.send(ServerMessage::DraftCheckCompared {
+                    request_id: request_id.clone(),
+                    issue: None,
+                });
+                return;
+            }
+        };
+        (checker::Context::capture(&c), finding)
+    };
+    let compared = finding.source.is_some();
+    let issue = context.report(player, &request, state, finding).await;
+    if compared {
+        let _ = tx.send(ServerMessage::DraftCheckCompared {
+            request_id: request_id.clone(),
+            issue: Some(issue),
+        });
+    } else {
+        reject(tx, request_id, "checker_failure", issue);
+    }
+}
+
 async fn handle(
     app: &App,
     tx: &mpsc::UnboundedSender<ServerMessage>,
@@ -494,78 +693,18 @@ async fn handle(
                 Err(message) => reject(tx, &request_id, "rejected", message),
             }
         }
-        ClientMessage::Commit { request } => {
-            let request_id = request.request_id.clone();
-            let Some(p) = app
-                .controller
-                .lock()
-                .unwrap()
-                .player_for(&request.slot_token)
-            else {
-                return reject(tx, &request_id, "unauthorized", "unknown slot token".into());
-            };
-            let (round, exact) = {
-                let c = app.controller.lock().unwrap();
-                match c.precheck_commit(p, &request) {
-                    Ok(Some(original)) => {
-                        let _ = tx.send(original);
-                        return;
-                    }
-                    Ok(None) => {}
-                    Err(message) => return reject(tx, &request_id, "invalid", message),
-                }
-                (c.round, c.exact_request(c.current, request.draft.tick))
-            };
-            let commands = match draft::resolve_local_references(&request.draft, round, p) {
-                Ok(commands) => commands,
-                Err(message) => return reject(tx, &request_id, "invalid", message),
-            };
-            let state = match exact {
-                Ok(exact) => {
-                    exact_state(
-                        app,
-                        exact,
-                        request.draft.based_on_revision,
-                        request.draft.tick,
-                    )
-                    .await
-                }
-                Err(message) => Err(message),
-            };
-            let state = match state {
-                Ok(state) => state,
-                Err(message) => return reject(tx, &request_id, "state_unavailable", message),
-            };
-            let result = {
-                let mut c = app.controller.lock().unwrap();
-                if c.round != round {
-                    return reject(
-                        tx,
-                        &request_id,
-                        "stale",
-                        "planning round changed while validating".into(),
-                    );
-                }
-                match c.precheck_commit(p, &request) {
-                    Ok(Some(original)) => {
-                        let _ = tx.send(original);
-                        return;
-                    }
-                    Err(message) => return reject(tx, &request_id, "stale", message),
-                    Ok(None) => {}
-                }
-                c.validate_against_state(p, &commands, &state)
-                    .and_then(|_| c.accept_commit(p, &request, commands))
-            };
-            match result {
-                Ok((accepted, rx)) => {
-                    let _ = tx.send(accepted);
-                    if let Some(rx) = rx {
-                        drive_job(app.clone(), rx);
-                    }
-                }
-                Err(message) => reject(tx, &request_id, "rejected", message),
-            }
+        ClientMessage::Commit {
+            request,
+            checker_approved,
+        } => {
+            handle_draft(app, tx, request, DraftIntent::Commit { checker_approved }).await;
+        }
+        ClientMessage::CompareDraftCheck {
+            request,
+            source,
+            issue,
+        } => {
+            handle_draft(app, tx, request, DraftIntent::Compare { source, issue }).await;
         }
         ClientMessage::GetReplayProgress {} => {
             respond(tx, Ok(app.controller.lock().unwrap().replay_progress()))

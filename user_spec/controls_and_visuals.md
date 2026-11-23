@@ -70,6 +70,8 @@ H adds the selection to a group; provide an explicit clear-group action. This su
 
 Blueprints of every structure type, including turrets, need a clear deletion action. Deleting a building placed in the same draft cancels its placement and frees the tile immediately for reuse. Normal drafting flows must not produce invalid-blueprint commit rejections. Preview queued changes as if applied at the selected tick, including group membership and priority. Show constructor priority in the bottom UI and distinguish a shared selection value from mixed values.
 
+Normal draft edits, undo and reload must preserve independently staged orders without reusing their local identifiers. Recover legitimate orders from a saved draft with duplicate identifiers and clearly identify any unresolved dependent edits. Preserve the original draft for investigating the failure.
+
 Ore should be yellow; fully depleted deposits should become light gray, distinct from partly mined deposits. Fog shades open tiles only; walls retain their dark gray. Miner silhouettes must primarily show their player color. Statistics plots need a slope switch showing a lightly smoothed derivative, especially for comparing active mining rates.
 
 ## Replay during simulation
@@ -145,3 +147,5 @@ Keep playback controls in place when stepping back one tick. At match end, show 
 ## Building placement and factory outputs
 
 Show a placement error as soon as the player attempts an illegal order. Identify the blocking building and its tile. Keep factory outputs clear of buildings, and orient each factory toward the tile where its units spawn.
+
+A rejected turn should explain what happened in language a player can act on. A draft can contain legal moves even when an internal command identifier is invalid. Preserve those moves during recovery. Treat a legitimate order rejected by the checker as a checker failure. Log the game state and the inputs needed to reproduce each such failure, alert the operator, and explain the specific error to the player with the text “this is a failure on the checker, reported” after reporting succeeds.

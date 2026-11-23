@@ -1,4 +1,4 @@
-import {packDraft, unpackDraft, type Draft} from './draft-storage';
+import {DraftIds, draftRecoveryNotice, packDraft, unpackDraft, type Draft} from './draft-storage';
 import {practice} from './practice';
 import {PlacementPlan} from './placement';
 import {GroundVision, SightMemory, playerSeesEntity, playerVisibility} from './vision';
@@ -10,7 +10,7 @@ import { unitIcon } from './icons';
 import { factoryPlan, factorySignature, orderLabel } from './factory';
 import type {
   Activity, CardinalDirection, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
-  TypeDefinition, WorldEvent, WorldState,
+  DraftCheckSource, TurnDraft, TypeDefinition, WorldEvent, WorldState,
 } from './contracts.generated';
 import type { Net } from './net';
 import type { Session } from './lobby';
@@ -116,6 +116,8 @@ export class Game {
   selection = new Set<string>();
   recalledGroup: number | null = null;
   mode: Mode = { kind: 'none' };
+  private readonly draftIds = new DraftIds();
+  private draftRecovery: {original: ReturnType<typeof packDraft>; notice: string} | null = null;
   draft: Draft = { tick: null, commands: [], undo: [], redo: [], policy: 'keep', selected: null };
   // Uncommitted orders survive a reload (e.g. a server update restart) in this tab.
   draftRestored = false;
@@ -191,7 +193,11 @@ export class Game {
       if (!this.draftRestored && this.player !== null) {
         try {
           const saved = JSON.parse(sessionStorage.getItem(this.draftKey) ?? 'null');
-          if (saved?.round === m.round && !this.draft.commands.length) this.draft = unpackDraft(saved.draft);
+          if (saved?.round === m.round && !this.draft.commands.length) {
+            const notice = this.restoreDraft(unpackDraft(saved.draft), m.revision);
+            if (!this.draftRecovery) this.draftRecovery = saved.recovery ?? null;
+            if (notice) this.toast(`Draft restored.${notice}`);
+          }
         } catch { this.toast('Could not restore the saved draft in this tab.'); }
         this.draftRestored = true;
       }
@@ -713,7 +719,7 @@ export class Game {
       return true;
     }
     if (persistent.length) {
-      commands.push({local_id: `d${Date.now()}-${this.draft.commands.length}`, future_orders: 'keep',
+      commands.push({local_id: this.draftIds.create(), future_orders: 'keep',
         command: {kind: 'cancel_blueprints', blueprint_ids: persistent}});
     }
     this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
@@ -903,7 +909,14 @@ export class Game {
     }
     if (command.kind === 'place_blueprints') {
       const issue = this.placementPlanAtPlayhead()?.issue(command);
-      if (issue) { this.toast(issue); return false; }
+      if (issue) {
+        this.showDraftRejection('placement', {
+          based_on_revision: this.current,
+          tick: Math.floor(this.playhead),
+          commands: [...this.draft.commands, {local_id: this.draftIds.create(), command, future_orders: policy}],
+        }, issue);
+        return false;
+      }
     }
     // One shared payload remains one protocol command for disjoint recipients.
     if(this.factoryEditing){
@@ -935,7 +948,7 @@ export class Game {
         return [d];
       });
     }
-    this.draft.commands = [...this.draft.commands, { local_id: `d${Date.now()}-${this.draft.commands.length}`, command: command as DraftCommand['command'], future_orders: policy }];
+    this.draft.commands = [...this.draft.commands, { local_id: this.draftIds.create(), command: command as DraftCommand['command'], future_orders: policy }];
     if (!this.factoryEditing) this.updatePanels();
     return true;
   }
@@ -957,6 +970,7 @@ export class Game {
     this.updatePanels();
   }
   clearDraft(): void {
+    this.draftRecovery = null;
     this.draft = { tick: null, commands: [], undo: [], redo: [], policy: this.draft.policy, selected: null };
     this.updatePanels();
   }
@@ -985,6 +999,23 @@ export class Game {
     this.stage({ kind: 'assign_order', entities, order }, this.draft.policy);
   }
 
+  private restoreDraft(original: Draft, revision: number): string {
+    const recovered = this.draftIds.restore(original);
+    this.draft = recovered.draft;
+    const notice = draftRecoveryNotice(recovered.unresolved, recovered.historyAffected);
+    if (recovered.evidence) {
+      const recovery = {original: packDraft(original), notice: notice.trim()};
+      this.draftRecovery = recovery;
+      const {tick, commands} = recovered.evidence;
+      if (tick !== null) {
+        const issue = recovery.notice || 'Recovered duplicate or invalid draft IDs.';
+        void this.checkLocalDraftRejection('recovery', {based_on_revision: revision, tick, commands}, issue)
+          .then(message => { if (this.draftRecovery === recovery && message !== issue) this.toast(message); });
+      }
+    }
+    return notice;
+  }
+
   private turnRequestPending = false;
 
   async uncommit(): Promise<void> {
@@ -998,12 +1029,14 @@ export class Game {
         this.committed = this.committed.filter(p => p !== this.player);
         this.clearDraft();
         if (reply.draft) {
-          this.draft.tick = reply.draft.tick;
-          this.draft.commands = reply.draft.commands;
-          this.draft.undo = reply.draft.commands.map((_, index) => ({commands:reply.draft!.commands.slice(0,index),tick:index ? reply.draft!.tick : null}));
+          const {commands, tick} = reply.draft;
+          const notice = this.restoreDraft({
+            ...this.draft, tick, commands,
+            undo: commands.map((_, index) => ({commands: commands.slice(0, index), tick: index ? tick : null})),
+          }, reply.draft.based_on_revision);
           this.current = reply.draft.based_on_revision;
           this.seek(reply.draft.tick);
-          this.toast('Turn uncommitted. Your moves are ready to edit.');
+          this.toast(notice ? `Turn uncommitted.${notice}` : 'Turn uncommitted. Your moves are ready to edit.');
         } else this.toast('Turn uncommitted. This older archive has no editable draft; enter your moves again.');
       }
     } catch (err) { this.toast(`Could not uncommit: ${(err as Error).message}`); }
@@ -1015,7 +1048,12 @@ export class Game {
     const gate = this.canStage(true);
     if (!gate.ok) { this.toast(gate.reason); return; }
     const issue = this.blueprintDraftIssue(this.exact!.state, this.draft.commands);
-    if (issue) { this.toast(issue); return; }
+    if (issue) {
+      this.showDraftRejection('rebase', {
+        based_on_revision: this.current, tick: Math.floor(this.playhead), commands: this.draft.commands,
+      }, issue);
+      return;
+    }
     this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
     this.draft.redo = [];
     this.draft.tick = Math.floor(this.playhead);
@@ -1048,7 +1086,34 @@ export class Game {
     const state = this.exact?.revision === revision && this.exact.tick === tick ? this.exact.state :
       (await this.net.request({kind:'get_exact_state',revision,tick},'exact_state',m=>m.revision===revision&&m.tick===tick)).snapshot;
     const issue = this.blueprintDraftIssue(state, commands);
-    if (issue) throw new Error(issue);
+    if (issue) {
+      const draft = {based_on_revision: revision, tick, commands};
+      throw new Error(await this.checkLocalDraftRejection('commit_preflight', draft, issue));
+    }
+  }
+
+  private draftCheckNumber = 0;
+
+  async checkLocalDraftRejection(source: DraftCheckSource, draft: TurnDraft, issue: string): Promise<string> {
+    if (!this.session.token) return issue;
+    const request_id = `draft-check-${++this.draftCheckNumber}`;
+    try {
+      const compared = await this.net.request({
+        kind: 'compare_draft_check', request: {request_id, slot_token: this.session.token, draft}, source, issue,
+      }, 'draft_check_compared', reply => reply.request_id === request_id, 5000);
+      return compared.issue ?? issue;
+    } catch {
+      // A disconnected, stale, or older server cannot confirm a checker discrepancy.
+      return issue;
+    }
+  }
+
+  private showDraftRejection(source: DraftCheckSource, draft: TurnDraft, issue: string): void {
+    this.toast(issue);
+    const round = this.round;
+    void this.checkLocalDraftRejection(source, draft, issue).then(message => {
+      if (message !== issue && this.round === round && this.current === draft.based_on_revision) this.toast(message);
+    });
   }
 
   async commit(): Promise<void> {
@@ -1073,7 +1138,7 @@ export class Game {
       if (this.draft.commands !== commands || this.draft.tick !== draftTick || this.current !== revision || this.round !== submittedRound) {
         throw new Error('The plan changed during validation. Review your draft and commit again.');
       }
-      await this.net.request({ kind: 'commit', request: { request_id, slot_token: this.session.token, draft: { based_on_revision: revision, tick, commands } } }, 'commit_accepted', m => m.request_id === request_id);
+      await this.net.request({ kind: 'commit', checker_approved: true, request: { request_id, slot_token: this.session.token, draft: { based_on_revision: revision, tick, commands } } }, 'commit_accepted', m => m.request_id === request_id);
       if (this.round === submittedRound && !this.committed.includes(this.player!)) this.committed.push(this.player!);
       this.clearDraft();
       this.toast('Turn committed. Waiting for the other players…');
@@ -1594,18 +1659,21 @@ export class Game {
   private persistDraft(): void {
     if (!this.draftRestored) return;
     const d = this.draft;
-    const state = JSON.stringify([this.round, d.tick, d.selected, d.policy, d.undo.length, d.redo.length]);
+    const state = JSON.stringify([this.round, d.tick, d.selected, d.policy, d.undo.length, d.redo.length, !!this.draftRecovery]);
     if (this.lastSavedCommands === d.commands && this.lastSavedState === state) return;
     this.lastSavedCommands = d.commands;
     this.lastSavedState = state;
     try {
-      if (practice || !d.commands.length) sessionStorage.removeItem(this.draftKey);
-      else sessionStorage.setItem(this.draftKey, JSON.stringify({round:this.round, draft:packDraft(d)}));
+      if (practice || (!d.commands.length && !this.draftRecovery)) sessionStorage.removeItem(this.draftKey);
+      else sessionStorage.setItem(this.draftKey, JSON.stringify({
+        round: this.round, draft: packDraft(d), recovery: this.draftRecovery ?? undefined,
+      }));
     } catch {
       try {
-        sessionStorage.removeItem(this.draftKey);
-        if (d.commands.length && !practice) {
-          sessionStorage.setItem(this.draftKey, JSON.stringify({round:this.round, draft:{...d,undo:[],redo:[]}}));
+        if ((d.commands.length || this.draftRecovery) && !practice) {
+          sessionStorage.setItem(this.draftKey, JSON.stringify({
+            round: this.round, draft: {...d, undo: [], redo: []}, recovery: this.draftRecovery ?? undefined,
+          }));
         }
       } catch { this.toast('Browser storage is full or unavailable. Keep this tab open until you commit.'); }
     }
@@ -1751,6 +1819,9 @@ export class Game {
     body.prepend(helpers);
     updateOrderWarnings(this);
     // Draft panel.
+    const recovery = $('draft-recovery');
+    recovery.hidden = !this.draftRecovery?.notice;
+    recovery.textContent = this.draftRecovery?.notice ?? '';
     const list = $('draft-list');
     list.innerHTML = '';
     this.draft.commands.forEach((c, i) => {

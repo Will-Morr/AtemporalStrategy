@@ -3,6 +3,7 @@
 //! static serving while never running the authoritative match.
 pub mod adapter;
 pub mod archive;
+mod checker;
 pub mod controller;
 pub mod ws;
 

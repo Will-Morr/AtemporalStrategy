@@ -83,7 +83,25 @@ fn earlier_local_references_resolve_to_causal_ids_and_fail_atomically() {
     assert!(resolve_local_references(&draft, 2, 0).is_err());
     let mut draft = local_draft();
     draft.commands[1].local_id = "place".into();
-    assert!(resolve_local_references(&draft, 2, 0).is_err());
+    assert!(
+        resolve_local_references(&draft, 2, 0)
+            .unwrap_err()
+            .contains("Draft commands 1 and 2 share a local ID")
+    );
+    draft.commands[1].local_id = "".into();
+    assert!(
+        resolve_local_references(&draft, 2, 0)
+            .unwrap_err()
+            .contains("Draft command 2 has an empty local ID")
+    );
+    draft.commands[1].local_id = "é".repeat(32);
+    assert!(resolve_local_references(&draft, 2, 0).is_ok());
+    draft.commands[1].local_id.push('x');
+    assert!(
+        resolve_local_references(&draft, 2, 0)
+            .unwrap_err()
+            .contains("Draft command 2 has a 65-byte local ID")
+    );
     let mut draft = local_draft();
     draft.commands[1].command = Command::CancelBlueprints {
         blueprint_ids: vec![DraftItemRef::Draft {

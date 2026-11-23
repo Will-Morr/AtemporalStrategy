@@ -72,3 +72,7 @@ For counting unique users, the coordinator appends a line to `STATE/games/visits
 ## Network and host boundary
 
 Public games cannot request more simulation threads than the coordinator's local startup configuration (`match_defaults.simulation_threads`, four by default). Oversized requests are rejected before launching a worker. Persisted games above that budget are also refused; keep the host budget adequate for games you want to resume. This limits one request-driven thread-amplification path, not total worker count or total CPU use. The source review, fixed issue and remaining limits are recorded in [Network and host boundary review](security-review.md).
+
+## Checker failure reports
+
+A disagreement between the browser and the authoritative order checker produces a report in the affected match archive under `checker-incidents/<report-id>.json`. Search the game's worker.log for the report ID shown to the player, or the server stderr log for a standalone match. The file includes the submitted orders, player seat, intervention tick, revision, match configuration, content, rules fingerprint and exact world state used for validation. Treat the file as operator data because it includes both players’ positions. The hourly game-log mirror includes these files.

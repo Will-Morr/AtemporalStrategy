@@ -86,9 +86,11 @@ export class Net {
   }
   private performRequest<K extends Kind>(message: ClientMessage, kind: K, test: (m: Of<K>) => boolean = () => true, timeoutMs = 60000): Promise<Of<K>> {
     if (!this.connected) return Promise.reject(new Error('Disconnected'));
+    const requestId = message.kind === 'commit' || message.kind === 'compare_draft_check'
+      ? message.request.request_id : 'request_id' in message ? message.request_id : '';
     return new Promise((resolve, reject) => {
       const waiter: Waiter = {
-        test: m => (m.kind === kind && test(m as Of<K>)) || (m.kind === 'commit_rejected' && ('request_id' in message ? m.request_id === message.request_id : message.kind === 'commit' ? m.request_id === message.request.request_id : !m.request_id)),
+        test: m => (m.kind === kind && test(m as Of<K>)) || (m.kind === 'commit_rejected' && m.request_id === requestId),
         resolve: m => {
           clearTimeout(timer);
           if (m.kind === kind) resolve(m as Of<K>);

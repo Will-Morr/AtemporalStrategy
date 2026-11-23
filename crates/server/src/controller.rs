@@ -69,6 +69,32 @@ pub struct RoundMeasurement {
     pub evictions: u64,
 }
 
+pub(crate) enum StateCheckIssue {
+    /// A recipient may no longer be available when a draft is moved to another tick.
+    Unavailable(String),
+    Invalid(String),
+}
+
+impl StateCheckIssue {
+    fn reason(self) -> String {
+        match self {
+            Self::Unavailable(reason) | Self::Invalid(reason) => reason,
+        }
+    }
+}
+
+impl From<String> for StateCheckIssue {
+    fn from(reason: String) -> Self {
+        Self::Invalid(reason)
+    }
+}
+
+impl From<&str> for StateCheckIssue {
+    fn from(reason: &str) -> Self {
+        Self::Invalid(reason.into())
+    }
+}
+
 pub struct Controller {
     practice_opening_min_end: Option<Tick>,
     pub last_activity_ms: u64,
@@ -96,6 +122,7 @@ pub struct Controller {
     pub timed: Option<TimedAdjudication>,
     pub editable_from: Tick,
     archive: Option<Archive>,
+    practice_checker_root: Option<PathBuf>,
     replay_root: PathBuf,
     exact_cache: VecDeque<((Revision, Tick), WorldState)>,
     pub broadcast: broadcast::Sender<ServerMessage>,
@@ -263,6 +290,7 @@ impl Controller {
             timed: None,
             editable_from: 0,
             archive: None,
+            practice_checker_root: None,
             replay_root,
             exact_cache: VecDeque::new(),
             broadcast,
@@ -1277,6 +1305,18 @@ impl Controller {
         player: PlayerId,
         request: &CommitRequest,
     ) -> Result<Option<ServerMessage>> {
+        let existing = self.precheck_commit_access(player, request)?;
+        if existing.is_none() {
+            self.compile_draft(player, &request.draft)?;
+        }
+        Ok(existing)
+    }
+
+    pub(crate) fn precheck_commit_access(
+        &self,
+        player: PlayerId,
+        request: &CommitRequest,
+    ) -> Result<Option<ServerMessage>> {
         // A retry answers from the recorded turn even after the round closed.
         if let Some((request_id, _, _)) = self.committed.get(&player) {
             if *request_id == request.request_id {
@@ -1310,11 +1350,29 @@ impl Controller {
         if self.config.control_limit == ControlLimit::SingleOrder && draft.commands.len() > 1 {
             return Err("single-order mode allows one command per turn".into());
         }
+        Ok(None)
+    }
+
+    pub(crate) fn compile_draft(
+        &self,
+        player: PlayerId,
+        draft: &TurnDraft,
+    ) -> Result<Vec<Command>> {
         for command in &draft.commands {
             draft::validate_policy(command, self.config.future_orders.window_ticks)?;
         }
-        draft::resolve_local_references(draft, self.round, player)?;
-        Ok(None)
+        draft::resolve_local_references(draft, self.round, player)
+    }
+
+    pub(crate) fn checker_archive_root(&self) -> Option<PathBuf> {
+        self.archive
+            .as_ref()
+            .map(|archive| archive.root.clone())
+            .or_else(|| self.practice_checker_root.clone())
+    }
+
+    pub(crate) fn set_practice_checker_root(&mut self, root: Option<PathBuf>) {
+        self.practice_checker_root = root;
     }
 
     /// Ownership/capability/placement validation against the exact pre-tick state.
@@ -1324,19 +1382,36 @@ impl Controller {
         commands: &[Command],
         state: &WorldState,
     ) -> Result<()> {
-        let owned = |id: &EntityId| -> Result<&EntityState> {
-            let e =
-                state.entities.iter().find(|e| e.id == *id).ok_or_else(|| {
-                    format!("entity {} does not exist at that tick", short_id(id))
-                })?;
+        self.check_state(player, commands, state, false)
+            .map_err(StateCheckIssue::reason)
+    }
+
+    pub(crate) fn check_state(
+        &self,
+        player: PlayerId,
+        commands: &[Command],
+        state: &WorldState,
+        compare_client_placement: bool,
+    ) -> std::result::Result<(), StateCheckIssue> {
+        let owned = |id: &EntityId| -> std::result::Result<&EntityState, StateCheckIssue> {
+            let e = state.entities.iter().find(|e| e.id == *id).ok_or_else(|| {
+                StateCheckIssue::Unavailable(format!(
+                    "entity {} does not exist at that tick",
+                    short_id(id)
+                ))
+            })?;
             if e.owner != player {
-                return Err(format!("entity {} is not yours", short_id(id)));
+                return Err(StateCheckIssue::Unavailable(format!(
+                    "entity {} is not yours",
+                    short_id(id)
+                )));
             }
             Ok(e)
         };
         let def = |key: &str| self.content.types.iter().find(|t| t.key == key);
         // Hidden blockers and competing turns are resolved by the simulation.
-        let mut structures = if rules_at_least(&self.fingerprint.sim_build, 14)
+        let reserve_factory_outputs = rules_at_least(&self.fingerprint.sim_build, 14);
+        let mut structures = if (reserve_factory_outputs || compare_client_placement)
             && commands
                 .iter()
                 .any(|command| matches!(command, Command::PlaceBlueprints { .. }))
@@ -1390,19 +1465,23 @@ impl Controller {
                             Order::Construct { .. } => d.construction.is_some(),
                         };
                         if d.silo.is_some() || (!ok && d.production.is_none()) {
-                            return Err(format!("{} cannot perform that order", e.type_key));
+                            return Err(format!("{} cannot perform that order", e.type_key).into());
                         }
                     }
                 }
                 Command::AssignGroupOrder { group, .. }
                 | Command::EditGroupMembers { group, .. } => {
                     if group.owner != player {
-                        return Err("not your control group".into());
+                        return Err(StateCheckIssue::Unavailable(
+                            "not your control group".into(),
+                        ));
                     }
                 }
                 Command::BindFactoryGroup { factories, group } => {
                     if group.as_ref().is_some_and(|g| g.owner != player) {
-                        return Err("not your control group".into());
+                        return Err(StateCheckIssue::Unavailable(
+                            "not your control group".into(),
+                        ));
                     }
                     for id in factories {
                         owned(id)?;
@@ -1416,7 +1495,9 @@ impl Controller {
                                 .iter()
                                 .any(|b| b.id == *id && b.owner == player)
                         {
-                            return Err("priority target is not yours".into());
+                            return Err(StateCheckIssue::Unavailable(
+                                "priority target is not yours".into(),
+                            ));
                         }
                     }
                 }
@@ -1446,15 +1527,16 @@ impl Controller {
                                 return Err(format!(
                                     "Cannot place {type_key} at ({}, {}). A {key} already occupies that tile.",
                                     tile.x, tile.y
-                                ));
+                                ).into());
                             }
-                            if let Some((key, origin, _)) =
-                                known.values().find(|(_, _, output)| *output == Some(tile))
+                            if reserve_factory_outputs
+                                && let Some((key, origin, _)) =
+                                    known.values().find(|(_, _, output)| *output == Some(tile))
                             {
                                 return Err(format!(
                                     "Cannot place {type_key} at ({}, {}). It is the output of the {key} at ({}, {}).",
                                     tile.x, tile.y, origin.x, origin.y
-                                ));
+                                ).into());
                             }
                             let mut output = None;
                             if d.production.is_some() && d.silo.is_none() {
@@ -1475,7 +1557,7 @@ impl Controller {
                                             return Err(format!(
                                                 "The output for {type_key} at ({}, {}) is blocked by a {key} at ({}, {}).",
                                                 tile.x, tile.y, candidate.x, candidate.y
-                                            ));
+                                            ).into());
                                         }
                                         continue;
                                     }
@@ -1486,7 +1568,8 @@ impl Controller {
                                     return Err(format!(
                                         "No clear output for {type_key} at ({}, {}).",
                                         tile.x, tile.y
-                                    ));
+                                    )
+                                    .into());
                                 }
                             }
                             let command =
@@ -1540,7 +1623,11 @@ impl Controller {
                                         _ => None,
                                     })
                             })
-                            .ok_or("blueprint is not yours or does not exist")?;
+                            .ok_or_else(|| {
+                                StateCheckIssue::Unavailable(
+                                    "blueprint is not yours or does not exist".into(),
+                                )
+                            })?;
                         let d = def(key).ok_or("unknown structure")?;
                         if let Some(plan) = &settings.silo_plan {
                             validate_silo_plan(d, plan, state.terrain.width, state.terrain.height)?;
@@ -1572,7 +1659,9 @@ impl Controller {
                                         && usize::from(id.item_index) < tiles.len())
                                 })
                         {
-                            return Err("blueprint is not yours or does not exist".into());
+                            return Err(StateCheckIssue::Unavailable(
+                                "blueprint is not yours or does not exist".into(),
+                            ));
                         }
                         if let Some(known) = &mut structures {
                             known.remove(id);

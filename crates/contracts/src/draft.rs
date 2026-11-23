@@ -62,11 +62,21 @@ pub fn resolve_local_references(
     >::new();
     let mut resolved = vec![];
     for (index, entry) in draft.commands.iter().enumerate() {
-        if entry.local_id.is_empty()
-            || entry.local_id.len() > 64
-            || earlier.contains_key(&entry.local_id)
-        {
-            return Err("draft local IDs must be nonempty, unique and at most 64 bytes".into());
+        let number = index + 1;
+        if entry.local_id.is_empty() {
+            return Err(format!("Draft command {number} has an empty local ID."));
+        }
+        if entry.local_id.len() > 64 {
+            return Err(format!(
+                "Draft command {number} has a {}-byte local ID. The limit is 64 bytes.",
+                entry.local_id.len()
+            ));
+        }
+        if let Some((previous, _)) = earlier.get(&entry.local_id) {
+            return Err(format!(
+                "Draft commands {} and {number} share a local ID. Reload this tab to recover the saved draft.",
+                previous + 1
+            ));
         }
         if let Command::EditProduction { factories, edit } = &entry.command {
             if factories.len() > 65536 || factories.windows(2).any(|p| p[0] >= p[1]) {

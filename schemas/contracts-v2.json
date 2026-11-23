@@ -623,6 +623,9 @@
         {
           "additionalProperties": false,
           "properties": {
+            "checker_approved": {
+              "type": "boolean"
+            },
             "kind": {
               "const": "commit",
               "type": "string"
@@ -634,6 +637,31 @@
           "required": [
             "kind",
             "request"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "issue": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "compare_draft_check",
+              "type": "string"
+            },
+            "request": {
+              "$ref": "#/$defs/CommitRequest"
+            },
+            "source": {
+              "$ref": "#/$defs/DraftCheckSource"
+            }
+          },
+          "required": [
+            "kind",
+            "request",
+            "source",
+            "issue"
           ],
           "type": "object"
         },
@@ -1761,6 +1789,15 @@
         "sw",
         "w",
         "nw"
+      ],
+      "type": "string"
+    },
+    "DraftCheckSource": {
+      "enum": [
+        "placement",
+        "rebase",
+        "commit_preflight",
+        "recovery"
       ],
       "type": "string"
     },
@@ -4708,6 +4745,29 @@
             "kind",
             "request_id",
             "round"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "issue": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "draft_check_compared",
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "request_id"
           ],
           "type": "object"
         },

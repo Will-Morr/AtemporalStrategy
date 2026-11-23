@@ -174,6 +174,24 @@ fn atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<u64> {
     Ok(bytes)
 }
 
+pub(crate) fn write_checker_incident(root: &Path, id: &str, report: &impl Serialize) -> Result<()> {
+    static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _writing = WRITING
+        .lock()
+        .map_err(|_| "checker report writer unavailable")?;
+    let directory = root.join("checker-incidents");
+    let path = directory.join(format!("{id}.json"));
+    if !path.is_file() {
+        atomic_json(&path, report)?;
+    }
+    fs::File::open(&directory)
+        .and_then(|dir| dir.sync_all())
+        .map_err(|e| e.to_string())?;
+    fs::File::open(root)
+        .and_then(|dir| dir.sync_all())
+        .map_err(|e| e.to_string())
+}
+
 fn json<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     serde_json::to_vec(value).map_err(|e| e.to_string())
 }

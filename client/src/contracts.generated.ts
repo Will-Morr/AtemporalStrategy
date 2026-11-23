@@ -63,8 +63,15 @@ export type ClientMessage =
       round: number;
     }
   | {
+      checker_approved?: boolean;
       kind: "commit";
       request: CommitRequest;
+    }
+  | {
+      issue: string;
+      kind: "compare_draft_check";
+      request: CommitRequest;
+      source: DraftCheckSource;
     }
   | {
       kind: "uncommit";
@@ -317,6 +324,11 @@ export type DraftItemRef2 =
  * via the `definition` "FutureOrderPolicy".
  */
 export type FutureOrderPolicy = "keep" | "drop_all" | "drop_window";
+/**
+ * This interface was referenced by `ContractCatalog`'s JSON-Schema
+ * via the `definition` "DraftCheckSource".
+ */
+export type DraftCheckSource = "placement" | "rebase" | "commit_preflight" | "recovery";
 /**
  * This interface was referenced by `ContractCatalog`'s JSON-Schema
  * via the `definition` "SkipReason".
@@ -644,6 +656,11 @@ export type ServerMessage =
       kind: "commit_accepted";
       request_id: string;
       round: number;
+    }
+  | {
+      issue?: string | null;
+      kind: "draft_check_compared";
+      request_id: string;
     }
   | {
       draft?: TurnDraft | null;

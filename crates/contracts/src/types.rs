@@ -468,6 +468,12 @@ record!(CommitRequest {
     slot_token: String,
     draft: TurnDraft
 });
+choices!(DraftCheckSource {
+    Placement,
+    Rebase,
+    CommitPreflight,
+    Recovery
+});
 record!(AcceptedTurn { player: PlayerId, round: u32, tick: Tick, commands: Vec<CommittedCommand>, duration_ms: SafeInt });
 record!(SkippedTarget { entity_id: Option<EntityId>, reason: SkipReason });
 choices!(SkipReason {
@@ -807,6 +813,13 @@ pub enum ClientMessage {
     },
     Commit {
         request: CommitRequest,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        checker_approved: bool,
+    },
+    CompareDraftCheck {
+        request: CommitRequest,
+        source: DraftCheckSource,
+        issue: String,
     },
     Uncommit {
         request_id: String,
@@ -912,6 +925,10 @@ pub enum ServerMessage {
     CommitAccepted {
         request_id: String,
         round: u32,
+    },
+    DraftCheckCompared {
+        request_id: String,
+        issue: Option<String>,
     },
     Uncommitted {
         request_id: String,
