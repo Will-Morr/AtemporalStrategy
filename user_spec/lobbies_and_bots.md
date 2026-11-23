@@ -77,3 +77,7 @@ Review network-facing code for unintended code execution and similar host compro
 ## Test-server opening shortcut
 
 Provide a test-server flag that adds a homescreen button labeled **DEBUG_TEST**. It runs a bot-versus-bot opening to turn 2 and then lets the player take over, making UI changes quick to review without manually replaying the start. Ordinary servers must not show or enable this shortcut.
+
+## Tactical openings and recovery
+
+Tactical should contest a strong opening and recover when its first plan fails. Evaluate its opening and its subsequent interventions against the recorded human plans that beat it in effectively one turn.
