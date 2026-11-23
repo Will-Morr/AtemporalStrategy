@@ -78,7 +78,7 @@ cargo run --release -p atemporal-server --example replay_opponent -- seed:42 tac
 
 The replay evaluator retains the recorded human's seat, map, starting state, timestamps and command identities, replacing the other seat from round one. Each bot plans against the previous published state before the next human commands enter the simulation. Both policies use the release's game rules and unit stats. The evaluator prints the opponent's commands with a missing recipient alongside each timeline score. If a recorded order references a unit that failed to spawn in a changed timeline, the engine handles the missing target. The original scoreboard target stays pinned. Seeded runs use generated maps, the release defaults and Standard 1.0 in the opposite seat. The release adds only aggregate results. The raw November export stays outside the repository.
 
-## Wall firing in the two November 21 matches
+## Wall firing in the two November 23 matches
 
 Both matches paired WillM (seat 0) with Tactical 2.0 (seat 1), first to three. The control reproduced all nine archived revisions under rules 13, including both opening states. Final state hashes, command outcomes, simulation outcomes and cumulative scores matched the archives. A second run reused the same requests and enabled only allied-wall fire and turret fire over constructed walls and rock. Both seats kept every recorded order and intervention tick. Factory output reservations and bot planning changes were disabled for this comparison.
 
