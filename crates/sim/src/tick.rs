@@ -27,6 +27,13 @@ struct Prep {
     blueprint: Option<usize>,
 }
 
+/// Shared by the mining orders in one tick, before any ore is consumed.
+#[derive(Default)]
+struct OreSearch {
+    scanned: usize,
+    deposits: Option<Vec<Tile>>,
+}
+
 #[derive(Clone, Copy)]
 enum ConsumerKind {
     Site(usize),
@@ -194,6 +201,7 @@ impl Sim {
         let n = self.state.entities.len();
         self.index_claims();
         let mut prep: Vec<Prep> = Vec::with_capacity(n);
+        let mut ore_search = OreSearch::default();
         for i in 0..n {
             let e = &self.state.entities[i];
             let mut p = Prep::default();
@@ -205,7 +213,7 @@ impl Sim {
             match &e.action {
                 Order::Mine { area } if def.mining.is_some() => {
                     let area = area.clone();
-                    p.ore = self.ore_target(i, &area);
+                    p.ore = self.ore_target(i, &area, &mut ore_search);
                     let detour = if self.reroute_miners
                         && p.ore
                             .is_some_and(|target| target != self.state.entities[i].tile)
@@ -494,14 +502,11 @@ impl Sim {
             let ore_in = |t: Tile| in_rect(t, area) && self.state.ore[self.idx(t)] > 0.0;
             let destination = e.resolved_destination.filter(|d| ore_in(*d));
             let current_ore = ore_in(e.tile).then_some(e.tile);
-            let target = if self.reroute_miners {
-                current_ore.or(destination)
-            } else {
-                destination.or(current_ore)
-            };
+            let target = destination.or(current_ore);
             if let Some(t) = target {
                 let at = self.idx(t);
-                // A worker on ore has precedence over a worker still travelling to it.
+                // A worker at its destination has precedence over a worker still travelling
+                // there. A worker passing through keeps its claim farther along the route.
                 if self.claims[at] == NONE || (self.reroute_miners && t == e.tile) {
                     self.claims[at] = i as u32;
                 }
@@ -527,7 +532,7 @@ impl Sim {
     }
 
     /// Keep a reachable claimed destination; new targets minimize actual walking steps.
-    fn ore_target(&mut self, i: usize, area: &Rect) -> Option<Tile> {
+    fn ore_target(&mut self, i: usize, area: &Rect, search: &mut OreSearch) -> Option<Tile> {
         let from = self.state.entities[i].tile;
         let neighbors = self
             .def(i)
@@ -549,16 +554,52 @@ impl Sim {
         {
             return Some(t);
         }
-        // A cached distance grid from the source is symmetric with destination fields. This
-        // search happens only when acquiring/replacing a target, not on every walking tick.
-        let distance = self.field(from, neighbors);
+        // A source field ranks all reachable candidates. Wait until there is
+        // a candidate so miners in exhausted areas need no pathfinding.
+        let mut distance = None;
         let mut best: Option<(u16, Tile)> = None;
-        for y in area.min.y..=area.max.y.min(self.state.terrain.height - 1) {
-            for x in area.min.x..=area.max.x.min(self.state.terrain.width - 1) {
-                let t = Tile { x, y };
-                let d = distance[self.idx(t)];
-                if d != UNREACHABLE && valid(self, t) && best.is_none_or(|old| (d, t) < old) {
+        let width = usize::from(self.state.terrain.width);
+        let max_x = area.max.x.min(self.state.terrain.width - 1);
+        let max_y = area.max.y.min(self.state.terrain.height - 1);
+        if area.min.x > max_x || area.min.y > max_y {
+            return None;
+        }
+        // A few small areas are cheaper to scan directly. Once their combined
+        // area exceeds a board scan, share the remaining deposits across miners.
+        if search.deposits.is_none() {
+            search.scanned +=
+                (usize::from(max_x - area.min.x) + 1) * (usize::from(max_y - area.min.y) + 1);
+            if search.scanned > self.cells() {
+                search.deposits = Some(
+                    self.state
+                        .ore
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, amount)| *amount > 0.0)
+                        .map(|(index, _)| Tile {
+                            x: (index % width) as u16,
+                            y: (index / width) as u16,
+                        })
+                        .collect(),
+                );
+            }
+        }
+        let mut consider = |t| {
+            if valid(self, t) {
+                let d = distance.get_or_insert_with(|| self.field(from, neighbors))[self.idx(t)];
+                if d != UNREACHABLE && best.is_none_or(|old| (d, t) < old) {
                     best = Some((d, t));
+                }
+            }
+        };
+        if let Some(deposits) = &search.deposits {
+            let start = deposits.partition_point(|tile| tile.y < area.min.y);
+            let end = deposits.partition_point(|tile| tile.y <= max_y);
+            deposits[start..end].iter().copied().for_each(&mut consider);
+        } else {
+            for y in area.min.y..=max_y {
+                for x in area.min.x..=max_x {
+                    consider(Tile { x, y });
                 }
             }
         }
@@ -651,14 +692,15 @@ impl Sim {
                 )
             })
             .collect();
-        // One source field ranks every candidate; only the chosen target needs a work field
-        // for motion. Large blueprint sets therefore cannot churn one BFS per site per worker.
-        let distances = self.field(from, neighbors);
+        // Share one source field across eligible sites. Workers with no pending
+        // construction in their area never need it.
+        let mut distances = None;
         let mut best = None;
         for (b, tile, started, precedence, id) in candidates {
             if !started && self.occ[self.idx(tile)] != NONE {
                 continue;
             }
+            let distances = distances.get_or_insert_with(|| self.field(from, neighbors));
             let distance = DIRS
                 .iter()
                 .filter_map(|(dx, dy, _)| self.offset(tile, *dx, *dy))
