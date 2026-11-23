@@ -16,6 +16,8 @@ The user suggested splitting a started game into a separate process and routing 
 
 Host on a small remote computer on the live Internet, expecting about four simultaneous players. Keep deployment simple; a large scalable update architecture is unnecessary.
 
+Update the hosted supervisor through the same staged releases as the server. After the one-time bootstrap, deploy supervisor changes without privileged restarts.
+
 Automatically update and restart when `main` changes, but do not restart while games are actively being played.
 
 Use Lobbies for joining active lobbies and running games. Hide games without connected players by default and keep the option to show inactive lobbies. Use a separate Replays tab for review. Keep the five most recently completed matches across all players available regardless of age, including their complete server-side game logs. Archive incomplete games after 24 hours without activity. This replaces the six-hour expiry rule.
