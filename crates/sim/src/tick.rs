@@ -4,7 +4,7 @@ use crate::fields::{Occupancy, UNREACHABLE};
 use crate::output::Output;
 use crate::world::{DIRS, NONE, RESERVED, Sim, cardinal_offset, direction_of};
 use crate::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 
 const EPS: f64 = 1e-9;
 
@@ -206,13 +206,39 @@ impl Sim {
                 Order::Mine { area } if def.mining.is_some() => {
                     let area = area.clone();
                     p.ore = self.ore_target(i, &area);
+                    let detour = if self.reroute_miners
+                        && p.ore
+                            .is_some_and(|target| target != self.state.entities[i].tile)
+                        && self.state.entities[i].failed_move_attempts >= 2
+                    {
+                        let free = self.mining_detour(i, &area, false);
+                        if free.is_empty() {
+                            self.mining_detour(i, &area, true)
+                        } else {
+                            free
+                        }
+                    } else {
+                        Vec::new()
+                    };
+                    if let Some(target) = detour.last() {
+                        p.ore = Some(*target);
+                    }
                     if let Some(old) = self.state.entities[i].resolved_destination {
                         let at = self.idx(old);
                         if Some(old) != p.ore && self.claims[at] == i as u32 {
                             self.claims[at] = NONE;
                         }
                     }
-                    if p.ore.is_none() {
+                    if self.reroute_miners {
+                        let entity = &mut self.state.entities[i];
+                        if entity.resolved_destination != p.ore || !detour.is_empty() {
+                            entity.resolved_destination = p.ore;
+                            entity.local_detour = detour;
+                            entity.goal_settled = false;
+                            entity.failed_move_attempts = 0;
+                            entity.blocked_step = None;
+                        }
+                    } else if p.ore.is_none() {
                         self.state.entities[i].resolved_destination = None;
                     }
                     if let Some(target) = p.ore {
@@ -466,13 +492,17 @@ impl Sim {
                 continue;
             }
             let ore_in = |t: Tile| in_rect(t, area) && self.state.ore[self.idx(t)] > 0.0;
-            let target = e
-                .resolved_destination
-                .filter(|d| ore_in(*d))
-                .or_else(|| ore_in(e.tile).then_some(e.tile));
+            let destination = e.resolved_destination.filter(|d| ore_in(*d));
+            let current_ore = ore_in(e.tile).then_some(e.tile);
+            let target = if self.reroute_miners {
+                current_ore.or(destination)
+            } else {
+                destination.or(current_ore)
+            };
             if let Some(t) = target {
                 let at = self.idx(t);
-                if self.claims[at] == NONE {
+                // A worker on ore has precedence over a worker still travelling to it.
+                if self.claims[at] == NONE || (self.reroute_miners && t == e.tile) {
                     self.claims[at] = i as u32;
                 }
             }
@@ -533,6 +563,67 @@ impl Sim {
             }
         }
         best.map(|(_, t)| t)
+    }
+
+    /// After repeated failed moves, seek a free deposit using current occupancy.
+    /// Allow allied mobile units on the route only when the unobstructed search failed.
+    fn mining_detour(&self, i: usize, area: &Rect, allow_allies: bool) -> Vec<Tile> {
+        let from = self.state.entities[i].tile;
+        let Some(movement) = &self.def(i).movement else {
+            return Vec::new();
+        };
+        let neighbors = movement.neighbors;
+        let count = if neighbors == Neighbors::Eight { 8 } else { 4 };
+        let mut parent = vec![None; self.cells()];
+        parent[self.idx(from)] = Some(from);
+        let mut queue = VecDeque::from([from]);
+        while !queue.is_empty() {
+            let mut best: Option<Tile> = None;
+            for _ in 0..queue.len() {
+                let tile = queue.pop_front().unwrap();
+                if in_rect(tile, area)
+                    && self.state.ore[self.idx(tile)] > 0.0
+                    && !self.claimed_by_other(tile, i)
+                    && self.occ[self.idx(tile)] == NONE
+                {
+                    best = Some(best.map_or(tile, |other| tile.min(other)));
+                    continue;
+                }
+                for (dx, dy, _) in &DIRS[..count] {
+                    let Some(next) = self.step_legal(tile, *dx, *dy, neighbors) else {
+                        continue;
+                    };
+                    let at = self.idx(next);
+                    if parent[at].is_some() {
+                        continue;
+                    }
+                    if self.occ[at] != NONE {
+                        if !allow_allies || self.occupancy(next, i) == Occupancy::Hard {
+                            continue;
+                        }
+                        let blocker = self.def(self.occ[at] as usize).movement.as_ref().unwrap();
+                        if self
+                            .step_legal(next, -*dx, -*dy, blocker.neighbors)
+                            .is_none()
+                        {
+                            continue;
+                        }
+                    }
+                    parent[at] = Some(tile);
+                    queue.push_back(next);
+                }
+            }
+            if let Some(mut tile) = best {
+                let mut path = Vec::new();
+                while tile != from {
+                    path.push(tile);
+                    tile = parent[self.idx(tile)].unwrap();
+                }
+                path.reverse();
+                return path;
+            }
+        }
+        Vec::new()
     }
 
     /// Nearest reachable working position; equal paths use creation precedence then identity.
@@ -1031,6 +1122,7 @@ impl Sim {
                 continue;
             };
             let ready = e.next_move_tick <= t;
+            let needs_exact_ore = self.reroute_miners && matches!(e.action, Order::Mine { .. });
             if self.state.entities[i].resolved_destination != Some(goal) {
                 self.state.entities[i].local_detour.clear();
             }
@@ -1042,6 +1134,7 @@ impl Sim {
                 );
                 if dx.abs() <= 1
                     && dy.abs() <= 1
+                    && (!needs_exact_ore || next != from)
                     && self.step_legal(from, dx, dy, m.neighbors).is_some()
                 {
                     if ready {
@@ -1058,7 +1151,9 @@ impl Sim {
                 continue;
             }
             match self.descend(&field, from, i, m.neighbors) {
-                Some((to, _, Occupancy::Settled)) if self.settled_same_goal(to, i) => {
+                Some((to, _, Occupancy::Settled))
+                    if self.settled_same_goal(to, i) && !needs_exact_ore =>
+                {
                     // Every lower exit holds a settled same-goal ally: try one bounded local
                     // detour around the cluster, otherwise settle behind it. Settlement is
                     // evaluated even on cooldown so arrivals are never churned by displacement.
@@ -1147,7 +1242,9 @@ impl Sim {
                 self.fail_move(i, to, intents[i].work_goal);
                 continue;
             }
-            if self.settled_same_goal(to, i) {
+            if self.settled_same_goal(to, i)
+                && !(self.reroute_miners && matches!(mover.action, Order::Mine { .. }))
+            {
                 // Settled same-goal ally: wait behind it instead of perpetual displacement.
                 self.state.entities[i].goal_settled = true;
                 self.state.entities[i].local_detour.clear();
@@ -1251,9 +1348,18 @@ impl Sim {
 
     /// After stepping onto `to`, the mover could keep descending into a free or yielding cell.
     fn transits(&mut self, mover: usize, to: Tile, work_goal: bool) -> bool {
-        let Some(goal) = self.state.entities[mover].resolved_destination else {
+        let entity = &self.state.entities[mover];
+        let Some(goal) = entity.resolved_destination else {
             return false;
         };
+        if self.reroute_miners
+            && matches!(entity.action, Order::Mine { .. })
+            && let [first, next, ..] = entity.local_detour.as_slice()
+            && *first == to
+            && self.occupancy(*next, mover) != Occupancy::Hard
+        {
+            return true;
+        }
         let neighbors = self.def(mover).movement.as_ref().unwrap().neighbors;
         let field = self.movement_field(mover, goal, neighbors, work_goal);
         matches!(

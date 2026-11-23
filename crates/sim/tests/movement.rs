@@ -5,6 +5,133 @@ use atemporal_sim::*;
 use common::*;
 
 #[test]
+fn miner_on_a_deposit_has_priority_over_an_arriving_miner() {
+    let mut w = World::new(&["########", "#......#", "########"]);
+    let action = Order::Mine {
+        area: rect(3, 1, 3, 1),
+    };
+    let arriving = w.spawn_with(0, "miner", 2, 1, action.clone());
+    let standing = w.spawn_with(0, "miner", 3, 1, action);
+    let arriving_state = w
+        .state
+        .entities
+        .iter_mut()
+        .find(|e| e.id == arriving)
+        .unwrap();
+    arriving_state.resolved_destination = Some(tile(3, 1));
+    w.ore(tile(3, 1), 10.0);
+
+    let current = w.at(1);
+    assert_eq!(entity(&current, &standing).tile, tile(3, 1));
+    assert_eq!(entity(&current, &arriving).resolved_destination, None);
+    assert_eq!(current.players[0].counters.mined, 2.0);
+}
+
+#[test]
+fn miner_reassigns_an_occupied_deposit_to_reach_free_ore() {
+    let mut w = World::new(&["########", "#......#", "#......#", "#......#", "########"]);
+    let miner = w.spawn_with(
+        0,
+        "miner",
+        2,
+        2,
+        Order::Mine {
+            area: rect(2, 1, 5, 2),
+        },
+    );
+    let blocker = w.spawn(0, "miner", 2, 1);
+    let settled = w
+        .state
+        .entities
+        .iter_mut()
+        .find(|e| e.id == blocker)
+        .unwrap();
+    settled.resolved_destination = Some(tile(2, 1));
+    settled.goal_settled = true;
+    w.ore(tile(2, 1), 10.0);
+    w.ore(tile(5, 2), 10.0);
+
+    let mut legacy = w.request();
+    legacy.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 14".into();
+    let old = reconstruct(&legacy, 40).unwrap();
+    assert_eq!(entity(&old, &miner).tile, tile(2, 2));
+    assert_eq!(old.players[0].counters.mined, 0.0);
+
+    let current = w.at(40);
+    assert_eq!(entity(&current, &blocker).tile, tile(2, 1));
+    assert_eq!(current.players[0].counters.mined, 10.0);
+    assert_eq!(current.ore[2 * 8 + 5], 0.0);
+    assert_checkpoint_equivalence(&w, &w.run());
+}
+
+#[test]
+fn miner_uses_a_longer_route_around_a_hostile_blocker() {
+    let mut w = World::new(&[
+        "#############",
+        "#...........#",
+        "#.#########.#",
+        "#...........#",
+        "#############",
+    ]);
+    let miner = w.spawn_with(
+        0,
+        "miner",
+        4,
+        1,
+        Order::Mine {
+            area: rect(1, 1, 1, 1),
+        },
+    );
+    w.spawn(1, "miner", 3, 1);
+    w.ore(tile(1, 1), 10.0);
+
+    let mut legacy = w.request();
+    legacy.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 14".into();
+    assert_eq!(
+        reconstruct(&legacy, 75).unwrap().players[0].counters.mined,
+        0.0
+    );
+
+    let current = w.at(75);
+    assert_eq!(entity(&current, &miner).tile, tile(1, 1));
+    assert_eq!(current.players[0].counters.mined, 10.0);
+    assert_checkpoint_equivalence(&w, &w.run());
+}
+
+#[test]
+fn miner_can_pass_a_line_of_settled_allies_to_reach_ore() {
+    let mut w = World::new(&["########", "#......#", "########"]);
+    let miner = w.spawn_with(
+        0,
+        "miner",
+        1,
+        1,
+        Order::Mine {
+            area: rect(6, 1, 6, 1),
+        },
+    );
+    for x in 2..=4 {
+        let ally = w.spawn(0, "miner", x, 1);
+        let settled = w.state.entities.iter_mut().find(|e| e.id == ally).unwrap();
+        settled.resolved_destination = Some(tile(x, 1));
+        settled.goal_settled = true;
+    }
+    w.ore(tile(6, 1), 10.0);
+
+    let mut legacy = w.request();
+    legacy.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 14".into();
+    assert_eq!(
+        reconstruct(&legacy, 40).unwrap().players[0].counters.mined,
+        0.0
+    );
+
+    let current = w.at(40);
+    assert_eq!(entity(&current, &miner).tile, tile(6, 1));
+    assert_eq!(current.players[0].counters.mined, 10.0);
+    assert_checkpoint_equivalence(&w, &w.run());
+}
+
+#[test]
 fn walkers_never_cut_corners() {
     let mut w = World::new(&["......", "..#...", "......", "......", "......", "......"]);
     let grunt = w.spawn_with(0, "grunt", 1, 1, attack_move(2, 2));

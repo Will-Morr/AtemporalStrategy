@@ -20,7 +20,7 @@ pub use output::{Output, RunResult};
 pub use world::Sim;
 
 /// Increment when deterministic rules change so archives and peripherals fail closed across rulesets.
-pub const RULES_VERSION: u32 = 14;
+pub const RULES_VERSION: u32 = 15;
 
 pub fn rules_at_least(build: &str, version: u32) -> bool {
     build
