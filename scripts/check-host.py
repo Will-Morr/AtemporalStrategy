@@ -23,7 +23,7 @@ class ReleaseTests(unittest.TestCase):
             def command(args, **kwargs):
                 if args[0] == 'git':
                     release.mkdir()
-                if args[0] == 'cargo':
+                if args[:4] == ['nice', '-n', '9', 'cargo']:
                     raise subprocess.CalledProcessError(1, args)
             with patch.object(host, 'run', side_effect=command):
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -31,7 +31,10 @@ class ReleaseTests(unittest.TestCase):
             self.assertFalse((release / '.ready').exists())
             with patch.object(host, 'run') as run:
                 self.assertEqual(host.build(root, root, 'revision'), release)
-                self.assertEqual([call.args[0][0] for call in run.call_args_list], ['npm', 'npm', 'cargo'])
+                self.assertEqual(
+                    [call.args[0][:4] for call in run.call_args_list],
+                    [['nice', '-n', '9', name] for name in ['npm', 'npm', 'cargo']],
+                )
             self.assertTrue((release / '.ready').exists())
             with patch.object(host, 'run') as run:
                 host.build(root, root, 'revision')

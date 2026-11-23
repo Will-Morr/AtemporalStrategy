@@ -31,9 +31,12 @@ def build(repo, releases, revision):
     if not release.exists():
         run(['git', '-C', str(repo), 'worktree', 'add', '--detach', str(release), revision])
     env = {**os.environ, 'CARGO_BUILD_JOBS': '2'}
-    run(['npm', 'ci', '--prefix', 'client', '--ignore-scripts'], cwd=release, env=env)
-    run(['npm', 'run', 'build', '--prefix', 'client'], cwd=release, env=env)
-    run(['cargo', 'build', '--release', '--locked', '-p', 'atemporal-server'], cwd=release, env=env)
+    # The server inherits the supervisor's priority. Lower only build processes
+    # and their children so a release can compile while a game is simulating.
+    build_priority = ['nice', '-n', '9']
+    run([*build_priority, 'npm', 'ci', '--prefix', 'client', '--ignore-scripts'], cwd=release, env=env)
+    run([*build_priority, 'npm', 'run', 'build', '--prefix', 'client'], cwd=release, env=env)
+    run([*build_priority, 'cargo', 'build', '--release', '--locked', '-p', 'atemporal-server'], cwd=release, env=env)
     (release / '.ready').touch()
     return release
 
