@@ -131,6 +131,19 @@ async fn live_worker_idle(port: u16) -> bool {
     .await
     .is_ok_and(|ready| ready.unwrap_or(false))
 }
+
+fn worker_executable() -> Result<PathBuf> {
+    // A running local coordinator may outlive a build replacing its on-disk path.
+    // At exec, the forked child still refers to the coordinator's executable inode.
+    #[cfg(target_os = "linux")]
+    {
+        let running_image = PathBuf::from("/proc/self/exe");
+        if running_image.is_file() {
+            return Ok(running_image);
+        }
+    }
+    std::env::current_exe().map_err(|error| error.to_string())
+}
 #[derive(Clone)]
 pub struct Coordinator {
     root: PathBuf,
@@ -578,7 +591,7 @@ impl Coordinator {
             .append(true)
             .open(dir.join("worker.log"))
             .map_err(|e| e.to_string())?;
-        let mut command = Process::new(std::env::current_exe().map_err(|e| e.to_string())?);
+        let mut command = Process::new(worker_executable()?);
         command
             .args([
                 "--single-match",
@@ -1042,9 +1055,16 @@ async fn relay(
     c.log_visit(&h, if readonly { "replay" } else { "game" }, &worker_key);
     let wc = c.clone();
     let wg = game.clone();
-    let lease = match tokio::task::spawn_blocking(move || wc.worker(&wg, replay.as_deref())).await {
-        Ok(Ok(p)) => p,
-        _ => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    let lease = tokio::task::spawn_blocking(move || wc.worker(&wg, replay.as_deref()))
+        .await
+        .map_err(|error| error.to_string())
+        .and_then(|result| result);
+    let lease = match lease {
+        Ok(lease) => lease,
+        Err(error) => {
+            eprintln!("game worker {worker_key}: {error}");
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
     };
     // Connect before upgrading, so a failed worker never leaves a half-open browser socket.
     // A cold resume may have to regenerate an evicted result before binding its port.
