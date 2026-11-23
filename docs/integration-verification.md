@@ -210,6 +210,8 @@ Release builds of the engine ran the same saved checkpoint and accepted orders o
 
 CPU sampling on the October [sustained-pressure recording](../fixtures/bots/sustained-pressure.json) attributed about 89% of the original engine's sampled cycles to path fields and traversability checks. Workers now request path fields only after finding a usable work candidate. Broad mining orders share a sparse scan of remaining deposits within each tick. Target distance and tie-breaking remain the same.
 
+After that round was published, the live process still used nearly one full CPU. The match protocol showed round 3 planning, a disconnected human seat and no round 3 human commitment. The coordinator’s status file still said round 2 was simulating. CPU was on a Tokio worker while Tactical planned from the published history. Retiring that worker after confirming the published result and lack of open sockets returned the VPS to 98–100% idle. Bot planning now cancels after a five-second reconnect window, and status reporting runs independently of that planning.
+
 The hosted supervisor and workers originally ran at nice 10, as did release builds when active. A local one-CPU contention check used three CPU-bound processes, each doing one second of CPU work. With all three at nice 10, the game stand-in finished in about 3.05 seconds. With two build stand-ins at nice 19, it finished in about 1.29 seconds. This checks scheduler priority under contention.
 
 ## Verification limits
