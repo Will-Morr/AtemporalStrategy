@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
-    path::PathBuf,
+    path::{Path as FsPath, PathBuf},
     process::{Child, Command as Process, Stdio},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -44,7 +44,7 @@ struct Directory {
     games: BTreeMap<String, GameRecord>,
     users: BTreeMap<String, String>,
 }
-#[derive(Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Serialize)]
 struct ReplayListing {
     time: u64,
     game: String,
@@ -52,7 +52,216 @@ struct ReplayListing {
     name: String,
     finished: bool,
     locked: bool,
+    #[serde(flatten)]
+    summary: ReplaySummary,
+}
+
+#[derive(Clone, Default, Serialize)]
+struct ReplaySummary {
     players: Vec<String>,
+    round_count: Option<u32>,
+    scores: Vec<ReplayScore>,
+    result: Option<ReplayResult>,
+}
+
+#[derive(Clone, Serialize)]
+struct ReplayScore {
+    label: String,
+    points: f64,
+}
+
+type ReplaySummaryCache = BTreeMap<(PathBuf, bool, u64), ReplaySummary>;
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum ReplayResult {
+    Win { winners: Vec<String> },
+    Draw,
+}
+
+#[derive(Deserialize)]
+struct ReplayProfile {
+    player_id: Option<PlayerId>,
+    username: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+struct ReplayManifest {
+    #[serde(default)]
+    profiles: Vec<Option<ReplayProfile>>,
+    config: Option<ReplayConfig>,
+}
+
+#[derive(Deserialize)]
+struct ReplayConfig {
+    objective: Option<ReplayObjective>,
+}
+
+#[derive(Deserialize)]
+struct ReplayObjective {
+    kind: String,
+}
+
+#[derive(Deserialize)]
+struct ReplayRound {
+    round: u32,
+    score: Option<ReplayRoundScore>,
+    timed: Option<ReplayWinners>,
+    outcome: Option<ReplayOutcome>,
+}
+
+#[derive(Deserialize)]
+struct ReplayRoundScore {
+    #[serde(default)]
+    entries: Vec<ReplayScoreEntry>,
+    #[serde(default)]
+    match_winners: Vec<SideId>,
+}
+
+#[derive(Deserialize)]
+struct ReplayWinners {
+    #[serde(default)]
+    match_winners: Vec<SideId>,
+}
+
+#[derive(Deserialize)]
+struct ReplayOutcome {
+    kind: OutcomeKind,
+    #[serde(default)]
+    surviving_sides: Vec<SideId>,
+    #[serde(default)]
+    survivors: Vec<PlayerId>,
+}
+
+#[derive(Deserialize)]
+struct ReplayScoreEntry {
+    side_id: SideId,
+    adjusted_total: Option<f64>,
+    raw_total: Option<f64>,
+}
+
+fn latest_round_file(root: &FsPath) -> Option<(u32, PathBuf)> {
+    std::fs::read_dir(root.join("rounds"))
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let number = entry
+                .file_name()
+                .to_str()?
+                .strip_suffix(".json")?
+                .parse()
+                .ok()?;
+            Some((number, entry.path()))
+        })
+        .max()
+}
+
+impl ReplaySummary {
+    fn load(root: &FsPath, teams: &[AvailableTeam], finished: bool) -> Self {
+        let manifest = std::fs::read(root.join("manifest.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<ReplayManifest>(&bytes).ok())
+            .unwrap_or_default();
+        let round = latest_round_file(root).and_then(|(number, path)| {
+            let bytes = std::fs::read(path).ok()?;
+            let round: ReplayRound = serde_json::from_slice(&bytes).ok()?;
+            (number == round.round).then_some(round)
+        });
+        let label = |side: &SideId| match side {
+            SideId::Player { player_id } => manifest
+                .profiles
+                .iter()
+                .flatten()
+                .find(|profile| profile.player_id == Some(*player_id))
+                .and_then(|profile| profile.username.clone())
+                .unwrap_or_else(|| format!("Player {}", u16::from(*player_id) + 1)),
+            SideId::Team { team_id } => teams
+                .iter()
+                .find(|team| team.team_id == *team_id)
+                .map_or_else(|| team_id.clone(), |team| team.label.clone()),
+        };
+        let scores = round
+            .as_ref()
+            .and_then(|r| r.score.as_ref())
+            .map_or_else(Vec::new, |score| {
+                score
+                    .entries
+                    .iter()
+                    .filter_map(|entry| {
+                        let points = entry.adjusted_total.or(entry.raw_total)?;
+                        Some(ReplayScore {
+                            label: label(&entry.side_id),
+                            points,
+                        })
+                    })
+                    .collect()
+            });
+        let result = if finished {
+            round.as_ref().and_then(|round| {
+                round.result(
+                    manifest.config.as_ref().and_then(|c| c.objective.as_ref()),
+                    label,
+                )
+            })
+        } else {
+            None
+        };
+        Self {
+            players: manifest
+                .profiles
+                .into_iter()
+                .flatten()
+                .filter_map(|p| p.username)
+                .collect(),
+            round_count: round.map(|r| r.round),
+            scores,
+            result,
+        }
+    }
+}
+
+impl ReplayRound {
+    fn result(
+        &self,
+        objective: Option<&ReplayObjective>,
+        label: impl Fn(&SideId) -> String,
+    ) -> Option<ReplayResult> {
+        let winners = self
+            .score
+            .as_ref()
+            .map(|score| score.match_winners.as_slice())
+            .into_iter()
+            .chain(
+                self.timed
+                    .as_ref()
+                    .map(|timed| timed.match_winners.as_slice()),
+            )
+            .find(|sides| !sides.is_empty());
+        if let Some(sides) = winners {
+            return Some(ReplayResult::Win {
+                winners: sides.iter().map(label).collect(),
+            });
+        }
+        // Old simple-win archives can have a final outcome without a winner ledger.
+        if objective.is_some_and(|objective| objective.kind != "simple_win") || self.round == 0 {
+            return None;
+        }
+        let outcome = self.outcome.as_ref()?;
+        match outcome.kind {
+            OutcomeKind::Draw => Some(ReplayResult::Draw),
+            OutcomeKind::Win if !outcome.surviving_sides.is_empty() => Some(ReplayResult::Win {
+                winners: outcome.surviving_sides.iter().map(label).collect(),
+            }),
+            OutcomeKind::Win if !outcome.survivors.is_empty() => Some(ReplayResult::Win {
+                winners: outcome
+                    .survivors
+                    .iter()
+                    .map(|&player_id| label(&SideId::Player { player_id }))
+                    .collect(),
+            }),
+            _ => None,
+        }
+    }
 }
 const WORKER_IDLE_GRACE: Duration = Duration::from_secs(5);
 const WORKER_START_TIMEOUT: Duration = Duration::from_secs(60);
@@ -154,6 +363,7 @@ pub struct Coordinator {
     defaults: Setup,
     test_server: bool,
     directory: Arc<Mutex<Directory>>,
+    replay_summaries: Arc<Mutex<ReplaySummaryCache>>,
     workers: Arc<Mutex<BTreeMap<String, Worker>>>,
     admissions: Arc<Mutex<Admissions>>,
 }
@@ -224,6 +434,7 @@ impl Coordinator {
             defaults,
             test_server,
             directory: Arc::new(Mutex::new(directory)),
+            replay_summaries: Arc::new(Mutex::new(BTreeMap::new())),
             workers: Arc::new(Mutex::new(BTreeMap::new())),
             admissions: Arc::new(Mutex::new(Admissions { count: 0 })),
         };
@@ -422,7 +633,7 @@ impl Coordinator {
                     id,
                     name: game.name.clone(),
                     finished,
-                    players: Vec::new(),
+                    summary: ReplaySummary::default(),
                     locked: !game.password.is_empty(),
                 };
                 if finished {
@@ -432,28 +643,39 @@ impl Coordinator {
                 }
             }
         }
-        completed.sort_unstable_by(|a, b| b.cmp(a));
+        let newest_first = |a: &ReplayListing, b: &ReplayListing| {
+            (b.time, &b.game, &b.id).cmp(&(a.time, &a.game, &a.id))
+        };
+        completed.sort_unstable_by(newest_first);
         completed.truncate(5);
-        archived.sort_unstable_by(|a, b| b.cmp(a));
+        archived.sort_unstable_by(newest_first);
         completed.extend(archived);
-        for row in &mut completed {
-            let manifest = self
-                .game_root(&row.game)
-                .join("replays")
-                .join(&row.id)
-                .join("manifest.json");
-            if let Ok(bytes) = std::fs::read(manifest)
-                && let Ok(data) = serde_json::from_slice::<Value>(&bytes)
-                && let Some(profiles) = data["profiles"].as_array()
-            {
-                row.players = profiles
-                    .iter()
-                    .filter_map(|p| p["username"].as_str().map(str::to_owned))
-                    .collect();
-            }
-        }
-
         completed
+    }
+
+    fn fill_replay_summaries(&self, directory: &Directory, replays: &mut [ReplayListing]) {
+        let mut cache = self.replay_summaries.lock().unwrap();
+        let mut previous = std::mem::take(&mut *cache);
+        for replay in replays {
+            let root = self
+                .game_root(&replay.game)
+                .join("replays")
+                .join(&replay.id);
+            // Published completed and archived matches are immutable. Keep summaries
+            // only for rows the directory still lists and retry incomplete reads.
+            let key = (root, replay.finished, replay.time);
+            let summary = previous.remove(&key).unwrap_or_else(|| {
+                ReplaySummary::load(
+                    &key.0,
+                    &directory.games[&replay.game].setup.available_teams,
+                    replay.finished,
+                )
+            });
+            if summary.round_count.is_some() {
+                cache.insert(key, summary.clone());
+            }
+            replay.summary = summary;
+        }
     }
     /// Appends who did what to visits.jsonl for counting unique users; best effort.
     fn log_visit(&self, h: &HeaderMap, event: &str, detail: &str) {
@@ -510,20 +732,7 @@ impl Coordinator {
         }
         // A status sample can predate a successful start/commit. Derive the next
         // unfinished round from the files written before each acknowledgement.
-        let last_round = std::fs::read_dir(archive.join("rounds"))
-            .ok()
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| {
-                entry
-                    .file_name()
-                    .to_str()?
-                    .strip_suffix(".json")?
-                    .parse::<u32>()
-                    .ok()
-            })
-            .max();
+        let last_round = latest_round_file(&archive).map(|(round, _)| round);
         let Some(round) = last_round.map(|last| last.saturating_add(1)) else {
             return true;
         };
@@ -678,7 +887,8 @@ pub fn router(c: Coordinator) -> Router {
 async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
     let d = c.directory.lock().unwrap();
     let user = cookie(&h, "atemporal-user");
-    let replays = c.replay_catalog(&d);
+    let mut replays = c.replay_catalog(&d);
+    c.fill_replay_summaries(&d, &mut replays);
     let games: Vec<_> = d
         .games
         .values()
@@ -1336,6 +1546,146 @@ mod tests {
         assert!(coordinator.live_archive(&game.id).is_none()); // New rematch lobby, old archive.
         std::fs::remove_dir_all(root).unwrap();
     }
+    #[tokio::test]
+    async fn replay_directory_summarizes_each_archived_match_from_its_own_rounds() {
+        let root = std::env::temp_dir().join(format!(
+            "atemporal-replay-summaries-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let mut setup =
+            atemporal_content::load_setup(include_str!("../../../config/game.yaml")).unwrap();
+        setup.available_teams.push(AvailableTeam {
+            team_id: "cyan".into(),
+            label: "Cyan squad".into(),
+            capacity: None,
+        });
+        let c = Coordinator::new(
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            root.clone(),
+            setup.clone(),
+            false,
+        )
+        .unwrap();
+        let game = GameRecord {
+            id: "game-summary".into(),
+            name: "Replay summary".into(),
+            password: "private-secret".into(),
+            setup,
+            bots: BotConfig::default(),
+            debug_test: false,
+            created: now_ms(),
+            expired: false,
+            members: BTreeMap::new(),
+        };
+        c.directory
+            .lock()
+            .unwrap()
+            .games
+            .insert(game.id.clone(), game);
+
+        let archival_root = root.join("game-summary/replays");
+        let saved = |id: &str, manifest: Value, finished: bool, records: &[(u32, Value)]| {
+            let path = archival_root.join(id);
+            std::fs::create_dir_all(path.join("rounds")).unwrap();
+            atomic_json(&path.join("manifest.json"), &manifest).unwrap();
+            if finished {
+                atomic_json(&path.join("completed.json"), &now_ms()).unwrap();
+            } else {
+                atomic_json(
+                    &path.join("archive.json"),
+                    &json!({"stopped_at_unix_ms": now_ms()}),
+                )
+                .unwrap();
+            }
+            for (number, data) in records {
+                atomic_json(&path.join(format!("rounds/{number}.json")), data).unwrap();
+            }
+        };
+        let profiles =
+            json!({"profiles":[{"player_id":0,"username":"A"},{"player_id":1,"username":"B"}]});
+        let winner = json!({"kind":"team","team_id":"cyan"});
+        saved(
+            "match-first",
+            profiles.clone(),
+            true,
+            &[
+                (
+                    2,
+                    json!({"round":2,"score":{"entries":[{"side_id":winner,"adjusted_total":1.0}]}}),
+                ),
+                (
+                    10,
+                    json!({"round":10,"command_outcomes":[{"secret":"turn-plan"}],"score":{"entries":[{"side_id":winner,"raw_total":4.0,"adjusted_total":3.5}],"match_winners":[winner]}}),
+                ),
+            ],
+        );
+        saved(
+            "match-rematch",
+            json!({"profiles":[{"player_id":0,"username":"New A"}]}),
+            false,
+            &[(
+                1,
+                json!({"round":1,"outcome":{"kind":"win","survivors":[0]},"score":{"entries":[{"side_id":{"kind":"player","player_id":0},"raw_total":1.0}]}}),
+            )],
+        );
+        saved(
+            "match-timed",
+            profiles.clone(),
+            true,
+            &[(
+                3,
+                json!({"round":3,"timed":{"match_winners":[{"kind":"player","player_id":1}]}}),
+            )],
+        );
+        saved(
+            "match-legacy",
+            profiles.clone(),
+            true,
+            &[(4, json!({"round":4,"outcome":{"kind":"draw"}}))],
+        );
+        saved("match-empty", profiles, false, &[]);
+
+        let response = directory(State(c.clone()), HeaderMap::new()).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 16384)
+            .await
+            .unwrap();
+        let raw = String::from_utf8_lossy(&body);
+        assert!(!raw.contains("private-secret") && !raw.contains("turn-plan"));
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let replays = json["replays"].as_array().unwrap();
+        let replay = |id: &str| replays.iter().find(|row| row["id"] == id).unwrap();
+        let first = replay("match-first");
+        assert_eq!(first["locked"], true);
+        assert_eq!(first["round_count"], 10);
+        assert_eq!(first["players"], json!(["A", "B"]));
+        assert_eq!(
+            first["scores"],
+            json!([{"label":"Cyan squad","points":3.5}])
+        );
+        assert_eq!(
+            first["result"],
+            json!({"kind":"win","winners":["Cyan squad"]})
+        );
+        let rematch = replay("match-rematch");
+        assert_eq!(rematch["round_count"], 1);
+        assert_eq!(rematch["scores"], json!([{"label":"New A","points":1.0}]));
+        assert_eq!(rematch["result"], Value::Null);
+        assert_eq!(
+            replay("match-timed")["result"],
+            json!({"kind":"win","winners":["B"]})
+        );
+        assert_eq!(replay("match-timed")["scores"], json!([]));
+        assert_eq!(replay("match-legacy")["result"], json!({"kind":"draw"}));
+        assert_eq!(replay("match-empty")["round_count"], Value::Null);
+        assert_eq!(c.replay_summaries.lock().unwrap().len(), 4);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[tokio::test]
     async fn public_creation_rejects_host_thread_amplification_before_spawning() {
         let root = std::env::temp_dir().join(format!(
