@@ -3,7 +3,18 @@ import {setFingerprint} from './session';
 setFingerprint();
 type Style='standard'|'tactical';
 interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}}}
-interface Replay {id:string; game:string; name:string; time:number; finished:boolean; locked:boolean; players:string[]}
+interface Replay {
+  id:string;
+  game:string;
+  name:string;
+  time:number;
+  finished:boolean;
+  locked:boolean;
+  players:string[];
+  round_count:number|null;
+  scores:{label:string; points:number}[];
+  result:{kind:'win'; winners:string[]} | {kind:'draw'} | null;
+}
 interface Directory {games:Entry[];replays:Replay[];user:string|null;defaults:Setup;default_bot:Style}
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const reviewing = location.pathname === '/replays/';
@@ -18,7 +29,7 @@ if (reviewing) {
 function showReplays(list:HTMLElement):void {
   for (const replay of directory.replays) {
     const card=document.createElement('article');
-    card.className='card';
+    card.className='card replay-card';
     const body=document.createElement('div');
     const badge=document.createElement('span');
     badge.className='badge';
@@ -26,15 +37,51 @@ function showReplays(list:HTMLElement):void {
     const title=document.createElement('h3');
     title.textContent=replay.name;
     const info=document.createElement('p');
-    info.textContent=new Date(replay.time).toLocaleString()+(replay.locked?' · Password required':'');
+    const details=[new Date(replay.time).toLocaleString()];
+    if (replay.round_count != null) {
+      details.unshift(`${replay.round_count} ${replay.round_count === 1 ? 'round' : 'rounds'}`);
+    }
+    if (replay.locked) details.push('Password required');
+    info.textContent=details.join(' · ');
     const link=document.createElement('a');
     link.className='button';
     link.href=`/games/${replay.game}/replays/${replay.id}/`;
     link.textContent='View replay';
-    const roster=document.createElement('p');
-    roster.className='players';
-    roster.textContent=replay.players.join(' · ');
-    body.append(badge,title,roster,info);
+    body.append(badge,title);
+    const scores=replay.scores ?? [];
+    if (scores.length) {
+      const scoreList=document.createElement('dl');
+      scoreList.className='replay-scores';
+      scoreList.setAttribute('aria-label','Score');
+      for (const {label,points} of scores) {
+        const side=document.createElement('div');
+        const name=document.createElement('dt');
+        name.textContent=label;
+        const score=document.createElement('dd');
+        score.textContent=String(points);
+        side.append(name,score);
+        scoreList.append(side);
+      }
+      body.append(scoreList);
+    } else if (replay.result) {
+      const result=document.createElement('p');
+      result.className='replay-result';
+      if (replay.result.kind==='draw') result.textContent='Draw';
+      else {
+        const winners=replay.result.winners;
+        result.textContent=`${winners.length === 1 ? 'Winner' : 'Winners'} · ${winners.join(' · ')}`;
+      }
+      body.append(result);
+    }
+    if (replay.players.length && (
+      replay.players.length !== scores.length || replay.players.some(player => !scores.some(side => side.label === player))
+    )) {
+      const roster=document.createElement('p');
+      roster.className='players';
+      roster.textContent=replay.players.join(' · ');
+      body.append(roster);
+    }
+    body.append(info);
     card.append(body,link);
     list.append(card);
   }

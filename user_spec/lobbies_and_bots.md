@@ -22,6 +22,8 @@ Automatically update and restart when `main` changes, but do not restart while g
 
 Use Lobbies for joining active lobbies and running games. Hide games without connected players by default and keep the option to show inactive lobbies. Use a separate Replays tab for review. Keep the five most recently completed matches across all players available regardless of age, including their complete server-side game logs. Archive incomplete games after 24 hours without activity. This replaces the six-hour expiry rule.
 
+Show a quick score and the total number of played rounds on replay cards. For modes without points, show the recorded match result when it is available.
+
 Backward compatibility with older game data is not required. A quick migration script is acceptable if old game data is useful for reference.
 
 Track these requests in an ordered TODO list and update it as implementation proceeds.

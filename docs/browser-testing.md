@@ -217,6 +217,14 @@ check replaced a disposable coordinator executable while it was running.
 The next lobby worker started successfully from the original executable
 inode. Other operating systems were outside this pass.
 
+Replay directory score cards were checked in three Chromium scenarios. The
+archived individual and team games show three played rounds and the cumulative
+scores from their final saved rounds. The retained recordings show one played
+round, including a seeded legacy timed result with a named winner. The
+390-pixel directory remains within the viewport and its replay link opens the
+recording read-only. Inspected desktop and narrow frames are under
+`artifacts/ui/2026-11-24T04-51-09.511Z-1919911`.
+
 ### Home page and quick play
 
 `landing.spec.mjs` covers the first-visit landing page, one-click default-bot startup, real commits and refresh, lobby/guide navigation, existing names, retry after a failed creation response and generated stats from modified server content. It captures desktop, laptop and narrow landing layouts. Coordinator scenarios now open `/lobbies/` to test the directory; standalone workers still open directly into their game lobby. The guide assertions use the Game Docs heading. See the [verification record](integration-verification.md#home-page-quick-play-and-explainer--2026-11-10) for results and screenshot review.

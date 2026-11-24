@@ -178,13 +178,24 @@ test('bot-only playtest archives at its budget and exposes read-only recent repl
   await page.goto(server.url+'lobbies/');
   await expect.poll(async () => (await (await page.request.get(server.url+'api/directory')).json()).replays.length, {timeout:90000}).toBe(1);
   expect(await workerPorts(server,created)).toHaveLength(1);
-  await expect(page.locator('.card')).toHaveCount(0);await page.getByRole('link',{name:'Replays',exact:true}).click();await expect(page.locator('.card')).toHaveCount(1);await expect(page.locator('.badge')).toHaveText('Archived');await review.capture('coordinator-recent-bot-playtest-replay',page);
+  await expect(page.locator('.card')).toHaveCount(0);await page.getByRole('link',{name:'Replays',exact:true}).click();
+  const card=page.locator('.replay-card');
+  await expect(card).toHaveCount(1);
+  await expect(card.locator('.badge')).toHaveText('Archived');
+  await expect(card).toContainText('3 rounds');
+  const parts=new URL(await card.getByRole('link',{name:'View replay'}).getAttribute('href'),page.url()).pathname.split('/');
+  const archivePath=`${server.dir}/games/${parts[2]}/replays/${parts[4]}`;
+  const sourceRound=`${archivePath}/rounds/3.json`;
+  const recorded=await readFile(sourceRound,'utf8');
+  const scores=JSON.parse(recorded).score.entries;
+  const profiles=JSON.parse(await readFile(`${archivePath}/manifest.json`,'utf8')).profiles;
+  await expect(card.locator('.replay-scores dt')).toHaveText(scores.map(entry=>profiles.find(profile=>profile.player_id===entry.side_id.player_id).username));
+  await expect(card.locator('.replay-scores dd')).toHaveText(scores.map(entry=>String(entry.adjusted_total)));
+  await review.capture('coordinator-recent-bot-playtest-replay',page);
   await page.getByRole('link',{name:'View replay'}).click();await expect(page.getByRole('button',{name:'View replay',exact:true})).toBeEnabled();await expect(page.locator('#map-picker')).toBeHidden();await review.capture('coordinator-read-only-entry',page);await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);await expect(page.locator('#commit')).toBeDisabled();await expect(page.locator('#new-game-start')).toHaveCount(0);await page.getByRole('button',{name:'Keep viewing replay'}).click();
-  const parts=new URL(page.url()).pathname.split('/');const token=JSON.parse(await readFile(`${server.dir}/games/${parts[2]}/replays/${parts[4]}/lobby.json`,'utf8')).tokens[0];
+  const token=JSON.parse(await readFile(`${archivePath}/lobby.json`,'utf8')).tokens[0];
   await page.evaluate(async token=>{const g=window.atemporal;g.net.send({kind:'hello',protocol_version:2,last_revision:null,slot_token:token});await g.net.request({kind:'get_exact_state',revision:g.current,tick:0},'exact_state');},token);expect(await page.evaluate(()=>window.atemporal.player)).toBe(null);
   await seek(page,Math.min(100,await page.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick)));await review.capture('coordinator-read-only-replay',page);await page.reload();await page.getByRole('button',{name:'View replay',exact:true}).click();await revision(page,3);
-  const sourceRound=`${server.dir}/games/${parts[2]}/replays/${parts[4]}/rounds/3.json`;
-  const recorded=await readFile(sourceRound,'utf8');
   await page.locator('#replay summary').click();await page.selectOption('#practice-player','0');await page.locator('#start-practice').click();
   await revision(page,0);await page.locator('#commit').click();await revision(page,1);
   expect(await readFile(sourceRound,'utf8')).toBe(recorded);
@@ -215,6 +226,13 @@ test('four bot teams obey single-order limits and advancing hybrid history',asyn
   for(let round=1;round<=3;round++)for(let player=0;player<4;player++){const turn=JSON.parse(await readFile(`${dir}/turns/${round}-${player}.json`,'utf8'));expect(turn.commands.length).toBeLessThanOrEqual(1);expect(turn.tick).toBeGreaterThanOrEqual((round-1)*50);}
   const manifest=JSON.parse(await readFile(`${dir}/manifest.json`,'utf8'));expect(new Set(manifest.config.multiplayer.assignments.map(a=>a.team_id)).size).toBe(2);
   await expect(page.getByRole('button',{name:'Create another game',exact:true})).toBeEnabled();await review.capture('coordinator-four-bot-teams-hybrid-single-order',page);
+  const round=JSON.parse(await readFile(`${dir}/rounds/3.json`,'utf8'));
+  await page.goto(server.url+'replays/');
+  const card=page.locator('.replay-card');
+  await expect(card).toContainText('3 rounds');
+  await expect(card.locator('.replay-scores dt')).toHaveText(round.score.entries.map(entry=>setup.available_teams.find(team=>team.team_id===entry.side_id.team_id).label));
+  await expect(card.locator('.replay-scores dd')).toHaveText(round.score.entries.map(entry=>String(entry.adjusted_total)));
+  await review.capture('coordinator-bot-team-replay-score',page);
 });
 
 test('simple win game type can be selected and started',async({page,review},testInfo)=>{
@@ -298,10 +316,15 @@ test('five completed recordings survive lobby expiry, migration and restart',asy
     await unlink(match+'/archive.json');
     const manifest=JSON.parse(await readFile(match+'/manifest.json','utf8'));
     manifest.match_id=id;
+    if (n===5) manifest.config.objective={kind:'timed',lock_ticks_per_round:100};
     await writeFile(match+'/manifest.json',JSON.stringify(manifest));
     const last=match+'/rounds/1.json';
     const round=JSON.parse(await readFile(last,'utf8'));
-    round.score.match_winners=[{kind:'player',player_id:0}];
+    const winner={kind:'player',player_id:0};
+    if (n===5) {
+      round.score=null;
+      round.timed={boundary:100,eligible_sides:[winner],match_winners:[winner],status:'finished',timed_lost_players:[1]};
+    } else round.score.match_winners=[winner];
     await writeFile(last,JSON.stringify(round));
     await utimes(last,1000-n,1000-n);
   }
@@ -318,6 +341,13 @@ test('five completed recordings survive lobby expiry, migration and restart',asy
   const links=guest.getByRole('link',{name:'View replay',exact:true});
   await expect(links).toHaveCount(5);
   for(let n=1;n<=5;n++)await expect(links.nth(n-1)).toHaveAttribute('href',new RegExp('/match-'+n+'/$'));
+  await expect(guest.locator('.replay-card').filter({hasText:'1 round ·'})).toHaveCount(5);
+  const latestScore=JSON.parse(await readFile(recordings+'/match-1/rounds/1.json','utf8')).score.entries;
+  await expect(guest.locator('.replay-card').first().locator('.replay-scores dd')).toHaveText(latestScore.map(entry=>String(entry.adjusted_total)));
+  const timedManifest=JSON.parse(await readFile(recordings+'/match-5/manifest.json','utf8'));
+  const timedWinner=timedManifest.profiles.find(profile=>profile.player_id===0).username;
+  await expect(guest.locator('.replay-card').nth(4).locator('.replay-result')).toHaveText(`Winner · ${timedWinner}`);
+  await expect(guest.locator('.replay-card').nth(4).locator('.replay-scores')).toHaveCount(0);
   expect((await guest.request.get(url)).status()).toBe(404);
   expect((await guest.request.get(url+'replays/match-6/')).status()).toBe(404);
   await review.capture('five-retained-completed-replays',guest);
