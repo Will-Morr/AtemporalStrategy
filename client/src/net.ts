@@ -6,6 +6,7 @@ type Of<K extends Kind> = Extract<ServerMessage, { kind: K }>;
 type Waiter = { test: (m: ServerMessage) => boolean; resolve: (m: ServerMessage) => void; reject: (e: Error) => void };
 
 export class DisconnectedError extends Error {}
+export class RequestTimeoutError extends Error {}
 
 /** Same-origin WebSocket with broadcast handlers and request/response matching by predicate. */
 export class Net {
@@ -65,7 +66,7 @@ export class Net {
     };
     return new Promise((resolve, reject) => {
       this.ws.onopen = () => { this.connected = true; resolve(); };
-      this.ws.onerror = () => reject(new Error('cannot connect'));
+      this.ws.onerror = () => reject(new DisconnectedError('cannot connect'));
     });
   }
   disconnect(): void { this.ws?.close(); }
@@ -102,7 +103,7 @@ export class Net {
       };
       const timer = setTimeout(() => {
         this.waiters.splice(this.waiters.indexOf(waiter), 1);
-        reject(new Error(`timeout waiting for ${kind}`));
+        reject(new RequestTimeoutError(`timeout waiting for ${kind}`));
       }, timeoutMs);
       this.waiters.push(waiter);
       this.send(message);

@@ -865,6 +865,18 @@ pub fn router(c: Coordinator) -> Router {
         .route("/api/games", post(create))
         .route("/api/games/{id}/join", post(join))
         .route("/api/games/{id}/feedback", post(feedback))
+        .route(
+            "/api/games/{id}/client-incidents",
+            post(client_incident).layer(axum::extract::DefaultBodyLimit::max(
+                crate::client_incident::MAX_BODY,
+            )),
+        )
+        .route(
+            "/api/games/{id}/replays/{replay}/client-incidents",
+            post(replay_client_incident).layer(axum::extract::DefaultBodyLimit::max(
+                crate::client_incident::MAX_BODY,
+            )),
+        )
         .route("/games/{id}/guide/", get(game_guide))
         .route("/games/{id}/guide/{*path}", get(game_guide_file))
         .route("/games/{id}/ws", get(game_ws))
@@ -1148,6 +1160,42 @@ async fn feedback(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"Could not save feedback. Your message is still here; please retry."}))).into_response()
         }
     }
+}
+
+async fn client_incident(
+    State(c): State<Coordinator>,
+    Path(id): Path<String>,
+    h: HeaderMap,
+    Json(input): Json<crate::client_incident::Report>,
+) -> Response {
+    save_client_incident(&c, &id, None, &h, input)
+}
+
+async fn replay_client_incident(
+    State(c): State<Coordinator>,
+    Path((id, replay)): Path<(String, String)>,
+    h: HeaderMap,
+    Json(input): Json<crate::client_incident::Report>,
+) -> Response {
+    save_client_incident(&c, &id, Some(&replay), &h, input)
+}
+
+fn save_client_incident(
+    c: &Coordinator,
+    id: &str,
+    replay: Option<&str>,
+    headers: &HeaderMap,
+    input: crate::client_incident::Report,
+) -> Response {
+    let Ok(game) = c.reviewable_game(id, replay) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if !allowed(&game, headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let status = c.status(id);
+    let match_id = replay.or_else(|| status["match_id"].as_str());
+    crate::client_incident::save(&c.game_root(id), Some(id), match_id, input)
 }
 #[derive(Deserialize)]
 struct JoinInput {

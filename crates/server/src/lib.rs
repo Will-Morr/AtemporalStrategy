@@ -4,6 +4,7 @@
 pub mod adapter;
 pub mod archive;
 mod checker;
+mod client_incident;
 pub mod controller;
 pub mod ws;
 

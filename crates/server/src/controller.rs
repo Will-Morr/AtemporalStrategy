@@ -387,6 +387,9 @@ impl Controller {
     pub fn bot_pending(&self, player: PlayerId) -> bool {
         self.phase == Phase::Planning && !self.committed.contains_key(&player)
     }
+    pub(crate) fn client_incident_root(&self) -> &std::path::Path {
+        &self.replay_root
+    }
     pub(crate) fn has_commit(&self, player: PlayerId) -> bool {
         self.committed.contains_key(&player)
     }

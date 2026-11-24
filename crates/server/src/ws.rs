@@ -8,7 +8,7 @@ use crate::{
 };
 use atemporal_sim::*;
 use axum::{
-    Router,
+    Json, Router,
     body::Body,
     extract::{
         State,
@@ -16,7 +16,7 @@ use axum::{
     },
     http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use futures_util::{SinkExt, StreamExt};
 use std::path::{Path, PathBuf};
@@ -89,8 +89,26 @@ pub fn router(app: App) -> Router {
         .fallback(get(client_file));
     if app.managed.is_some() {
         router = router.route("/_worker/idle", get(worker_idle));
+    } else {
+        router = router.route(
+            "/api/client-incidents",
+            post(client_incident).layer(axum::extract::DefaultBodyLimit::max(
+                crate::client_incident::MAX_BODY,
+            )),
+        );
     }
     router.with_state(app)
+}
+
+async fn client_incident(
+    State(app): State<App>,
+    Json(input): Json<crate::client_incident::Report>,
+) -> Response {
+    let (root, match_id) = {
+        let c = app.controller.lock().unwrap();
+        (c.client_incident_root().to_owned(), c.match_id.clone())
+    };
+    crate::client_incident::save(&root, None, Some(&match_id), input)
 }
 
 async fn worker_idle(State(app): State<App>) -> StatusCode {

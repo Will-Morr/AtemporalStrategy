@@ -24,7 +24,7 @@ export function runLobby(net: Net, config: MatchConfig, initial: LobbyState, pha
   const error = $<HTMLSpanElement>('lobby-error');
   const status = $<HTMLParagraphElement>('status');
   let lobby = initial;
-  if(readonly){username.closest('.row')!.setAttribute('hidden','');start.hidden=true;$('map-picker').hidden=true;spectate.textContent='View replay';}
+  if(readonly){$('lobby-profile')?.setAttribute('hidden','');start.hidden=true;$('map-picker').hidden=true;spectate.textContent='View replay';}
   if (!location.pathname.startsWith('/games/') && !username.value) username.value = localStorage.getItem('atemporal-username') ?? '';
   if (color.value === '#4fc3f7') color.value = localStorage.getItem('atemporal-color') ?? color.value;
   $<HTMLParagraphElement>('rules').textContent = lobby.rule_summary;

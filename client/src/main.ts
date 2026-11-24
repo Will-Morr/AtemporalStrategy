@@ -1,12 +1,9 @@
 import {practice} from './practice';
-import { Net } from './net';
+import { DisconnectedError, Net, RequestTimeoutError } from './net';
 import { runLobby, type Session } from './lobby';
 import { Game } from './game';
 import { tabToken, rememberPlayer, slotStorageKey, setFingerprint } from './session';
-
-setFingerprint();
-
-if (matchMedia('(pointer: coarse)').matches && !sessionStorage.getItem('atemporal-mobile-warned')) { sessionStorage.setItem('atemporal-mobile-warned', '1'); alert('Heads up: this is really not optimized for mobile, it might work a little but no promises'); }
+import { MissingSetupElement, reportSetupError, type SetupStage } from './setup-incident';
 
 const status = document.getElementById('status') as HTMLParagraphElement;
 const controls = document.getElementById('top-controls')!;
@@ -14,6 +11,9 @@ const net = new Net();
 let game: Game | null = null;
 let stale = false;
 let reconnecting = false;
+let welcomed = false;
+let setupStage: SetupStage | null = 'environment';
+let setupFailed = false;
 let disconnectNotice: number | undefined;
 const connection = document.createElement('div'); connection.id = 'connection'; document.body.append(connection);
 const showConnection = (message: string) => {
@@ -24,8 +24,9 @@ const showConnection = (message: string) => {
 // Updates restart the server; reloading picks up the new release and restores the saved draft.
 net.onInstanceChange = () => { stale = true; showConnection('Server updated. Reloading… '); location.reload(); };
 net.onClose = () => {
+  if (stale) return;
   game?.updatePanels();
-  if (stale || reconnecting) return;
+  if (!welcomed || reconnecting) return;
   if (practice) {showConnection('Practice session closed. Reload to start again from the recording. '); return;}
   if (disconnectNotice === undefined) {
     // Give the first retry time to complete before covering the game with a warning.
@@ -54,31 +55,36 @@ net.on('match_reset', () => {
   showConnection('Opening the next game. Your player slot is retained. ');
   location.reload();
 });
-const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=!!practice || location.pathname.includes('/replays/'); controls.append(switchPlayer);
 
 async function boot(): Promise<void> {
+  setFingerprint();
+  if (matchMedia('(pointer: coarse)').matches && !sessionStorage.getItem('atemporal-mobile-warned')) { sessionStorage.setItem('atemporal-mobile-warned', '1'); alert('Heads up: this is really not optimized for mobile, it might work a little but no promises'); }
+  if (!controls) throw new MissingSetupElement('top_controls');
+  const switchPlayer = document.createElement('button'); switchPlayer.id = 'switch-player'; switchPlayer.textContent = 'Switch / rejoin player'; switchPlayer.onclick = () => { sessionStorage.removeItem(slotStorageKey); location.href = location.pathname; }; switchPlayer.hidden=!!practice || location.pathname.includes('/replays/'); controls.append(switchPlayer);
   if (location.pathname.startsWith('/games/')) {
+    setupStage = 'directory';
     (document.getElementById('guide-link') as HTMLAnchorElement).href=`${location.pathname.match(/^\/games\/[^/]+/)![0]}/guide/`;
     for (const parent of [document.getElementById('lobby'),controls]) {
       const link=document.createElement('a');link.href=location.pathname.includes('/replays/')?'/replays/':'/lobbies/';link.textContent=location.pathname.includes('/replays/')?'Replays':'All games';link.style.pointerEvents='auto';parent?.prepend(link);
     }
-    const identity=await fetch('/api/directory').then(r=>r.json());
+    const response = await fetch('/api/directory').catch(() => { throw new DisconnectedError(); });
+    if (!response.ok) throw new DisconnectedError();
+    const identity = await response.json();
     const replayPath=location.pathname.includes('/replays/');
     if(identity.user===null && !replayPath){location.replace(`/lobbies/?join=${encodeURIComponent(location.pathname)}`);return;}
-    (document.getElementById('username') as HTMLInputElement).value=identity.user??'';
-    document.getElementById('username')!.closest('label')!.hidden=true;
+    const username = document.getElementById('username') as HTMLInputElement | null;
+    if (!username) throw new MissingSetupElement('username');
+    username.value=identity.user??'';
+    (document.getElementById('lobby-username') ?? username).hidden = true;
     const entry=identity.games.find((g:{id:string})=>g.id===location.pathname.split('/')[2]);
     const name=entry?.name??identity.replays?.find((r:{game:string})=>r.game===location.pathname.split('/')[2])?.name;
     if(name){document.body.dataset.gameName=name;document.querySelector('#lobby h1')!.textContent=name;}
     document.body.dataset.botOnly=String(!!entry?.bots?.length && entry.bots.every((bot:unknown)=>bot!==null));
     if(!practice && location.pathname.includes('/replays/')) sessionStorage.removeItem(slotStorageKey);
   }
-  try {
-    await net.connect();
-  } catch {
-    status.textContent = practice ? 'Practice replay unavailable. Return to the recording and try again.' : 'Cannot reach the game server. Is it running on this address?';
-    return;
-  }
+  setupStage = 'socket';
+  await net.connect();
+  setupStage = 'welcome';
   const session: Session = { slot: null, token: practice ? 'practice' : tabToken() };
   const welcome = net.request({ kind: 'hello', protocol_version: 2, last_revision: null, slot_token: session.token }, 'welcome');
   net.on('slot_claimed', m => {
@@ -86,6 +92,7 @@ async function boot(): Promise<void> {
     session.token = m.private_token;
   });
   const w = await welcome;
+  welcomed = true;
   // A token from an older server instance is not ours any more.
   // The server confirms the private slot before welcome; no timing guess is needed.
   if (session.slot === null) {
@@ -94,7 +101,10 @@ async function boot(): Promise<void> {
   }
   if (!practice && session.slot !== null && session.token) rememberPlayer(w.match_id, session.slot, session.token, w.lobby.slots[session.slot]?.profile?.username ?? `Player ${session.slot}`);
   status.textContent = `Connected · ${w.config.player_count} players · ${w.phase}`;
+  setupStage = 'lobby';
   const { session: settled, lobby } = practice ? {session, lobby:w.lobby} : await runLobby(net, w.config, net.lobby ?? w.lobby, net.published ? 'planning' : w.phase, session, w.match_id);
+  if (setupFailed) return;
+  setupStage = 'game';
   game = new Game(net, w.config, settled, lobby);
   // Debug/test hook: agent-run browser checks read state through it; never used by gameplay code.
   (window as unknown as { atemporal: Game }).atemporal = game;
@@ -109,6 +119,24 @@ async function boot(): Promise<void> {
   if (settled.slot !== null) game.toast(`Connected as ${lobby.slots[settled.slot]?.profile?.username ?? `Player ${settled.slot}`}. This tab keeps your player when refreshed.`);
   // Late joiners need the current revision; the server resends it on hello, so replay any queued one.
   net.send({ kind: 'hello', protocol_version: 2, last_revision: null, slot_token: settled.token });
+  setupStage = null;
 }
 
-void boot().catch(e => showConnection(`Connection setup failed: ${(e as Error).message} `));
+async function setupError(error: unknown): Promise<void> {
+  if (!setupStage || setupFailed) return;
+  if (error instanceof DisconnectedError || error instanceof RequestTimeoutError) {
+    showConnection(practice ? 'Practice replay unavailable. Return to the recording and try again.' : 'Cannot reach the game server. Reload to try again.');
+    return;
+  }
+  setupFailed = true;
+  stale = true;
+  net.disconnect();
+  showConnection('Connection setup failed. Saving a diagnostic report…');
+  const id = await reportSetupError(error, setupStage, !!practice, game?.round ?? null, game && game.current >= 0 ? game.current : null);
+  showConnection(id ? `Connection setup failed. Diagnostic report saved (${id}).` : 'Connection setup failed. The diagnostic report could not be saved.');
+}
+
+window.addEventListener('error', event => {
+  if (event.error && event.filename === `${location.origin}/app.js`) void setupError(event.error);
+});
+void boot().catch(setupError);

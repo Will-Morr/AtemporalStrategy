@@ -54,6 +54,8 @@ Allow half of the battlefield viewport to extend past each map edge at any zoom,
 
 Reconnect without flashing a warning for brief disconnects. Show a visible warning when the connection remains unavailable.
 
+Record unexpected game-page setup errors even before the connection opens. Show the player a report ID only after the server confirms it saved the diagnostic. Keep ordinary connection failures and private connection information out of these reports.
+
 A replacement constructor order must clear the earlier action visually and mechanically. Hide commands incompatible with the selection. Factories receive starting orders through the same gestures as units. Ghost buildings must be selectable and configurable before construction: production queue, priority, and newborn starting order take effect immediately on completion.
 
 Show stored matter clearly at the viewed tick. Timeline markers include every tick with an authoritative applied order affecting any selected unit. Unit vision determines battlefield visibility with fog of war even though timeline inspection may disclose other information.

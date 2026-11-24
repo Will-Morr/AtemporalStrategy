@@ -175,13 +175,34 @@ fn atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<u64> {
 }
 
 pub(crate) fn write_checker_incident(root: &Path, id: &str, report: &impl Serialize) -> Result<()> {
+    write_incident(root, "checker-incidents", id, report, None).map(|_| ())
+}
+
+pub(crate) fn write_incident(
+    root: &Path,
+    folder: &str,
+    id: &str,
+    report: &impl Serialize,
+    limit: Option<usize>,
+) -> Result<bool> {
     static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _writing = WRITING
         .lock()
-        .map_err(|_| "checker report writer unavailable")?;
-    let directory = root.join("checker-incidents");
+        .map_err(|_| "incident report writer unavailable")?;
+    let directory = root.join(folder);
     let path = directory.join(format!("{id}.json"));
-    if !path.is_file() {
+    let new_report = !path.is_file();
+    if new_report {
+        if let Some(limit) = limit
+            && directory.is_dir()
+            && fs::read_dir(&directory)
+                .map_err(|err| err.to_string())?
+                .take(limit)
+                .count()
+                >= limit
+        {
+            return Err("incident storage limit reached".into());
+        }
         atomic_json(&path, report)?;
     }
     fs::File::open(&directory)
@@ -189,7 +210,8 @@ pub(crate) fn write_checker_incident(root: &Path, id: &str, report: &impl Serial
         .map_err(|e| e.to_string())?;
     fs::File::open(root)
         .and_then(|dir| dir.sync_all())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    Ok(new_report)
 }
 
 fn json<T: Serialize>(value: &T) -> Result<Vec<u8>> {

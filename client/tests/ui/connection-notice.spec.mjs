@@ -1,5 +1,7 @@
 import { test, expect } from './fixtures.mjs';
 import { isolatedServer, players, revision } from './game-helpers.mjs';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 
 test('a quick reconnect stays quiet and a sustained outage warns until recovery', async ({review}, testInfo) => {
   const server = await isolatedServer(testInfo);
@@ -41,5 +43,6 @@ test('a quick reconnect stays quiet and a sustained outage warns until recovery'
   await expect(banner).toBeHidden();
   await expect.poll(connected).toBe(true);
   await revision(page, 0);
+  await expect(readdir(join(server.dir, 'replays', 'client-incidents'))).rejects.toMatchObject({code:'ENOENT'});
   await review.capture('connection-recovered', page);
 });
