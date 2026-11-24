@@ -122,6 +122,8 @@ Multiple selected factories must be edited only as a group. If their configurati
 
 Warn visibly about queued units and factories without orders, especially miners and constructors, and make missing construction orders apparent before committing. Show “Needs orders” only once the player has started giving orders in the current draft, and assess only that intervention tick; do not warn during idle replay browsing or at other ticks. Mixed factory queues are normal gameplay: a mining newborn order with miners and grunts must not trigger an incompatibility warning. Warn about missing orders, not an order being unusable by some queued unit types. Show a large colored banner while the player's turn is committed and waiting; remove it when execution starts. Highlight order ticks for the current selection on the timeline. Make unit statistics accessible before building units, with a clearly linked reference tab/page.
 
+A first-turn draft with planned buildings must visibly call out missing Construct coverage when the constructor is Idle or mining. Keep the warning visible when another unit is selected or there are other order reminders.
+
 Keep unsupported actions unavailable for selected units, including keyboard shortcuts. Structure planning is a global action independent of constructor selection; placing a blueprint must not imply that a selected constructor has been assigned to build it. Constructor work orders remain a separate action.
 
 The remaining fixed-height workspace still wastes too much space, including for large selections. Reduce its overall footprint further while retaining the existing sections.
