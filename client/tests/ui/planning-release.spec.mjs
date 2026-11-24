@@ -264,6 +264,15 @@ test('the opening shares vision with the roster-selected allies',async({review},
   },content=>{content.starting_roster=['constructor','miner'];});
   review.afterClose(server.stop);
   const [a]=await players(review,server.url,4,true);
+  await a.setViewportSize({width:1366,height:768});
+  const profileColumns=await a.locator('.lobby-profile :is(input,select)').evaluateAll(fields=>fields.map(field=>field.getBoundingClientRect().x));
+  expect(profileColumns).toHaveLength(3);
+  expect(new Set(profileColumns).size).toBe(1);
+  await a.getByText('Username',{exact:true}).click();
+  await expect(a.locator('#username')).toBeFocused();
+  await expect(a.getByRole('button',{name:'Start match',exact:true})).toBeInViewport();
+  await review.capture('lobby-profile-aligned-controls',a);
+  await a.setViewportSize({width:1920,height:1080});
   await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);
   expect(await a.evaluate(()=>[...new Set(window.atemporal.entities().map(e=>e.owner))].sort())).toEqual([0,1]);
   const observed=await exportedFrames(server,0);

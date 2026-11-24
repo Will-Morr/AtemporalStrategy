@@ -37,7 +37,10 @@ test('silo blueprint production, launch previews, satellite replay and stockpili
   await a.keyboard.press('Control+z');await a.keyboard.press('Control+z');
   const predicted={};
   for(const name of ['Satellite','Cluster','Tac nuke']){await a.getByRole('button',{name:`Target ${name}`,exact:true}).click();const point=await hover(a,enemy);await expect(a.locator('#range-readout')).toContainText('ticks to hit after launch');await expect(a.locator('#range-readout')).toContainText(name);predicted[name.toLowerCase().replace(' ','_')]=Number((await a.locator('#range-readout').innerText()).match(/(\d+) ticks to hit/)[1]);if(name==='Tac nuke')await review.capture('nuke-target-flight-time-and-area',a);await a.mouse.click(...point);}
-  await expect(a.locator('.missile-launches li')).toHaveCount(3);await a.getByRole('button',{name:'Remove launch 3',exact:true}).click();await expect(a.locator('.missile-launches li')).toHaveCount(2);
+  await expect(a.locator('.missile-launches li')).toHaveCount(3);
+  const removalColumns=await a.locator('.missile-launches button').evaluateAll(buttons=>buttons.map(button=>button.getBoundingClientRect().x));
+  expect(new Set(removalColumns).size).toBe(1);
+  await a.getByRole('button',{name:'Remove launch 3',exact:true}).click();await expect(a.locator('.missile-launches li')).toHaveCount(2);
   await a.getByRole('button',{name:'Target Tac nuke',exact:true}).click();await tile(a,enemy);
   await a.getByRole('button',{name:'Auto launch: Off',exact:true}).click();await a.getByRole('button',{name:'Auto launch: On',exact:true}).click();
   await expect(a.locator('#actions [data-key="f"]')).toBeHidden();await review.capture('blueprint-missiles-and-queued-launches',a);

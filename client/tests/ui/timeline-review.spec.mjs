@@ -18,7 +18,12 @@ test('completed timeline can be replayed with different orders without changing 
   await expect(a.locator('#scoreboard [data-player="0"]')).toHaveAttribute('data-status','winner');
 
   await b.getByRole('button',{name:'Try a different timeline'}).click();
-  await b.locator('#review-plans').check();await seek(b,0);
+  await b.locator('#review-plans').focus();
+  await b.keyboard.press('Space');
+  await expect(b.locator('#review-plans')).toBeChecked();
+  expect((await b.locator('#round-picker').boundingBox()).x).toBe((await b.locator('#practice-player').boundingBox()).x);
+  await review.capture('replay-aligned-selects',b);
+  await seek(b,0);
   await expect(b.locator('#tick-activity')).toContainText('Attack move');
   await expect.poll(()=>b.evaluate(()=>window.atemporal.experience.review.recipients.size)).toBeGreaterThan(0);
   await b.locator('#tick-activity .review-command').click();

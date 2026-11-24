@@ -50,7 +50,20 @@ export function siloPanel(g:Game,v:EntityView):HTMLElement {
   const targets=document.createElement('div');targets.className='missile-target-buttons';
   for(const type of def.production!.recipes){const b=button(`Target ${missileName(type)}`,()=>{g.mode={kind:'launch',type_key:type,silos:[v.id]};g.updateMode();document.getElementById('map')!.focus();});b.title='Click a target. Shift-click to queue one launch and keep targeting. Missing missiles are added to production.';targets.append(b);}root.append(targets);
   const launches=document.createElement('ol');launches.className='missile-launches';
-  plan.launches.forEach((launch,index)=>{const li=document.createElement('li');const m=g.types.get(launch.type_key)!.missile!;li.append(unitIcon(launch.type_key,g.color(v.owner)),document.createTextNode(`${missileName(launch.type_key)} → ${launch.target.x},${launch.target.y} · ${flightTicks(v,launch.target,m)} ticks flight`));const remove=button('×',()=>{const next=structuredClone(plan);next.launches.splice(index,1);setSiloPlan(g,v,next);});remove.setAttribute('aria-label',`Remove launch ${index+1}`);li.append(remove);launches.append(li);});root.append(launches);
+  plan.launches.forEach((launch,index)=>{
+    const li=document.createElement('li');
+    const row=document.createElement('div');
+    row.className='missile-launch-row';
+    const label=document.createElement('span');
+    label.className='missile-launch-label';
+    const m=g.types.get(launch.type_key)!.missile!;
+    label.textContent=`${missileName(launch.type_key)} → ${launch.target.x},${launch.target.y} · ${flightTicks(v,launch.target,m)} ticks flight`;
+    const remove=button('×',()=>{const next=structuredClone(plan);next.launches.splice(index,1);setSiloPlan(g,v,next);});
+    remove.setAttribute('aria-label',`Remove launch ${index+1}`);
+    row.append(unitIcon(launch.type_key,g.color(v.owner)),label,remove);
+    li.append(row);
+    launches.append(li);
+  });root.append(launches);
   const note=document.createElement('small');note.textContent=plan.launches.length?'Launches fire in order as stock becomes ready. Flight times start at launch.':plan.automatic?'Automatic targeting is active. Manual launches have unlimited range.':'Stockpile mode. Build missiles above, then target a launch when ready.';root.append(note);
   return root;
 }

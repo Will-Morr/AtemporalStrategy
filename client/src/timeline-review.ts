@@ -46,7 +46,7 @@ export class TimelineReview {
   constructor(readonly g: Game, root: HTMLElement) {
     const controls = document.createElement('section');
     controls.className = 'review-tools';
-    controls.innerHTML = '<label><input type="checkbox" id="review-plans"> Show orders and events at playhead</label><div id="tick-activity" hidden></div><div class="review-jumps"><button type="button">Previous order tick</button><button type="button">Next order tick</button></div><div id="practice-options" hidden><label>Practice as <select id="practice-player"></select></label><button type="button" id="start-practice">Play this timeline</button><small>Try new orders against the recorded plans. Practice lasts until you leave or reload.</small></div>';
+    controls.innerHTML = '<label><input type="checkbox" id="review-plans"> Show orders and events at playhead</label><div id="tick-activity" hidden></div><div class="review-jumps"><button type="button">Previous order tick</button><button type="button">Next order tick</button></div><div id="practice-options" hidden><label class="replay-field">Practice as <select id="practice-player"></select></label><button type="button" id="start-practice">Play this timeline</button><small>Try new orders against the recorded plans. Practice lasts until you leave or reload.</small></div>';
     root.querySelector('#return-live')!.after(controls);
     this.enabled = controls.querySelector('input')!;
     this.activity = controls.querySelector('#tick-activity')!;

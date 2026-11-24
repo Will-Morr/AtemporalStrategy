@@ -237,6 +237,16 @@ test('completed factory queues retain the remaining items after deletion and com
   const add = a.getByRole('button', {name: 'Queue grunt', exact: true});
   await add.click({modifiers: ['Shift']});
   const remove = a.getByRole('button', {name: 'Remove one queued grunt', exact: true});
+  await a.getByRole('button', {name:'Queue artillery', exact:true}).click();
+  const removeArtillery = a.getByRole('button', {name:'Remove one queued artillery', exact:true});
+  const gruntBox = await remove.boundingBox();
+  const artilleryBox = await removeArtillery.boundingBox();
+  expect(artilleryBox.x).toBe(gruntBox.x);
+  expect((await a.getByRole('button', {name:'Loop queued artillery'}).boundingBox()).x)
+    .toBe((await a.getByRole('button', {name:'Loop queued grunt'}).boundingBox()).x);
+  await review.capture('factory-queue-aligned-action-columns', a);
+  await a.mouse.click(gruntBox.x + gruntBox.width / 2, artilleryBox.y + artilleryBox.height / 2);
+  await expect(removeArtillery).toHaveCount(0);
   await remove.focus();
   await a.keyboard.press('Delete');
   await expect(a.locator('#queue')).toContainText('grunt ×4');

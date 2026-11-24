@@ -183,18 +183,37 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 #round-results button:hover,#round-results button:focus-visible{outline:1px solid #b9d6eb;outline-offset:-2px}
 .review-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
 #new-game-menu .review-actions button{width:auto;margin:0;padding:5px 8px;font-size:12px}
+
+.lobby-setup{display:grid;grid-template-columns:minmax(14rem,20rem) minmax(0,1fr);gap:20px;align-items:start}
+.lobby-profile{display:grid;gap:.6rem;margin:.8rem 0}
+.lobby-profile label{display:grid;grid-template-columns:6rem minmax(0,1fr);gap:.6rem;align-items:center}
+.lobby-profile input,.lobby-profile select{min-width:0;max-width:100%}
+@media(max-width:700px){.lobby-setup{grid-template-columns:minmax(0,1fr);gap:0}}
+.queue-icons{display:grid;grid-template-columns:minmax(0,1fr);width:min(100%,28rem);scrollbar-gutter:stable}
+.queue-item{display:grid;grid-template-columns:20px minmax(0,1fr) 2rem 1.75rem}
+.queue-item-label,.missile-launch-label{overflow-wrap:anywhere}
+.queue-actions{display:flex;flex-wrap:wrap;gap:4px}
+.missile-launches{max-height:90px;scrollbar-gutter:stable}
+.missile-launch-row{display:grid;grid-template-columns:23px minmax(0,1fr) 1.75rem;gap:5px;align-items:center}
+.missile-launch-row button{margin:0}
+#replay[open]{width:min(260px,90vw)}
+.replay-field{display:grid;grid-template-columns:5.25rem minmax(0,1fr);gap:6px;align-items:center}
+.replay-field select{min-width:0;width:100%}
+#practice-options .replay-field{width:100%}
 </style></head><body>
 
 <section id="lobby">
   <h1>Atemporal Strategy</h1>
   <p><a href="/guide/" id="guide-link" target="_blank">How to play / Unit reference</a></p>
   <p id="rules"></p>
-  <div class="row">
-    <label>Username <input id="username"  placeholder="your name"></label>
-    <label>Color <input id="color" type="color" value="#4fc3f7"></label>
-    <span id="team-wrap" style="display:none"><label>Team <select id="team"></select></label></span>
+  <div class="lobby-setup">
+    <div class="lobby-profile">
+      <label>Username <input id="username" placeholder="your name"></label>
+      <label>Color <input id="color" type="color" value="#4fc3f7"></label>
+      <span id="team-wrap" style="display:none"><label>Team <select id="team"></select></label></span>
+    </div>
+    <ul id="roster"></ul>
   </div>
-  <ul id="roster"></ul>
   <section id="map-picker" aria-label="Choose a map"><h2>Choose the battlefield</h2><p id="map-choice-status"></p><div id="map-choices"></div></section>
   <div class="row">
     <button id="start" disabled>Start match</button>

@@ -370,3 +370,16 @@ frames with matching rules 15 binaries in
 passed and its full frame shows the Match review control and dialog in
 `artifacts/ui/2026-11-23T21-41-43.215Z-1774429`. Long readouts can
 ellipsize at narrower widths. Other browser engines were outside this pass.
+
+## Labeled control columns
+
+Desktop Chromium checked equal horizontal positions for lobby profile fields,
+replay selectors, factory queue buttons, and missile launch removal buttons.
+The team lobby and silo ran at 1366 × 768. The factory and replay inspector
+ran at 1920 × 1080. Tests click a lobby label to focus its field, remove
+artillery at the same horizontal coordinate as the grunt removal button,
+and use Space to toggle the replay checkbox. The Start match button stays
+in view in the four-player laptop layout. Inspected full frames are under
+`artifacts/ui/2026-11-24T04-09-17.105Z-1890519` and
+`artifacts/ui/2026-11-24T04-10-13.349Z-1892851`. The patch-note checkbox
+filter regression also passed at 390 pixels wide.
