@@ -214,6 +214,14 @@ After that round was published, the live process still used nearly one full CPU.
 
 The hosted supervisor and workers originally ran at nice 10, as did release builds when active. A local one-CPU contention check used three CPU-bound processes, each doing one second of CPU work. With all three at nice 10, the game stand-in finished in about 3.05 seconds. With two build stand-ins at nice 19, it finished in about 1.29 seconds. This checks scheduler priority under contention.
 
+### November 23 worker traffic replay
+
+The recorded 48×48 human-versus-Tactical game used rules 15. Exact replay of the accepted orders reproduced the worker traffic independently of the browser. Three observations isolate different causes.
+
+- The opening miner was displaced from its active ore tile at (1, 11) to (2, 11) by friendly traffic at ticks 84, 127, 151, 157 and 174. At tick 202 a constructor was displaced from (4, 8) to (3, 9) by another constructor while approaching the same work cluster. Nearby constructors repeatedly displaced one another during the next 25 ticks.
+- At tick 840 of revision 1, 40 constructors targeted the factory at (5, 36). At tick 1,000, all eight adjacent positions had a constructor in range, the factory was still a low-priority site with 193.45 matter paid, and the bank was empty. At tick 5,000, 38 constructors still targeted it. Payment had risen to 193.60 and stayed there through tick 20,000. These observations distinguish the excess workers converging on a saturated site from the site's funding stall.
+- In revision 6, five miners spawned between ticks 787 and 859 with the inherited full-map Mine order. At tick 800 the first miner, at (2, 22), had a static route to all 40 positive ore tiles. Rules 15 had already assigned every tile a claim. Four empty deposits at (1–4, 28) were claimed by opposing miners at (18, 38), (38, 39), (40, 39) and (38, 41). At tick 1,000 the five new miners still had no resolved destination. All 21 remaining deposits had prior claims. The immediate obstacle was target selection before movement.
+
 ## Verification limits
 
 Chromium is the verified browser. Firefox/WebKit, touchscreen-only play and WAN behavior were not tested. Narrow layouts support keyboard/mouse input with scrolling command panels; the primary play surface is desktop. Fog limits battlefield rendering and selection, while replay/statistical data remain inspectable. Local draft lock estimates are deliberately non-authoritative; published command outcomes are the source of truth. Heavy current revisions can exceed configured retention budgets as measured above.
