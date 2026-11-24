@@ -1,7 +1,7 @@
 import type {Setup, LobbySlot} from './contracts.generated';
 import {setFingerprint} from './session';
 setFingerprint();
-type Style='standard'|'tactical';
+type Style='standard'|'tactical'|'enclosure';
 interface Entry {active_players:number;id:string;name:string;created:number;locked:boolean;players:number;mine:boolean;bots:(Style|null)[];status:{phase:string;round:number;last_activity_ms?:number;slots?:LobbySlot[];objective?:{kind:string}}}
 interface Replay {
   id:string;
@@ -132,7 +132,7 @@ function slots():void {
   const container=$('bot-slots'),previous=Array.from(container.querySelectorAll('select')).map(s=>s.value),all=$<HTMLInputElement>('all-bots').checked;container.replaceChildren();
   for(let i=0;i<Number($<HTMLSelectElement>('player-count').value);i++){
     const label=document.createElement('label');label.className='field';label.textContent=`Slot ${i}`;const select=document.createElement('select');select.id=`bot-${i}`;
-    for(const [value,text] of [['','Human'],['tactical','Tactical 2.1'],['standard','Standard 1.0']]){if(all&&!value||!all&&i===0&&value)continue;const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);}
+    for(const [value,text] of [['','Human'],['tactical','Tactical 2.1'],['standard','Standard 1.0'],['enclosure','Enclosure']]){if(all&&!value||!all&&i===0&&value)continue;const o=document.createElement('option');o.value=value;o.textContent=text;select.append(o);}
     select.value=all?(previous[i]||directory.default_bot):i===0?'':previous[i]??'';label.append(select);container.append(label);
   }
   $('round-budget-label').hidden=!all;

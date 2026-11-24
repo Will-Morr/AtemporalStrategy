@@ -18,6 +18,7 @@ pub enum Style {
     #[serde(alias = "rusher", alias = "builder", alias = "raider")]
     Standard,
     Tactical,
+    Enclosure,
 }
 /// Offline Tactical tuning knobs. The default preserves the live policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,18 +58,22 @@ impl Style {
         match self {
             Self::Standard => "Standard 1.0",
             Self::Tactical => "Tactical 2.1",
+            Self::Enclosure => "Enclosure",
         }
+    }
+    fn tactical(self) -> bool {
+        matches!(self, Self::Tactical | Self::Enclosure)
     }
     fn interval(self) -> Tick {
         match self {
             Self::Standard => 150,
-            Self::Tactical => 100,
+            Self::Tactical | Self::Enclosure => 100,
         }
     }
     fn unit(self) -> &'static str {
         match self {
             Self::Standard => "grunt",
-            Self::Tactical => "tank",
+            Self::Tactical | Self::Enclosure => "tank",
         }
     }
 }
@@ -302,7 +307,7 @@ impl PolicyTimeline {
 pub fn intervention(input: &PolicyTimeline, style: Style) -> Tick {
     let editable = input.editable_ticks();
     let (editable_from, available_through) = (*editable.start(), *editable.end());
-    if style == Style::Tactical
+    if style.tactical()
         && let Some(previous) = input.timeline.turns.iter().max_by_key(|turn| turn.round)
     {
         return tactical::intervention(input, previous.tick);
@@ -375,7 +380,7 @@ pub fn published_plan_with_params(
     params: TacticalParams,
 ) -> TurnDraft {
     let tick = intervention(input, style);
-    if input.winning() && style == Style::Tactical {
+    if input.winning() && style.tactical() {
         return TurnDraft {
             based_on_revision: input.revision(),
             tick,
@@ -391,8 +396,8 @@ pub fn published_plan_with_params(
         content: input.content(),
         terrain: &input.timeline.terrain,
     };
-    if style == Style::Tactical {
-        return tactical::plan(input, frame, rules, params);
+    if style.tactical() {
+        return tactical::plan(input, frame, rules, params, style);
     }
     plan_frame(frame, input.player(), style, rules, input.revision())
 }
@@ -552,7 +557,7 @@ fn plan_frame_with_rally(
         .filter(|e| def(e).is_some_and(|t| t.construction.is_some()))
         .collect();
     if let Some(structure) = structure.filter(|_| !constructors.is_empty() && recipe.is_some()) {
-        let west = style == Style::Tactical && target.x < home.x;
+        let west = style.tactical() && target.x < home.x;
         let direction = if west {
             CardinalDirection::W
         } else {
@@ -591,10 +596,10 @@ fn plan_frame_with_rally(
                 if factory_count == 0 && can_train("miner") {
                     queue.extend(std::iter::repeat_n(
                         "miner".into(),
-                        if style == Style::Tactical { 12 } else { 2 },
+                        if style.tactical() { 12 } else { 2 },
                     ));
                 }
-                let flags = if style == Style::Tactical && factory_count == 0 {
+                let flags = if style.tactical() && factory_count == 0 {
                     let loop_start = queue.len();
                     for key in ["miner", "miner"] {
                         if can_train(key) {
@@ -670,7 +675,7 @@ fn plan_frame_with_rally(
                 || p.pending_items
                     .iter()
                     .any(|i| i.type_key == "miner" || i.type_key == "constructor");
-            let newborn_order = if style == Style::Tactical
+            let newborn_order = if style.tactical()
                 && matches!(p.stored_order, Order::Construct { .. })
                 && p.active_item
                     .iter()
@@ -681,8 +686,7 @@ fn plan_frame_with_rally(
                 p.stored_order.clone()
             } else if feeding_economy {
                 Order::Mine { area: area.clone() }
-            } else if style == Style::Tactical && matches!(p.stored_order, Order::AttackMove { .. })
-            {
+            } else if style.tactical() && matches!(p.stored_order, Order::AttackMove { .. }) {
                 p.stored_order.clone()
             } else {
                 Order::AttackMove {
@@ -750,8 +754,19 @@ fn plan_frame_with_rally(
             },
         });
     }
-    if style == Style::Tactical {
-        tactical::develop(state, player, rules, home, target, params, &mut commands);
+    if style.tactical() {
+        let enclosure = style == Style::Enclosure
+            && state.tick == 0
+            && config.control_limit != ControlLimit::SingleOrder;
+        tactical::develop(
+            state,
+            player,
+            rules,
+            home,
+            target,
+            (params, enclosure),
+            &mut commands,
+        );
     }
     if config.control_limit == ControlLimit::SingleOrder {
         commands.truncate(1);

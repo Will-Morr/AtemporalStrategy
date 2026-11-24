@@ -86,7 +86,10 @@ fn main() {
             "use --self-play ROUND_CAP BOT_PARAMS_JSON OPPONENT_PARAMS_JSON"
         );
         assert!(args[1].starts_with("seed:"), "self-play requires a seed");
-        assert_eq!(args[2], "tactical", "self-play is Tactical versus Tactical");
+        assert!(
+            matches!(args[2].as_str(), "tactical" | "enclosure"),
+            "self-play expects Tactical or Enclosure versus Tactical"
+        );
         let cap = args[5].parse::<u32>().expect("round cap");
         assert!((1..=1000).contains(&cap), "round cap must be 1..=1000");
         let parse = |profile: &str| {
@@ -98,7 +101,7 @@ fn main() {
     } else {
         assert!(
             (4..=5).contains(&args.len()) && args.get(4).is_none_or(|m| m == "--frozen"),
-            "usage: replay_opponent EXPORT_DIRECTORY|seed:INTEGER tactical|standard 0|1 [--frozen | --self-play ROUND_CAP BOT_PARAMS_JSON OPPONENT_PARAMS_JSON]"
+            "usage: replay_opponent EXPORT_DIRECTORY|seed:INTEGER tactical|enclosure|standard 0|1 [--frozen | --self-play ROUND_CAP BOT_PARAMS_JSON OPPONENT_PARAMS_JSON]"
         );
         ([TacticalParams::default(); 2], 12)
     };
@@ -109,6 +112,7 @@ fn main() {
     let style = match args[2].as_str() {
         "standard" => Style::Standard,
         "tactical" => Style::Tactical,
+        "enclosure" => Style::Enclosure,
         _ => panic!("unknown policy"),
     };
     let yaml = include_str!("../../../config/game.yaml");
@@ -360,6 +364,7 @@ fn main() {
                 "fingerprint": c.fingerprint,
                 "seed": c.config.seed,
                 "candidate_seat": bot,
+                "policy_styles_by_seat": if bot == 0 { [style, Style::Tactical] } else { [Style::Tactical, style] },
                 "policy_fingerprints_by_seat": if bot == 0 {
                     profiles.map(|params| identity::canonical_hash(&params).unwrap())
                 } else {

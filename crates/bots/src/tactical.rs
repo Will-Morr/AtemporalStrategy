@@ -1,6 +1,6 @@
 use super::{
-    FrameRules, OwnEntity, PlayerFrame, PolicyTimeline, TacticalParams, allied, append, distance,
-    ore_at,
+    FrameRules, OwnEntity, PlayerFrame, PolicyTimeline, Style, TacticalParams, allied, append,
+    distance, ore_at,
 };
 use atemporal_contracts::{
     BlueprintSettings, CardinalDirection, Command, ControlLimit, DraftCommand, DraftItemRef,
@@ -166,7 +166,7 @@ pub(super) fn develop(
     rules: FrameRules<'_>,
     home: Tile,
     target: Tile,
-    params: TacticalParams,
+    (params, enclosure): (TacticalParams, bool),
     commands: &mut Vec<DraftCommand>,
 ) {
     let FrameRules {
@@ -262,7 +262,20 @@ pub(super) fn develop(
             }
         }
     }
-    for &(structure, desired, ideal) in EXPANSION {
+    for (index, &(structure, desired, ideal)) in EXPANSION.iter().enumerate() {
+        if index == 3
+            && enclosure
+            && enclosure::extend(
+                state,
+                player,
+                rules,
+                [home, anchor],
+                &factory.recipes,
+                commands,
+            )
+        {
+            break;
+        }
         if u32::from(ideal) > u32::from(terrain.width) * 3 / 4
             || !content.types.iter().any(|d| d.key == structure)
         {
@@ -444,6 +457,7 @@ pub(super) fn develop(
     }
 }
 
+mod enclosure;
 mod intel;
 
 /// Give a new opening time to develop, then intervene before an observed
@@ -523,6 +537,7 @@ pub(super) fn plan(
     view: &PlayerFrame,
     rules: FrameRules<'_>,
     params: TacticalParams,
+    style: Style,
 ) -> TurnDraft {
     let intel = intel::Intel::scan(input, params.fresh_entry_ticks);
     if input.cancelled() {
@@ -536,7 +551,7 @@ pub(super) fn plan(
     let mut draft = super::plan_frame_with_rally(
         view,
         input.player(),
-        super::Style::Tactical,
+        style,
         rules,
         input.revision(),
         rally,

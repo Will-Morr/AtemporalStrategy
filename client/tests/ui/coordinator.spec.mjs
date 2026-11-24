@@ -136,7 +136,7 @@ test('coordinator identities, passwords, parallel games, filters and same-addres
   const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);review.afterClose(server.stop);
   await page.goto(server.url+'lobbies/');await expect(page.locator('#identity')).toBeVisible();await review.capture('coordinator-first-visit-username',page);await identify(page,'Avery <sandbox> with a long unvalidated name');
   await expect(page.locator('#profile')).toContainText('Avery <sandbox>');
-  await page.getByRole('button',{name:'Create game',exact:true}).click();await expect(page.locator('#bot-1 option')).toHaveText(['Human','Tactical 2.1','Standard 1.0']);await page.locator('#bot-1').selectOption('standard');await expect(page.locator('#round-budget-label')).toBeHidden();await review.capture('coordinator-simple-create',page);await page.setViewportSize({width:1366,height:768});await page.locator('#submit-create').scrollIntoViewIfNeeded();await review.capture('coordinator-create-1366',page);await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.setViewportSize({width:1920,height:1080});
+  await page.getByRole('button',{name:'Create game',exact:true}).click();await expect(page.locator('#bot-1 option')).toHaveText(['Human','Tactical 2.1','Standard 1.0','Enclosure']);await page.locator('#bot-1').selectOption('standard');await expect(page.locator('#round-budget-label')).toBeHidden();await review.capture('coordinator-simple-create',page);await page.setViewportSize({width:1366,height:768});await page.locator('#submit-create').scrollIntoViewIfNeeded();await review.capture('coordinator-create-1366',page);await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.setViewportSize({width:1920,height:1080});
   const first=await create(page,'Sandbox one',{password:'casual'});await expect(page).toHaveTitle('Sandbox one — Scoreboard');await expect(page.getByLabel('Username',{exact:true})).toBeHidden();await claim(page);await expect(page.locator('#roster li').filter({hasText:'Slot 0:'})).toContainText('Avery <sandbox> with a long unvalidated name');await page.locator('#roster li').filter({hasText:'Slot 0:'}).getByRole('button',{name:'Release slot',exact:true}).click();await expect(page.locator('#roster li').filter({hasText:'Slot 0:'})).toContainText('open');await claim(page);await expect(page.locator('#roster')).toContainText('Bot · Standard');
   await page.getByRole('button',{name:'Map 3',exact:true}).click();await review.capture('coordinator-human-bot-map-lobby',page);
   await page.getByRole('button',{name:'Start match',exact:true}).click();await revision(page,0);
@@ -233,6 +233,34 @@ test('four bot teams obey single-order limits and advancing hybrid history',asyn
   await expect(card.locator('.replay-scores dt')).toHaveText(round.score.entries.map(entry=>setup.available_teams.find(team=>team.team_id===entry.side_id.team_id).label));
   await expect(card.locator('.replay-scores dd')).toHaveText(round.score.entries.map(entry=>String(entry.adjusted_total)));
   await review.capture('coordinator-bot-team-replay-score',page);
+});
+
+test('Enclosure bot submits a fortified opening with forward production', async ({page,review}, testInfo) => {
+  const server=await isolatedServer(testInfo,()=>{},()=>{},['--coordinator']);
+  review.afterClose(server.stop);
+  await page.goto(server.url+'lobbies/');
+  await identify(page,'Opening reviewer');
+  const url=await create(page,'Enclosure versus Tactical',{all:true,bot:'enclosure',rounds:1,edit:c=>{
+    c.match_defaults.max_tick=1200;
+    c.match_defaults.objective.rules.victory_rule.points=10;
+  }});
+  await expect(page.locator('#roster')).toContainText('Bot · Enclosure');
+  await page.getByRole('button',{name:'Spectate',exact:true}).click();
+  await revision(page,1);
+  const match=await page.evaluate(()=>window.atemporal.net.matchId);
+  const game=new URL(url).pathname.split('/')[2];
+  const turn=JSON.parse(await readFile(`${server.dir}/games/${game}/replays/${match}/turns/1-1.json`,'utf8'));
+  expect(turn.tick).toBe(0);
+  const orders=turn.commands.map(item=>item.command);
+  expect(orders.some(command=>command.kind==='assign_order'&&command.order.kind==='construct')).toBe(true);
+  expect(orders.filter(command=>command.kind==='place_blueprints'&&command.type_key==='turret').length).toBeGreaterThanOrEqual(4);
+  expect(orders.filter(command=>command.kind==='place_blueprints'&&command.type_key==='wall').length).toBeGreaterThanOrEqual(2);
+  expect(orders.filter(command=>command.kind==='configure_blueprints'&&command.settings.order.kind==='attack_move'&&command.settings.queue.includes('artillery')).length).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole('button',{name:'Keep viewing replay'})).toBeVisible();
+  await page.getByRole('button',{name:'Keep viewing replay'}).click();
+  const terminal=await page.evaluate(()=>window.atemporal.rev().outcome.terminal_state_tick);
+  await seek(page,Math.min(1000,terminal));
+  await review.capture('enclosure-bot-forward-production',page);
 });
 
 test('simple win game type can be selected and started',async({page,review},testInfo)=>{

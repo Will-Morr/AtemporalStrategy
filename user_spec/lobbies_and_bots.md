@@ -91,3 +91,5 @@ Tactical should contest a strong opening and recover when its first plan fails. 
 Game results should arrive promptly, including while a release builds. Give live game work priority over deployment builds. Diagnose unusually slow turns against recorded matches.
 
 Pause bot planning when everyone has left a human-versus-bot game and no human commitment is waiting. Resume when a human reconnects. Finish committed rounds and preserve unattended bot-only playtests.
+
+Offer a bot that reproduces the principles of WillM's turret-enclosure opening. It must use normal player information and orders and adapt its construction and army production to different maps.
