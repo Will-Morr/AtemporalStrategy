@@ -24,6 +24,8 @@ pub struct Sim {
     pub state: WorldState,
     pub(crate) legacy_rules: bool,
     pub(crate) reroute_miners: bool,
+    pub(crate) avoid_working_units: bool,
+    pub(crate) team_ore_claims: bool,
     pub(crate) alternate_treads: bool,
     pub(crate) breach_enemy_structures: bool,
     pub(crate) reserve_factory_outputs: bool,
@@ -136,6 +138,8 @@ impl Sim {
         let mut sim = Self {
             legacy_rules,
             reroute_miners: rules_at_least(build, 15),
+            avoid_working_units: rules_at_least(build, 16),
+            team_ore_claims: rules_at_least(build, 16),
             breach_enemy_structures: rules_at_least(build, 13),
             reserve_factory_outputs: rules_at_least(build, 14),
             fire_through_walls: rules_at_least(build, 14),

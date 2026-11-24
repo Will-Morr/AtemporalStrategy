@@ -75,7 +75,7 @@ test('rejected checked commit saves exact checker evidence without disclosing it
   expect(record.checker.draft.commands[0].local_id).toBe(record.checker.draft.commands[1].local_id);
   expect(record.state).toEqual(await player.evaluate(() => window.atemporal.exact.state));
   expect(record.config.max_tick).toBe(150);
-  expect(record.checker.fingerprint.sim_build).toContain('rules 15');
+  expect(record.checker.fingerprint.sim_build).toContain('rules 16');
   expect(raw.includes(secret)).toBe(false);
   expect(raw.includes('slot_token')).toBe(false);
   expect(await player.evaluate(raw => raw.includes(window.atemporal.session.token), raw)).toBe(false);

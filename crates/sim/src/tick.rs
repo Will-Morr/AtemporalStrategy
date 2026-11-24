@@ -17,7 +17,16 @@ struct Intent {
     goal: Option<(Tile, bool)>,
     retreat: Option<(Tile, Tile)>,
     work_goal: bool,
+    work_seat: Option<Tile>,
     hold: bool,
+    work_anchor: Option<Tile>,
+}
+
+impl Intent {
+    fn route_destination(&self, goal: Tile) -> (Tile, bool) {
+        self.work_seat
+            .map_or((goal, self.work_goal), |seat| (seat, false))
+    }
 }
 
 /// Results of the serial field-touching prepass, consumed by the read-only intent pass.
@@ -25,6 +34,7 @@ struct Intent {
 struct Prep {
     ore: Option<Tile>,
     blueprint: Option<usize>,
+    work_seat: Option<Tile>,
 }
 
 /// Shared by the mining orders in one tick, before any ore is consumed.
@@ -202,6 +212,11 @@ impl Sim {
         self.index_claims();
         let mut prep: Vec<Prep> = Vec::with_capacity(n);
         let mut ore_search = OreSearch::default();
+        let mut work_seats = if self.avoid_working_units && !self.state.blueprints.is_empty() {
+            vec![false; self.team_cells()]
+        } else {
+            Vec::new()
+        };
         for i in 0..n {
             let e = &self.state.entities[i];
             let mut p = Prep::default();
@@ -232,7 +247,7 @@ impl Sim {
                         p.ore = Some(*target);
                     }
                     if let Some(old) = self.state.entities[i].resolved_destination {
-                        let at = self.idx(old);
+                        let at = self.claim_index(old, i);
                         if Some(old) != p.ore && self.claims[at] == i as u32 {
                             self.claims[at] = NONE;
                         }
@@ -250,13 +265,33 @@ impl Sim {
                         self.state.entities[i].resolved_destination = None;
                     }
                     if let Some(target) = p.ore {
-                        let at = self.idx(target);
+                        let at = self.claim_index(target, i);
                         self.claims[at] = i as u32;
                     }
                 }
                 Order::Construct { area } if def.construction.is_some() => {
                     let area = area.clone();
-                    p.blueprint = self.choose_blueprint(i, &area);
+                    if (!self.avoid_working_units || e.priority != Priority::Off)
+                        && let Some((blueprint, seat)) =
+                            self.choose_blueprint(i, &area, &work_seats)
+                    {
+                        p.blueprint = Some(blueprint);
+                        p.work_seat = seat;
+                        if let Some(seat) = seat {
+                            work_seats[self.team_cell_index(seat, i)] = true;
+                        }
+                    }
+                    if self.avoid_working_units {
+                        let target = p.blueprint.map(|b| self.state.blueprints[b].tile);
+                        let entity = &mut self.state.entities[i];
+                        if entity.resolved_destination != target {
+                            entity.resolved_destination = target;
+                            entity.local_detour.clear();
+                            entity.goal_settled = false;
+                            entity.failed_move_attempts = 0;
+                            entity.blocked_step = None;
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -451,6 +486,7 @@ impl Sim {
                     if self.mines_here(i) {
                         intent.hold = true;
                         intent.mine = ready;
+                        intent.work_anchor = Some(e.tile);
                     } else if let Some(goal) = prep.ore {
                         intent.goal = Some((goal, false));
                     }
@@ -460,12 +496,16 @@ impl Sim {
                         let target = self.state.blueprints[b].tile;
                         if chebyshev(e.tile, target) == 1 {
                             intent.hold = true;
+                            if e.priority != Priority::Off {
+                                intent.work_anchor = Some(target);
+                            }
                             if ready {
                                 intent.construct = Some(b);
                             }
                         } else {
                             intent.goal = Some((target, true));
                             intent.work_goal = true;
+                            intent.work_seat = prep.work_seat;
                         }
                     }
                 }
@@ -489,8 +529,13 @@ impl Sim {
     /// Each mining unit claims the ore tile it is heading for, or the one it stands on; the
     /// lowest entity index wins a contested tile, so later miners target elsewhere.
     fn index_claims(&mut self) {
+        let size = if self.team_ore_claims {
+            self.team_cells()
+        } else {
+            self.cells()
+        };
         self.claims.clear();
-        self.claims.resize(self.cells(), NONE);
+        self.claims.resize(size, NONE);
         for i in 0..self.state.entities.len() {
             let e = &self.state.entities[i];
             let Order::Mine { area } = &e.action else {
@@ -504,7 +549,7 @@ impl Sim {
             let current_ore = ore_in(e.tile).then_some(e.tile);
             let target = destination.or(current_ore);
             if let Some(t) = target {
-                let at = self.idx(t);
+                let at = self.claim_index(t, i);
                 // A worker at its destination has precedence over a worker still travelling
                 // there. A worker passing through keeps its claim farther along the route.
                 if self.claims[at] == NONE || (self.reroute_miners && t == e.tile) {
@@ -514,8 +559,25 @@ impl Sim {
         }
     }
 
+    fn team_cells(&self) -> usize {
+        (usize::from(self.team_of.iter().copied().max().unwrap_or(0)) + 1) * self.cells()
+    }
+
+    fn team_cell_index(&self, tile: Tile, unit: usize) -> usize {
+        let team = usize::from(self.team_of[usize::from(self.state.entities[unit].owner)]);
+        self.idx(tile) + team * self.cells()
+    }
+
+    fn claim_index(&self, tile: Tile, miner: usize) -> usize {
+        if self.team_ore_claims {
+            self.team_cell_index(tile, miner)
+        } else {
+            self.idx(tile)
+        }
+    }
+
     fn claimed_by_other(&self, t: Tile, i: usize) -> bool {
-        let c = self.claims[self.idx(t)];
+        let c = self.claims[self.claim_index(t, i)];
         c != NONE && c != i as u32
     }
 
@@ -544,6 +606,14 @@ impl Sim {
                 && sim.state.ore[sim.idx(t)] > 0.0
                 && sim.traversable(t)
                 && !sim.claimed_by_other(t, i)
+                && (!sim.team_ore_claims
+                    || sim
+                        .state
+                        .entities
+                        .get(sim.occ[sim.idx(t)] as usize)
+                        .is_none_or(|occupant| {
+                            !sim.hostile(sim.state.entities[i].owner, occupant.owner)
+                        }))
         };
         if valid(self, from) {
             return Some(from);
@@ -668,7 +738,12 @@ impl Sim {
     }
 
     /// Nearest reachable working position; equal paths use creation precedence then identity.
-    fn choose_blueprint(&mut self, i: usize, area: &Rect) -> Option<usize> {
+    fn choose_blueprint(
+        &mut self,
+        i: usize,
+        area: &Rect,
+        work_seats: &[bool],
+    ) -> Option<(usize, Option<Tile>)> {
         let e = &self.state.entities[i];
         let (owner, from) = (e.owner, e.tile);
         let neighbors = self
@@ -697,26 +772,41 @@ impl Sim {
         let mut distances = None;
         let mut best = None;
         for (b, tile, started, precedence, id) in candidates {
-            if !started && self.occ[self.idx(tile)] != NONE {
+            let occupant = self.occ[self.idx(tile)];
+            if !started && occupant != NONE && !(self.avoid_working_units && occupant == i as u32) {
                 continue;
             }
-            let distances = distances.get_or_insert_with(|| self.field(from, neighbors));
-            let distance = DIRS
-                .iter()
-                .filter_map(|(dx, dy, _)| self.offset(tile, *dx, *dy))
-                .filter(|t| self.traversable(*t))
-                .map(|t| distances[self.idx(t)])
-                .min()
-                .unwrap_or(UNREACHABLE);
-            if distance == UNREACHABLE {
-                continue;
+            let mut best_seat = None;
+            for (dx, dy, _) in DIRS {
+                let Some(seat) = self.offset(tile, dx, dy) else {
+                    continue;
+                };
+                let at = self.idx(seat);
+                if !self.traversable(seat)
+                    || (self.avoid_working_units
+                        && seat != from
+                        && (work_seats[self.team_cell_index(seat, i)] || self.occ[at] != NONE))
+                {
+                    continue;
+                }
+                let distances = distances.get_or_insert_with(|| self.field(from, neighbors));
+                let distance = distances[at];
+                if distance == UNREACHABLE {
+                    continue;
+                }
+                let candidate = (distance, seat);
+                if best_seat.is_none_or(|old| candidate < old) {
+                    best_seat = Some(candidate);
+                }
             }
-            let candidate = (distance, precedence, id, b);
-            if best.as_ref().is_none_or(|old| &candidate < old) {
-                best = Some(candidate);
+            if let Some((distance, seat)) = best_seat {
+                let candidate = (distance, precedence, id, b, seat);
+                if best.as_ref().is_none_or(|old| &candidate < old) {
+                    best = Some(candidate);
+                }
             }
         }
-        best.map(|(_, _, _, b)| b)
+        best.map(|(_, _, _, b, seat)| (b, self.avoid_working_units.then_some(seat)))
     }
 
     fn mining(&mut self, intents: &[Intent]) {
@@ -1164,7 +1254,8 @@ impl Sim {
                 continue;
             };
             let ready = e.next_move_tick <= t;
-            let needs_exact_ore = self.reroute_miners && matches!(e.action, Order::Mine { .. });
+            let needs_exact_work = intent.work_seat.is_some()
+                || (self.reroute_miners && matches!(e.action, Order::Mine { .. }));
             if self.state.entities[i].resolved_destination != Some(goal) {
                 self.state.entities[i].local_detour.clear();
             }
@@ -1176,7 +1267,7 @@ impl Sim {
                 );
                 if dx.abs() <= 1
                     && dy.abs() <= 1
-                    && (!needs_exact_ore || next != from)
+                    && (!needs_exact_work || next != from)
                     && self.step_legal(from, dx, dy, m.neighbors).is_some()
                 {
                     if ready {
@@ -1186,7 +1277,8 @@ impl Sim {
                 }
                 self.state.entities[i].local_detour.clear();
             }
-            let field = self.movement_field(i, goal, m.neighbors, intent.work_goal);
+            let (route, adjacent) = intent.route_destination(goal);
+            let field = self.movement_field(i, route, m.neighbors, adjacent);
             let here = field[self.idx(from)];
             if here == 0 {
                 self.state.entities[i].goal_settled = true;
@@ -1194,7 +1286,7 @@ impl Sim {
             }
             match self.descend(&field, from, i, m.neighbors) {
                 Some((to, _, Occupancy::Settled))
-                    if self.settled_same_goal(to, i) && !needs_exact_ore =>
+                    if self.settled_same_goal(to, i) && !needs_exact_work =>
                 {
                     // Every lower exit holds a settled same-goal ally: try one bounded local
                     // detour around the cluster, otherwise settle behind it. Settlement is
@@ -1251,15 +1343,16 @@ impl Sim {
                 continue;
             }
             let from = self.state.entities[i].tile;
+            let intent = &intents[i];
             let cooldown = self.def(i).movement.as_ref().unwrap().cooldown;
             let cross = crossing(from, to);
             if cross.is_some_and(|c| diagonals.contains(&c)) {
-                self.fail_move(i, to, intents[i].work_goal);
+                self.fail_move(i, to, intent);
                 continue;
             }
             let o = self.occ[self.idx(to)];
             if o == RESERVED {
-                self.fail_move(i, to, intents[i].work_goal);
+                self.fail_move(i, to, intent);
                 continue;
             }
             if o == NONE {
@@ -1275,29 +1368,48 @@ impl Sim {
             let blocker = &self.state.entities[o];
             let mover = &self.state.entities[i];
             let mining_here = intents[o].hold && matches!(blocker.action, Order::Mine { .. });
+            let work_anchor = self
+                .avoid_working_units
+                .then_some(intents[o].work_anchor)
+                .flatten();
             let can_yield = blocker.lifecycle == Lifecycle::Complete
                 && self.def(o).movement.is_some()
                 && !self.hostile(mover.owner, blocker.owner)
                 && !touched[o]
                 && blocker.born_at_tick.is_none_or(|b| b < t);
             if !can_yield {
-                self.fail_move(i, to, intents[i].work_goal);
+                self.fail_move(i, to, intent);
                 continue;
             }
             if self.settled_same_goal(to, i)
                 && !(self.reroute_miners && matches!(mover.action, Order::Mine { .. }))
+                && intent.work_seat.is_none()
             {
                 // Settled same-goal ally: wait behind it instead of perpetual displacement.
                 self.state.entities[i].goal_settled = true;
                 self.state.entities[i].local_detour.clear();
                 continue;
             }
-            if (blocker.goal_settled || mining_here) && !self.transits(i, to, intents[i].work_goal)
+            if work_anchor.is_some()
+                && let Some(goal) = mover.resolved_destination
+            {
+                let neighbors = self.def(i).movement.as_ref().unwrap().neighbors;
+                let (route, adjacent) = intent.route_destination(goal);
+                let field = self.movement_field(i, route, neighbors, adjacent);
+                let detour = self.local_detour(&field, from, neighbors);
+                if !detour.is_empty() {
+                    self.state.entities[i].local_detour = detour;
+                    continue;
+                }
+            }
+            let blocker = &self.state.entities[o];
+            if (blocker.goal_settled || mining_here || work_anchor.is_some())
+                && !self.transits(i, to, intent)
             {
                 // A settled ally or a miner holding its claimed ore tile yields only to traffic
                 // passing through, never to a mover that would rest on its cell; otherwise two
                 // goals contend for one cell forever.
-                self.fail_move(i, to, intents[i].work_goal);
+                self.fail_move(i, to, intent);
                 continue;
             }
             let b_neighbors = self.def(o).movement.as_ref().unwrap().neighbors;
@@ -1313,6 +1425,7 @@ impl Sim {
                 let j = (seed.rotate_left((k * 7) as u32) % (k as u64 + 1)) as usize;
                 order.swap(k, j);
             }
+            let construct_anchor = work_anchor.filter(|anchor| *anchor != to);
             let mut placed: Option<(Tile, Direction)> = None;
             for k in order {
                 let (dx, dy, d) = DIRS[k];
@@ -1321,11 +1434,22 @@ impl Sim {
                     && self.occ[self.idx(nt)] == NONE
                     && crossing(to, nt).is_none_or(|c| !diagonals.contains(&c))
                 {
-                    placed = Some((nt, d));
-                    break;
+                    placed.get_or_insert((nt, d));
+                    if construct_anchor.is_none_or(|anchor| chebyshev(nt, anchor) == 1) {
+                        placed = Some((nt, d));
+                        break;
+                    }
                 }
             }
-            if placed.is_none() {
+            if placed.is_none()
+                // Swapping is preferable to moving a miner farther along a narrow lane where
+                // the same traffic would immediately need to push it again.
+                || (work_anchor == Some(to) && placed.is_some_and(|(_, direction)| direction == dir))
+                || construct_anchor.is_some_and(|anchor| {
+                    chebyshev(from, anchor) == 1
+                        && placed.is_some_and(|(tile, _)| chebyshev(tile, anchor) != 1)
+                })
+            {
                 let (dx, dy) = (
                     i32::from(from.x) - i32::from(to.x),
                     i32::from(from.y) - i32::from(to.y),
@@ -1335,7 +1459,7 @@ impl Sim {
                 }
             }
             let Some((bt, bd)) = placed else {
-                self.fail_move(i, to, intents[i].work_goal);
+                self.fail_move(i, to, intent);
                 continue;
             };
             // Apply both moves atomically: vacate, then place mover and blocker.
@@ -1389,7 +1513,7 @@ impl Sim {
     }
 
     /// After stepping onto `to`, the mover could keep descending into a free or yielding cell.
-    fn transits(&mut self, mover: usize, to: Tile, work_goal: bool) -> bool {
+    fn transits(&mut self, mover: usize, to: Tile, intent: &Intent) -> bool {
         let entity = &self.state.entities[mover];
         let Some(goal) = entity.resolved_destination else {
             return false;
@@ -1403,7 +1527,8 @@ impl Sim {
             return true;
         }
         let neighbors = self.def(mover).movement.as_ref().unwrap().neighbors;
-        let field = self.movement_field(mover, goal, neighbors, work_goal);
+        let (route, adjacent) = intent.route_destination(goal);
+        let field = self.movement_field(mover, route, neighbors, adjacent);
         matches!(
             self.descend(&field, to, mover, neighbors),
             Some((_, _, Occupancy::Free | Occupancy::Yielding))
@@ -1445,7 +1570,7 @@ impl Sim {
         self.note(owner, Activity::Movement);
     }
 
-    fn fail_move(&mut self, i: usize, to: Tile, work_goal: bool) {
+    fn fail_move(&mut self, i: usize, to: Tile, intent: &Intent) {
         let t = self.state.tick;
         let goal = self.state.entities[i].resolved_destination;
         {
@@ -1458,7 +1583,8 @@ impl Sim {
             && let Some(goal) = goal
         {
             let neighbors = self.def(i).movement.as_ref().unwrap().neighbors;
-            let field = self.movement_field(i, goal, neighbors, work_goal);
+            let (route, adjacent) = intent.route_destination(goal);
+            let field = self.movement_field(i, route, neighbors, adjacent);
             let from = self.state.entities[i].tile;
             let detour = self.local_detour(&field, from, neighbors);
             let e = &mut self.state.entities[i];

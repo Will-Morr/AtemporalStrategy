@@ -1102,7 +1102,7 @@ mod tests {
         let content = load_content(include_str!("../../../config/content.yaml")).unwrap();
         let initial = atemporal_sim::map::generate(&config, &content).unwrap();
         let local = fingerprint(&config, &content).unwrap();
-        for rules in [7, 9, 10, 11, 12, 13, 14, RULES_VERSION] {
+        for rules in [7, 9, 10, 11, 12, 13, 14, 15, RULES_VERSION] {
             let mut remote = local.clone();
             remote.sim_build = format!("atemporal-sim 0.1.0 rules {rules}");
             let store = Store::new(

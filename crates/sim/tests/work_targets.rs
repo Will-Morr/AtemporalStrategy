@@ -84,6 +84,193 @@ fn miners_skip_unreachable_ore_and_claim_distinct_reachable_tiles() {
 }
 
 #[test]
+fn a_newborn_miner_can_work_ore_claimed_from_afar_by_an_enemy() {
+    let mut w = World::new(&["............"; 6]);
+    let deposit = tile(4, 2);
+    w.ore(deposit, 100.0);
+    let order = Order::Mine {
+        area: rect(4, 2, 4, 2),
+    };
+    let factory = w.spawn(0, "factory", 1, 2);
+    w.bank(0, 30.0);
+    w.turn(
+        1,
+        0,
+        0,
+        vec![
+            Command::SetStoredOrder {
+                factories: vec![factory.clone()],
+                order: order.clone(),
+            },
+            Command::EditProduction {
+                factories: vec![factory],
+                edit: ProductionEdit::Append {
+                    items: vec!["miner".into()],
+                },
+            },
+        ],
+    );
+    let enemy = w.spawn_with(1, "miner", 11, 2, order);
+    let remote = w.entity_mut(&enemy);
+    remote.resolved_destination = Some(deposit);
+    remote.next_move_tick = 200;
+
+    let mut previous = w.request();
+    previous.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 15".into();
+    let old = reconstruct(&previous, 35).unwrap();
+    let newborn = old
+        .entities
+        .iter()
+        .find(|e| e.owner == 0 && e.type_key == "miner")
+        .unwrap();
+    assert_eq!(newborn.tile, tile(2, 2));
+    assert_eq!(newborn.resolved_destination, None);
+    let now = w.at(35);
+    assert!(now.players[0].counters.mined > 0.0);
+    assert_eq!(entity(&now, &newborn.id).tile, deposit);
+    assert_eq!(entity(&now, &enemy).tile, tile(11, 2));
+}
+
+#[test]
+fn a_constructor_group_uses_available_work_positions_at_multiple_sites() {
+    let mut w = World::new(&[
+        "###############",
+        "#.............#",
+        "#####.###.#####",
+        "###############",
+    ]);
+    let builders: Vec<_> = [1, 2, 3, 4, 5, 6]
+        .into_iter()
+        .map(|x| {
+            w.spawn_with(
+                0,
+                "constructor",
+                x,
+                1,
+                Order::Construct {
+                    area: rect(5, 2, 9, 2),
+                },
+            )
+        })
+        .collect();
+    let near = w.site(0, "turret", 5, 2, 1.0);
+    let far = w.site(0, "turret", 9, 2, 1.0);
+    let off = w.spawn_with(
+        0,
+        "constructor",
+        13,
+        1,
+        Order::Construct {
+            area: rect(5, 2, 9, 2),
+        },
+    );
+    w.entity_mut(&off).priority = Priority::Off;
+    w.bank(0, 1000.0);
+    let mut previous = w.request();
+    previous.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 15".into();
+    let old = reconstruct(&previous, 1).unwrap();
+    assert!(
+        builders
+            .iter()
+            .all(|id| entity(&old, id).resolved_destination != Some(tile(9, 2)))
+    );
+
+    let started = w.at(1);
+    assert_eq!(entity(&started, &off).resolved_destination, None);
+    assert_eq!(
+        builders
+            .iter()
+            .filter(|id| entity(&started, id).resolved_destination == Some(tile(9, 2)))
+            .count(),
+        3
+    );
+    let complete = w.at(60);
+    assert_eq!(entity(&complete, &near).lifecycle, Lifecycle::Complete);
+    assert_eq!(entity(&complete, &far).lifecycle, Lifecycle::Complete);
+    assert_checkpoint_equivalence(&w, &w.run());
+}
+
+#[test]
+fn traffic_paths_around_a_working_miner_when_there_is_room() {
+    let mut w = World::new(&["........"; 6]);
+    let deposit = tile(3, 2);
+    let worker = w.spawn_with(
+        0,
+        "miner",
+        3,
+        2,
+        Order::Mine {
+            area: rect(3, 2, 3, 2),
+        },
+    );
+    let moving = w.spawn_with(0, "miner", 2, 2, attack_move(6, 2));
+    w.ore(deposit, 1000.0);
+    let mut previous = w.request();
+    previous.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 15".into();
+    assert_ne!(
+        entity(&reconstruct(&previous, 1).unwrap(), &worker).tile,
+        deposit
+    );
+
+    let through = w.at(20);
+    assert_eq!(entity(&through, &moving).tile, tile(6, 2));
+    assert_eq!(entity(&through, &worker).tile, deposit);
+    assert_eq!(through.players[0].counters.mined, 40.0);
+    assert_checkpoint_equivalence(&w, &w.run());
+}
+
+#[test]
+fn traffic_leaves_a_constructor_at_work_when_another_route_exists() {
+    let mut w = World::new(&["........"; 6]);
+    let work_position = tile(3, 2);
+    let worker = w.spawn_with(
+        0,
+        "constructor",
+        3,
+        2,
+        Order::Construct {
+            area: rect(3, 1, 3, 1),
+        },
+    );
+    let site = w.site(0, "turret", 3, 1, 1.0);
+    let moving = w.spawn_with(0, "miner", 2, 2, attack_move(6, 2));
+    w.bank(0, 40.0);
+    let mut previous = w.request();
+    previous.fingerprint.sim_build = "atemporal-sim 0.1.0 rules 15".into();
+    assert_ne!(
+        entity(&reconstruct(&previous, 1).unwrap(), &worker).tile,
+        work_position
+    );
+
+    let through = w.at(20);
+    assert_eq!(entity(&through, &moving).tile, tile(6, 2));
+    assert_eq!(entity(&through, &worker).tile, work_position);
+    assert_eq!(entity(&through, &site).paid_matter, 41.0);
+}
+
+#[test]
+fn traffic_can_pass_a_worker_when_the_only_route_is_through_it() {
+    let mut w = World::new(&["########", "#......#", "########"]);
+    let deposit = tile(3, 1);
+    let worker = w.spawn_with(
+        0,
+        "miner",
+        3,
+        1,
+        Order::Mine {
+            area: rect(3, 1, 3, 1),
+        },
+    );
+    let moving = w.spawn_with(0, "miner", 2, 1, attack_move(6, 1));
+    w.ore(deposit, 1000.0);
+
+    let through = w.at(20);
+    assert_eq!(entity(&through, &moving).tile, tile(6, 1));
+    assert_eq!(entity(&through, &worker).tile, deposit);
+    assert!(through.players[0].counters.mined > 0.0);
+}
+
+#[test]
 fn constructors_choose_shortest_working_route_for_funded_and_unfunded_sites() {
     for funded in [false, true] {
         for neighbors in [Neighbors::Four, Neighbors::Eight] {
