@@ -22,6 +22,30 @@ Replay cards show the total published rounds after the opening and the cumulativ
 
 The selectable **Enclosure** bot applies a hand-written opening based on three human games. It starts the economy and constructor production near home, then uses public terrain to put turrets, walls and mixed-unit factories along two approaches. It reserves a travel corridor and factory output tiles, and the forward factories send artillery, tanks and other combat units toward the public opposing start. Its silo can send recon before Tactical's later scouting-based decisions. It falls back to Tactical's normal development when it cannot place enough forward factories or the match uses single-order turns. Quick play continues to use Tactical.
 
+The three source openings planned 9–10 factories, 15–24 turrets and 6–14
+wall pieces. They each used a home miner factory and a separate constructor
+factory. The newest sent artillery and tanks from both approaches and won
+all three rounds. Its first revision already gave the initial constructor
+an explicit tick-zero build order. The other two first revisions omitted
+that order and lost their opening round. Later successful revisions added
+construction coverage.
+
+Rules 16 self-play against Tactical used the normal 200 starting matter,
+48 × 48 maps, and a three-round test budget. Every submitted draft passed
+validation. The scores are in Enclosure–Tactical order.
+
+| Seed | Enclosure seat | Score after three rounds | Winning ticks |
+| --- | --- | --- | --- |
+| 42 | 0 | 1–0 | 1,738 |
+| 211 | 1 | 1–0 | 2,257 |
+| 907 | 0 | 2–0 | 2,447 and 1,434 |
+
+None reached the match's three-point target within the test budget. At the
+first round's tick cap on seed 42, Enclosure still had nine factories,
+14 turrets, seven walls, 41 artillery and 18 tanks. Tactical had one
+factory. That round remained a stalemate. Local match JSON and per-round
+construction traces are under `artifacts/enclosure-eval/`.
+
 Bots choose a tick and submit an ordinary draft. The controller checks references and validates orders against the exact simulation state before committing. Both the live worker and the replay evaluator give the strategy the same published player timeline. Human/bot games wait for each human commitment; bot-only playtests start automatically and have an explicit configurable round budget to bound unattended work. Standard maintains three miners and a constructor, adds a second factory when the economy can support it, builds a defensive turret against visible nearby threats, and redirects its army. Utility production is non-looping; combat production loops. It can rewind before its published elimination instead of progressing beyond a dead base. The lobby selector preserves Standard 1.0 under its existing serialized name. Tactical 2.1 opens a dedicated combat factory, finances it with miners and establishes a separate missile silo. See the [balance analysis](balance-analysis.md) for recorded replay and simulation results.
 
 Tactical scans the published replay for enemy units moving out of fog. It follows their observed direction back across passable terrain and counts distinct units whose routes point to the same area. Two units can justify sending troops to investigate even long after contact. An inferred missile target needs at least three units arriving through crossings at least three tiles apart within the last 600 ticks of the published replay. Tactical assigns at most one missile to that inferred area in the draft. A factory seen directly, even briefly by recon, gives Tactical a stronger target. Seeing the site empty clears that memory. Nearby armed threats take priority for troop orders, and the missile planner checks the blast area for friendly units visible at the chosen order tick.
