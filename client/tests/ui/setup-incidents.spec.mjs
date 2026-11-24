@@ -45,6 +45,8 @@ test('early setup exception saves a sanitized diagnosis and reload restores the 
   expect(saved).toBe(true);
   expect(report_id).toMatch(/^client-[a-f0-9]{24}$/);
   await expect(page.locator('#connection')).toContainText(`Diagnostic report saved (${report_id})`);
+  await expect(page.locator('#connection')).toContainText('The game directory could not update a missing page element.');
+  await expect(page.locator('#status')).toHaveText('Connection setup failed.');
   const raw = await readFile(join(root,`${report_id}.json`),'utf8');
   const record = JSON.parse(raw);
   expect(record.game_id).toBe(id);
@@ -85,5 +87,6 @@ test('setup failure claims a saved report only after a confirmed response', asyn
   });
   await page.goto(server.url);
   await expect(page.locator('#connection')).toContainText('The diagnostic report could not be saved.');
+  await expect(page.locator('#connection')).toContainText('The game page could not find a required page control.');
   await review.capture('connection-setup-report-unconfirmed',page);
 });

@@ -9,7 +9,7 @@ export class MissingSetupElement extends Error {
   }
 }
 
-function details(error: unknown) {
+export function setupErrorDetails(error: unknown) {
   const name = error instanceof Error ? error.name : '';
   const category = name === 'TypeError' ? 'type' : name === 'ReferenceError' ? 'reference'
     : name === 'RangeError' ? 'range' : name === 'SyntaxError' ? 'syntax' : name === 'Error' ? 'error' : 'other';
@@ -41,8 +41,30 @@ function details(error: unknown) {
   return {category, reason, operation, frames};
 }
 
+type Details = ReturnType<typeof setupErrorDetails>;
+
+export function setupFailureDescription(stage: SetupStage, details: Details): string {
+  const replay = location.pathname.includes('/replays/');
+  const subject: Record<SetupStage, string> = {
+    environment: 'The game page',
+    directory: replay ? 'The replay directory' : 'The game directory',
+    socket: 'The game connection',
+    welcome: 'The initial server handshake',
+    lobby: replay ? 'The replay lobby' : 'The game lobby',
+    game: replay ? 'The replay view' : 'The battlefield view',
+  };
+  const reason: Record<Details['reason'], string> = {
+    missing_ui: 'could not find a required page control',
+    null_access: details.operation === 'set_attribute' ? 'could not update a missing page element' : 'tried to read or update a missing value',
+    undefined_access: 'tried to read or update an unavailable value',
+    invalid_json: 'received data it could not read',
+    unclassified: 'encountered an unexpected error',
+  };
+  return `${subject[stage]} ${reason[details.reason]}.`;
+}
+
 export async function reportSetupError(
-  error: unknown, stage: SetupStage, isPractice: boolean, round: number | null, revision: number | null,
+  details: Details, stage: SetupStage, isPractice: boolean, round: number | null, revision: number | null,
 ): Promise<string | null> {
   const match = /^\/games\/([\w-]+)(?:\/replays\/([\w-]+))?\/?$/.exec(location.pathname);
   const view: View = isPractice ? 'practice' : match?.[2] ? 'replay' : match ? 'game' : 'standalone';
@@ -51,7 +73,7 @@ export async function reportSetupError(
     const response = await fetch(`${root}/client-incidents`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({stage, view, ...details(error), round, revision}),
+      body: JSON.stringify({stage, view, ...details, round, revision}),
       referrerPolicy: 'no-referrer',
       signal: AbortSignal.timeout(5000),
     });

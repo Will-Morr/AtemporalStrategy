@@ -3,7 +3,7 @@ import { DisconnectedError, Net, RequestTimeoutError } from './net';
 import { runLobby, type Session } from './lobby';
 import { Game } from './game';
 import { tabToken, rememberPlayer, slotStorageKey, setFingerprint } from './session';
-import { MissingSetupElement, reportSetupError, type SetupStage } from './setup-incident';
+import { MissingSetupElement, reportSetupError, setupErrorDetails, setupFailureDescription, type SetupStage } from './setup-incident';
 
 const status = document.getElementById('status') as HTMLParagraphElement;
 const controls = document.getElementById('top-controls')!;
@@ -15,7 +15,7 @@ let welcomed = false;
 let setupStage: SetupStage | null = 'environment';
 let setupFailed = false;
 let disconnectNotice: number | undefined;
-const connection = document.createElement('div'); connection.id = 'connection'; document.body.append(connection);
+const connection = document.createElement('div'); connection.id = 'connection'; connection.setAttribute('role', 'status'); document.body.append(connection);
 const showConnection = (message: string) => {
   connection.replaceChildren(document.createTextNode(message));
   const reload = document.createElement('button'); reload.textContent = 'Reload current server'; reload.onclick = () => location.reload(); connection.append(reload);
@@ -125,15 +125,19 @@ async function boot(): Promise<void> {
 async function setupError(error: unknown): Promise<void> {
   if (!setupStage || setupFailed) return;
   if (error instanceof DisconnectedError || error instanceof RequestTimeoutError) {
+    if (status) status.textContent = 'Disconnected.';
     showConnection(practice ? 'Practice replay unavailable. Return to the recording and try again.' : 'Cannot reach the game server. Reload to try again.');
     return;
   }
   setupFailed = true;
   stale = true;
   net.disconnect();
-  showConnection('Connection setup failed. Saving a diagnostic report…');
-  const id = await reportSetupError(error, setupStage, !!practice, game?.round ?? null, game && game.current >= 0 ? game.current : null);
-  showConnection(id ? `Connection setup failed. Diagnostic report saved (${id}).` : 'Connection setup failed. The diagnostic report could not be saved.');
+  if (status) status.textContent = 'Connection setup failed.';
+  const details = setupErrorDetails(error);
+  const description = setupFailureDescription(setupStage, details);
+  showConnection(`${description} Saving a diagnostic report…`);
+  const id = await reportSetupError(details, setupStage, !!practice, game?.round ?? null, game && game.current >= 0 ? game.current : null);
+  showConnection(`${description} ${id ? `Diagnostic report saved (${id}).` : 'The diagnostic report could not be saved.'}`);
 }
 
 window.addEventListener('error', event => {
