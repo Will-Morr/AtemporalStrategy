@@ -218,9 +218,17 @@ The hosted supervisor and workers originally ran at nice 10, as did release buil
 
 The recorded 48×48 human-versus-Tactical game used rules 15. Exact replay of the accepted orders reproduced the worker traffic independently of the browser. Three observations isolate different causes.
 
-- The opening miner was displaced from its active ore tile at (1, 11) to (2, 11) by friendly traffic at ticks 84, 127, 151, 157 and 174. At tick 202 a constructor was displaced from (4, 8) to (3, 9) by another constructor while approaching the same work cluster. Nearby constructors repeatedly displaced one another during the next 25 ticks.
+- The opening miner was displaced from its active ore tile at (1, 11) to (2, 11) by friendly traffic at ticks 84, 127, 151, 157 and 174. At tick 202 a constructor at a position adjacent to its site was displaced from (4, 8) to (3, 9) by another constructor. Nearby constructors repeatedly displaced one another during the next 25 ticks.
 - At tick 840 of revision 1, 40 constructors targeted the factory at (5, 36). At tick 1,000, all eight adjacent positions had a constructor in range, the factory was still a low-priority site with 193.45 matter paid, and the bank was empty. At tick 5,000, 38 constructors still targeted it. Payment had risen to 193.60 and stayed there through tick 20,000. These observations distinguish the excess workers converging on a saturated site from the site's funding stall.
 - In revision 6, five miners spawned between ticks 787 and 859 with the inherited full-map Mine order. At tick 800 the first miner, at (2, 22), had a static route to all 40 positive ore tiles. Rules 15 had already assigned every tile a claim. Four empty deposits at (1–4, 28) were claimed by opposing miners at (18, 38), (38, 39), (40, 39) and (38, 41). At tick 1,000 the five new miners still had no resolved destination. All 21 remaining deposits had prior claims. The immediate obstacle was target selection before movement.
+
+Continuing from the saved revision 6 checkpoint at tick 900, the same five miners acquired distinct deposits and moved within five ticks under rules 16. Three were on ore and had mined from their deposits by tick 964. Under rules 15 all five remained in the same positions without a target at tick 964. From the saved revision 1 checkpoint at tick 800, the two busiest sites had 25 and 13 assigned constructors in rules 15. Five ticks later those counts were unchanged. In rules 16 the busiest two sites each had eight and others had workers assigned.
+
+Over the first 500 ticks of revision 6, traced from the opening with the accepted orders, displacements of human miners standing on their resolved ore tile fell from 58 to 11. The opening miner's count fell from seven to zero. Human constructors pushed out of range of their resolved site fell from 200 to 22. The full timelines diverge under the new rules. The saved-checkpoint continuations test the fixes with the same starting positions and orders.
+
+On a single pinned logical CPU, with the same release engine emitting and discarding outputs, revision 6 through tick 1,600 took 1.80 seconds of user CPU under rules 15 and 1.89 seconds under rules 16. Revision 1 through tick 2,000 took 2.67 and 3.34 seconds. With a fixed 20,000-tick horizon, revision 1 took 13.94 and 14.44 seconds. These are whole-simulation measurements with different resulting battles.
+
+With the original rules 15 fingerprint, the updated release engine reproduced the recorded terminal ticks and SHA-256 hashes of all seven published revisions, including the opening.
 
 ## Verification limits
 
