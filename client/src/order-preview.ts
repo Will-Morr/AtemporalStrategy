@@ -79,8 +79,10 @@ export class OrderPreviews {
           const source=fields.field(from,rule);
           const candidates:Tile[]=views.filter(b=>b.owner===v.owner&&(b.blueprint||b.lifecycle==='site')&&inside(b)).map(b=>({x:b.x,y:b.y}));
           adjacent=true;
+          const assigned=order===v.exact?.action && g.net.rulesVersion>=16 ? v.exact.resolved_destination : undefined;
+          const assignedSite=assigned && candidates.find(t=>t.x===assigned.x && t.y===assigned.y);
           let best=Infinity;
-          for(const t of candidates){let d=source[fields.index(t)];if(adjacent){d=Infinity;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const p={x:t.x+dx,y:t.y+dy};if(fields.open(p)&&source[fields.index(p)]>=0)d=Math.min(d,source[fields.index(p)]);}}
+          for(const t of assignedSite?[assignedSite]:candidates){let d=source[fields.index(t)];if(adjacent){d=Infinity;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const p={x:t.x+dx,y:t.y+dy};if(fields.open(p)&&source[fields.index(p)]>=0)d=Math.min(d,source[fields.index(p)]);}}
             if(d>=0&&(d<best||(d===best&&goal&&(t.x<goal.x||(t.x===goal.x&&t.y<goal.y))))){goal=t;best=d;}}
         }
         if(!goal)continue;
