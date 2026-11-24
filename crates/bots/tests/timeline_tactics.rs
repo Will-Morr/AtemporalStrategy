@@ -31,6 +31,14 @@ impl History for NoEarlierRounds {
 }
 
 fn input(world: World, end: Tick) -> PolicyTimeline {
+    input_with_window(&world, end, 0..=0)
+}
+
+fn input_with_window(
+    world: &World,
+    end: Tick,
+    editable: std::ops::RangeInclusive<Tick>,
+) -> PolicyTimeline {
     let mut request = world.request();
     request.minimum_end_tick = end;
     request.end_tick_exclusive = end;
@@ -42,13 +50,13 @@ fn input(world: World, end: Tick) -> PolicyTimeline {
         timeline,
         Box::new(NoEarlierRounds),
         MatchRules {
-            config: world.config,
-            content: world.content,
+            config: world.config.clone(),
+            content: world.content.clone(),
         },
         PublishedWindow {
             revision: request.revision,
             player: 0,
-            editable: 0..=0,
+            editable,
         },
     )
     .unwrap()
@@ -420,4 +428,65 @@ fn observed_factory_can_be_targeted_before_the_silo_finishes() {
             })
         }));
     }
+}
+
+#[test]
+fn tactical_keeps_artillery_outside_observed_turret_range() {
+    let mut world = World::new(&["........................"; 24]);
+    world.spawn(0, "factory", 5, 5);
+    world.spawn(0, "turret", 6, 5);
+    world.spawn(0, "constructor", 4, 5);
+    let siege = world.spawn(0, "artillery", 4, 7);
+    world.spawn_with(
+        0,
+        "scout",
+        4,
+        8,
+        Order::AttackMove {
+            destination: tile(15, 8),
+        },
+    );
+    world.spawn(1, "turret", 15, 5);
+    world.spawn(1, "turret", 15, 7);
+    let pressure = |tile: Tile, gun: Tile| {
+        (i32::from(tile.x) - i32::from(gun.x)).pow(2)
+            + (i32::from(tile.y) - i32::from(gun.y)).pow(2)
+    };
+    let input = input_with_window(&world, 80, 10..=10);
+    let plan = published_plan(&input, Style::Tactical);
+    let destination = plan
+        .commands
+        .iter()
+        .find_map(|entry| match &entry.command {
+            Command::AssignOrder {
+                entities,
+                order: Order::AttackMove { destination },
+                ..
+            } if entities.contains(&siege) => Some(*destination),
+            _ => None,
+        })
+        .expect("a siege rally");
+    assert!(
+        [tile(15, 5), tile(15, 7)]
+            .iter()
+            .all(|&gun| pressure(destination, gun) > 49),
+        "destination: {destination:?}"
+    );
+    assert!(
+        [tile(15, 5), tile(15, 7)]
+            .iter()
+            .any(|&gun| pressure(destination, gun) <= 64),
+        "destination: {destination:?}"
+    );
+    let turrets_left = |state: &WorldState| {
+        state
+            .entities
+            .iter()
+            .filter(|entity| entity.owner == 1 && entity.type_key == "turret")
+            .count()
+    };
+    assert_eq!(turrets_left(&world.at(220)), 2);
+    let commands = draft::resolve_local_references(&plan, 1, 0).unwrap();
+    world.turn(1, 0, plan.tick, commands);
+    assert!(turrets_left(&world.at(220)) < 2);
 }

@@ -106,3 +106,18 @@ The bot-policy comparison used rules 14 for both opponents and replayed the huma
 Neither 2.1 run reached the first-to-three target before the recorded human turns ended. In the second game Tactical intervened at tick 1,156, won the rewritten timeline at tick 1,618, and kept that winning timeline on the next round. All bot drafts passed validation. These two plans informed development. On a separate map, seed 296108, Tactical in seat 1 beat Standard 3–0.
 
 On the independent October sustained-pressure recording, an opening-only check shortened the limit from 20,000 to 2,000 ticks. At that point Tactical was the sole surviving side, had eight factories and had spent 39,636 matter on production. All 29 human opening commands had their recipients. This establishes the position at tick 2,000.
+
+## Tactical responses to a turret enclosure
+
+The comparison replayed the same recorded human turns under rules 16. Tactical received only its own published player timeline. Scores list the human first.
+
+| Recording | Incumbent Tactical | Safe artillery rally |
+| --- | ---: | ---: |
+| `match-1795495091430-ed3a3992` | 3–0 | 2–0 through all three submitted rounds |
+| `match-1795494474870-a4e7141a` | 3–1 | 3–1 |
+| Older enclosure, two submitted rounds | 0–0 | 0–0 |
+| Ordinary opening, three submitted rounds | 0–1 | 0–1 |
+
+In the first recording, the third round changed from Tactical's elimination at tick 1,156 to both sides surviving at tick 20,000. In the second recording, the human changed its tick-zero construction plan in round two. Tactical could respond after that round became visible and still lost the next two rounds. The last two comparisons retained the same simulation outcomes and terminal ticks. No bot draft was rejected.
+
+A synthetic replay verified that artillery assigned to a stand-off tile can destroy an observed turret while staying outside its range. Converting a factory to artillery, adding mass grunt production with restricted mining, and combining a standing screen with a raid on a previously scouted production cluster did not improve the final scores of the two recent recordings. Keeping miners behind the turret line depleted their safe ore and reduced mining in the second recording. The retained change leaves factory queues, mining areas and intervention timing intact.

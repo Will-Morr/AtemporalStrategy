@@ -457,6 +457,7 @@ pub(super) fn develop(
     }
 }
 
+mod defense;
 mod enclosure;
 mod intel;
 
@@ -557,6 +558,9 @@ pub(super) fn plan(
         rally,
         params,
     );
+    if style == Style::Tactical {
+        defense::redirect(input, view, &mut draft);
+    }
     if input.config().control_limit != ControlLimit::SingleOrder {
         direct_silos(input, view, &intel, &mut draft);
         search_stalemate(input, view, rally, &intel, &mut draft);
