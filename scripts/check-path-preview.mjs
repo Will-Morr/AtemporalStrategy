@@ -29,6 +29,16 @@ assert.deepEqual(targets.get('a'),{x:1,y:0},'New draft clears old reservation');
 assert.deepEqual(targets.get('b'),{x:4,y:0},'Draft allocations spread across ore');
 targets=miningTargets(f,miners,i=>i===1?10:0);
 assert.deepEqual(targets.get('a'),{x:1,y:0},'Exhausted target is replaced');assert.equal(targets.has('b'),false);
+const deposit={x:1,y:0};
+const travelling={...miners[0],retained:deposit};
+const working={...miners[1],from:deposit};
+targets=miningTargets(f,[travelling,working],i=>i===1?10:0,undefined,true);
+assert.deepEqual(targets.get('b'),deposit,'A miner on ore takes precedence over an inbound ally');
+assert.equal(targets.has('a'),false);
+targets=miningTargets(f,[working],i=>ore.has(i)?10:0,new Set([4]),true);
+assert.deepEqual(targets.get('b'),deposit);
+targets=miningTargets(f,[travelling],i=>ore.has(i)?10:0,new Set([1]),true);
+assert.deepEqual(targets.get('a'),{x:4,y:0},'A hostile occupant excludes that deposit');
 for(const scale of [1,2,6,18,26,64]){const c=targetCorners(scale);assert.ok(c.inset-c.backing/2>=0);assert.ok(c.inset+c.span+c.backing/2<=scale);assert.ok(c.arm<c.span/2);}
 assert.ok(targetCorners(6).backing<targetCorners(26).backing);
 console.log('Alternating tread steps, retained mining targets, claims, draft replacement and inset/scaled markers passed.');

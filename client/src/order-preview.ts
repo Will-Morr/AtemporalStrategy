@@ -25,11 +25,23 @@ export class OrderPreviews {
     const aiming=(g.mode.kind==='attack'||g.mode.kind==='stored-target')&&!!g.hover;
     const targets=new Map<string,Tile>();
     const previewMining=!aiming&&views.some(v=>g.selection.has(idKey(v.id))&&(g.types.get(v.type_key)?.production?factoryPlan(g,v).order:g.effectiveOrder(v))?.kind==='mine');
-    const miners:MiningPreview[]=previewMining?views.flatMap(v=>{
+    const miners:(MiningPreview & {owner:number})[]=previewMining?views.flatMap(v=>{
       const order=g.effectiveOrder(v),def=g.types.get(v.type_key);
-      return !v.blueprint&&v.lifecycle==='complete'&&def?.mining&&def.movement&&order?.kind==='mine'?[{key:idKey(v.id),from:{x:Math.floor(v.x),y:Math.floor(v.y)},area:order.area,rule:def.movement.neighbors,retained:order===v.exact?.action?v.exact.resolved_destination:null}]:[];
+      return !v.blueprint&&v.lifecycle==='complete'&&def?.mining&&def.movement&&order?.kind==='mine'?[{key:idKey(v.id),owner:v.owner,from:{x:Math.floor(v.x),y:Math.floor(v.y)},area:order.area,rule:def.movement.neighbors,retained:order===v.exact?.action?v.exact.resolved_destination:null}]:[];
     }):[];
-    const oreTargets=miningTargets(fields,miners,i=>g.oreAt(i));
+    const oreByOwner=new Map<number,Map<string,Tile>>();
+    const mineTargets=(owner:number,newborn?:MiningPreview)=>{
+      const teamClaims=g.net.rulesVersion>=16;
+      const cacheKey=teamClaims?owner:-1;
+      const cached=oreByOwner.get(cacheKey);
+      if (!newborn && cached) return cached;
+      const sameTeam=(other:number)=>allied(g.config.multiplayer,owner,other);
+      const workers=teamClaims?miners.filter(m=>sameTeam(m.owner)):miners;
+      const occupied=teamClaims?new Set(views.filter(v=>!v.blueprint&&!v.remembered&&!sameTeam(v.owner)).map(cell)):undefined;
+      const targets=miningTargets(fields,newborn?[...workers,newborn]:workers,i=>g.oreAt(i),occupied,g.net.rulesVersion>=15);
+      if (!newborn) oreByOwner.set(cacheKey,targets);
+      return targets;
+    };
     for(const v of views){
       if(v.remembered||!g.selection.has(idKey(v.id)))continue;
       if(!aiming&&g.experience.review.recipients.get(idKey(v.id)))continue;
@@ -60,7 +72,7 @@ export class OrderPreviews {
         let goal:Tile|undefined,adjacent=false;
         if(order.kind==='attack_move')goal=order.destination;
         else if(order.kind==='mine'){
-          goal=factory?miningTargets(fields,[...miners,{key:'factory-preview',from,area:order.area,rule}],i=>g.oreAt(i)).get('factory-preview'):oreTargets.get(idKey(v.id));
+          goal=factory?mineTargets(v.owner,{key:'factory-preview',from,area:order.area,rule}).get('factory-preview'):mineTargets(v.owner).get(idKey(v.id));
         }
         else if(order.kind==='construct'){
           const inside=(t:Tile)=>t.x>=order.area.min.x&&t.y>=order.area.min.y&&t.x<=order.area.max.x&&t.y<=order.area.max.y;

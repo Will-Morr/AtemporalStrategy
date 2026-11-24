@@ -49,12 +49,18 @@ export interface MiningPreview {
 
 /** Mirror the mining prepass: retain reachable reservations, then acquire unclaimed ore.
  * Input order is authoritative entity order, not selection order. */
-export function miningTargets(fields: PreviewFields, miners: MiningPreview[], oreAt: (index: number)=>number): Map<string,Tile> {
+export function miningTargets(fields: PreviewFields, miners: MiningPreview[], oreAt: (index: number)=>number,
+    occupiedByHostile: ReadonlySet<number> = new Set(), preferWorkerOnOre = false): Map<string,Tile> {
   const targets=new Map<string,Tile>(),claims=new Map<number,string>();
   const inOre=(m:MiningPreview,t:Tile)=>t.x>=m.area.min.x&&t.y>=m.area.min.y&&t.x<=m.area.max.x&&t.y<=m.area.max.y&&oreAt(fields.index(t))>0;
-  for(const m of miners){const t=m.retained&&inOre(m,m.retained)?m.retained:inOre(m,m.from)?m.from:null;if(t&&!claims.has(fields.index(t)))claims.set(fields.index(t),m.key);}
+  for (const m of miners) {
+    const t=m.retained&&inOre(m,m.retained)?m.retained:inOre(m,m.from)?m.from:null;
+    if (!t) continue;
+    const cell=fields.index(t);
+    if (!claims.has(cell) || (preferWorkerOnOre && cell===fields.index(m.from))) claims.set(cell,m.key);
+  }
   for(const m of miners){
-    const valid=(t:Tile)=>inOre(m,t)&&fields.open(t)&&(!claims.has(fields.index(t))||claims.get(fields.index(t))===m.key);
+    const valid=(t:Tile)=>inOre(m,t)&&fields.open(t)&&!occupiedByHostile.has(fields.index(t))&&(!claims.has(fields.index(t))||claims.get(fields.index(t))===m.key);
     let goal:Tile|undefined;
     if(valid(m.from))goal=m.from;
     else if(m.retained&&valid(m.retained)&&fields.field(m.retained,m.rule)[fields.index(m.from)]>=0)goal=m.retained;
