@@ -391,3 +391,14 @@ in view in the four-player laptop layout. Inspected full frames are under
 `artifacts/ui/2026-11-24T04-09-17.105Z-1890519` and
 `artifacts/ui/2026-11-24T04-10-13.349Z-1892851`. The patch-note checkbox
 filter regression also passed at 390 pixels wide.
+
+## Enclosure opening
+
+Desktop Chromium selected Enclosure in the bot-only lobby against Tactical
+using the real coordinator. At seed 42 the archive's accepted tick-zero
+draft contained an explicit Construct order, turret and wall placements,
+and multiple artillery factories with attack orders. The inspected
+1920 × 1080 spectator frame at revision 1, tick 1,000 shows the green
+forward sites and units in both approaches. The one-round browser fixture
+ended in a stalemate at its 1,200-tick cap. The browser artifacts are under
+`artifacts/ui/2026-11-24T05-11-49.471Z-1946801`.
