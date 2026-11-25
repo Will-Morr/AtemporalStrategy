@@ -153,6 +153,18 @@ class MaintenanceTests(unittest.TestCase):
         run = json.loads((self.dest.parent / 'maintenance-runs.jsonl').read_text().splitlines()[-1])
         self.assertFalse(run['ok'])
 
+    def test_unmounted_mirror_drive_stops_before_sync(self):
+        # A plain directory is not a mount point, as with an external drive that failed to mount.
+        self.assertEqual(self.run_tool('--require-mount', str(self.dest.parent)), 1)
+        self.assertFalse(self.dest.parent.exists())
+        self.assertTrue((self.games / 'game-old').exists())
+        self.assertEqual(len(list((self.state / 'releases').iterdir())), 5)
+
+    def test_mounted_mirror_drive_runs(self):
+        with patch.object(m.os.path, 'ismount', side_effect=lambda p: Path(p) == self.dest.parent):
+            self.assertEqual(self.run_tool('--dry-run', '--require-mount', str(self.dest.parent)), 0)
+        self.assertTrue((self.dest / 'game-old/setup.json').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

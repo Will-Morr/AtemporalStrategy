@@ -39,11 +39,13 @@ Two local `--resume` runs restored the saved slots, the exact tick-30 snapshot a
 
 [`scripts/server-maintenance.py`](../scripts/server-maintenance.py) runs on the operator's machine over SSH. The remote account needs read and cleanup access to the game state and permission to remove release worktrees as the repository owner. Each run:
 
-1. Pulls `STATE/games` into a single local mirror (default `~/server-backups/personal-vps/games`) with rsync. Unchanged files are skipped and nothing is deleted from the mirror, so it holds one copy of every game ever played without repeated snapshots.
+1. Pulls `STATE/games` into a single local mirror with rsync. On the operator machine the mirror lives on the HDD at `/~/hdd/atemporal-backups/personal-vps/games` (the script's default is `~/server-backups/personal-vps/games`). Unchanged files are skipped and nothing is deleted from the mirror, so it holds one copy of every game ever played without repeated snapshots.
 2. Protects the full game folders containing the five latest completed matches across all players, including rematches. It reads the winning round for logs from older servers. Selects other game folders that the directory marks expired (or no longer lists) and whose newest file is more than 24 hours old.
 3. Compares every file in those folders against the mirror with an rsync checksum pass and a local size check. Any folder with a mismatch stays on the server.
 4. Deletes only confirmed files whose size and modification time are unchanged since step 2, then removes empty folders. `directory.json`, `visits.jsonl` and feedback stay on the server.
 5. Removes release worktrees other than the current release, the newest finished build and any build in progress. Code and executables are not backed up.
+
+The mirror is kept uncompressed so logs can be read and processed directly at any time. Game logs grow by several gigabytes a day, so it belongs on a large data drive rather than the boot SSD. `--require-mount PATH` makes a run fail before syncing unless `PATH` is a mounted filesystem containing the mirror, so a drive that failed to mount cannot redirect the backup onto the boot disk. The HDD is NTFS (ntfs-3g); modification times are kept, while Unix permissions are not stored, which the mirror does not need.
 
 A sync or verification failure stops the run before anything is deleted. Each run appends a JSON summary to `maintenance-runs.jsonl` beside the mirror. `--dry-run` syncs and verifies but deletes nothing. `scripts/check-server-maintenance.py` covers the sequence against local directories.
 
@@ -58,8 +60,10 @@ The operator installs the tested script outside the checkout so a branch switch 
 Example hourly entry:
 
 ```cron
-17 * * * * /usr/bin/python3 -I /home/will/.local/lib/atemporal/server-maintenance.py --host atemporal-backup >> /home/will/server-backups/personal-vps/maintenance.log 2>&1
+17 * * * * /usr/bin/python3 -I /home/will/.local/lib/atemporal/server-maintenance.py --host atemporal-backup --dest /~/hdd/atemporal-backups/personal-vps/games --require-mount /~/hdd >> /home/will/.local/state/atemporal/maintenance.log 2>&1
 ```
+
+The cron output log stays on the SSD so a run refused for an unmounted drive is still recorded. `maintenance-runs.jsonl` sits beside the mirror on the HDD. The HDD's fstab mount point is written `~/hdd`, which fstab does not expand, so it mounts at the literal path `/~/hdd`.
 
 System journals and Caddy logs are not part of this job; their own rotation limits apply.
 

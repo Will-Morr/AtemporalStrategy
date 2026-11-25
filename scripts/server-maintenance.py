@@ -11,6 +11,9 @@
 5. Remove release worktrees other than the current one, the newest finished build and any
    build still in progress. Code and executables are not backed up.
 
+With `--require-mount`, a run whose mirror is not on that mounted filesystem stops before touching
+the mirror, so a missing external drive cannot redirect the backup onto the boot disk.
+
 Every run appends a JSON summary to `<dest>/../maintenance-runs.jsonl`. Any sync or verification
 failure stops the run before anything is deleted.
 """
@@ -239,9 +242,18 @@ def main(argv=None):
     parser.add_argument('--dest', type=Path,
                         default=Path.home() / 'server-backups/personal-vps/games')
     parser.add_argument('--max-age-hours', type=float, default=24)
+    parser.add_argument('--require-mount', type=Path,
+                        help='refuse to run unless this mount point is mounted and holds the mirror')
     parser.add_argument('--dry-run', action='store_true', help='sync and verify, delete nothing')
     args = parser.parse_args(argv)
     args.dest = args.dest.expanduser().resolve()
+    if args.require_mount is not None:
+        mount = args.require_mount.expanduser().resolve()
+        if not os.path.ismount(mount) or not args.dest.is_relative_to(mount):
+            print(json.dumps({'started': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'ok': False,
+                              'error': f'{mount} is not mounted or does not hold {args.dest}; '
+                                       'nothing synced or deleted'}), flush=True)
+            return 1
     args.dest.parent.mkdir(parents=True, exist_ok=True)
     lock = open(args.dest.parent / '.maintenance.lock', 'w')
     try:
