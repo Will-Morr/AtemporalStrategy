@@ -3204,6 +3204,14 @@ pub(crate) mod tests {
         assert_eq!(ticks(c.stats_range(0, 0, 300, 7).unwrap()).len(), 31);
         assert_eq!(ticks(c.stats_range(0, 0, 300, 5).unwrap()).len(), 61);
         assert_eq!(ticks(c.stats_range(0, 100, 130, 1000).unwrap()), vec![130]);
+        assert_eq!(
+            ticks(c.stats_range(0, 0, 300, Tick::MAX).unwrap()),
+            vec![300]
+        );
+        assert!(ticks(c.stats_range(0, 130, 100, 5).unwrap()).is_empty());
+        assert!(matches!(c.snapshot_range(0, 130, 100, 5).unwrap(),
+            ServerMessage::SnapshotRange { samples, .. } if samples.is_empty()));
+
         assert!(
             ticks(c.stats_range(0, 0, 1_000_000, 1).unwrap()).len() <= MAX_STAT_BUCKETS as usize
         );

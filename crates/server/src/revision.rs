@@ -172,11 +172,12 @@ impl RevisionData {
         to: Tick,
         stride: Tick,
     ) -> ServerMessage {
-        let stride = stride.max(snapshot_interval);
+        let stride = stride.max(snapshot_interval).max(1);
         let samples = self
             .samples
-            .range(from..=to)
-            .filter(|(t, _)| (*t - from.min(**t)).is_multiple_of(stride) || **t == to)
+            .range(from..)
+            .take_while(|(tick, _)| **tick <= to)
+            .filter(|(tick, _)| (**tick - from).is_multiple_of(stride) || **tick == to)
             .map(|(_, s)| s.clone())
             .collect();
         ServerMessage::SnapshotRange {
@@ -198,24 +199,27 @@ impl RevisionData {
         to: Tick,
         bucket_width: Tick,
     ) -> ServerMessage {
-        let interval = snapshot_interval.max(1);
-        let span = to.saturating_sub(from).saturating_add(1);
-        let width = bucket_width
+        let interval = u64::from(snapshot_interval.max(1));
+        let span = u64::from(to.saturating_sub(from)) + 1;
+        let width = u64::from(bucket_width)
             .max(interval)
-            .max(span.div_ceil(MAX_STAT_BUCKETS))
+            .max(span.div_ceil(u64::from(MAX_STAT_BUCKETS)))
             .next_multiple_of(interval);
-        // Banks and counters are gauges/cumulative, so a bucket reports its latest sample.
-        let mut buckets: Vec<StatsSample> = vec![];
-        for (tick, sample) in self.stats.range(from..=to) {
-            let bucket = (tick - from) / width;
-            if buckets
-                .last()
-                .is_some_and(|last| (last.tick - from) / width == bucket)
-            {
-                buckets.pop();
+        // Walking backwards encounters the last sample in each bucket first.
+        // Only samples that will be sent to the client need to be cloned.
+        let mut buckets = Vec::new();
+        let mut previous = None;
+        for (&tick, sample) in self.stats.range(..=to).rev() {
+            if tick < from {
+                break;
             }
-            buckets.push(sample.clone());
+            let bucket = u64::from(tick - from) / width;
+            if previous != Some(bucket) {
+                buckets.push(sample.clone());
+                previous = Some(bucket);
+            }
         }
+        buckets.reverse();
         ServerMessage::StatsRange {
             revision: self.revision,
             buckets,
