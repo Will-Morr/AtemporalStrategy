@@ -19,6 +19,7 @@ const queueLabel = (text: string) => {
   const label = document.createElement('span');
   label.className = 'queue-item-label';
   label.textContent = text;
+  label.title = text;
   return label;
 };
 const metrics = ['bank', 'mined', 'spend', 'army', 'infrastructure', 'attrition', 'thinking'] as const;
@@ -297,7 +298,16 @@ export class Experience {
   queue(): void {
     const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && g.canInspectPlan(v.owner));
     const signature=JSON.stringify([g.canStage().ok,g.fullVision,g.current===g.latest,views.map(v=>[v.id,v.lifecycle,!!v.exact,factoryPlan(g,v)])]);
-    if(root.dataset.plan===signature)return;root.dataset.plan=signature;root.replaceChildren();this.focusDelete=null;
+    if(root.dataset.plan===signature)return;
+    const selection=JSON.stringify(views.map(v=>v.id));
+    const queueSelector='.editable-factory>.queue-icons';
+    const previousQueue=root.dataset.queueSelection===selection ? root.querySelector(queueSelector) : null;
+    const scrollTop=previousQueue?.scrollTop;
+    const focused=document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    const focusedItem=previousQueue?.contains(focused) && focused
+      ? focused.closest<HTMLElement>('[data-queue-item]') : null;
+    const focusedAction=focusedItem && focused ? Array.from(focusedItem.querySelectorAll('button')).indexOf(focused) : -1;
+    root.dataset.plan=signature;root.dataset.queueSelection=selection;root.replaceChildren();this.focusDelete=null;
     if (views.length && (g.fullVision || g.current !== g.latest)) {
       for (const v of views) {
         const card=document.createElement('section');card.className='factory-plan review-queue';
@@ -326,6 +336,7 @@ export class Experience {
     for(const v of views.filter(v=>g.types.get(v.type_key)?.silo?idKey(v.id)===root.dataset.editor:factories.length===1&&showFactories)) {
       const isSilo=!!g.types.get(v.type_key)?.silo;
       const plan=factoryPlan(g,v), card=document.createElement('section');card.className='factory-plan';
+      if (!isSilo) card.classList.add('editable-factory');
       const heading=document.createElement('strong');heading.append(unitIcon(v.type_key,g.color(v.owner)),document.createTextNode(isSilo?'Missile production':v.lifecycle==='complete'?'Factory output':v.lifecycle==='site'?'Factory under construction':'Planned factory'));card.append(heading);
       const configure=(change:(settings:NonNullable<typeof v.settings>)=>void)=>{const settings=structuredClone(v.settings!);settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
       const settings=document.createElement('div');settings.className='factory-settings';
@@ -333,10 +344,10 @@ export class Experience {
       const summary=document.createElement('div');summary.className='factory-order';summary.textContent=`New units: ${plan.order.kind==='idle'?'Idle at output — give a destination':orderLabel(plan.order)}${plan.group ? ` · group ${plan.group.slot}` : ''}`;summary.hidden=isSilo;card.append(summary);
       if(v.lifecycle!=='complete'){const note=document.createElement('small');note.textContent='Queue starts as soon as construction finishes.';card.append(note);}
       const queue=document.createElement('div');queue.className='queue-icons';
-      if(plan.active){const active=document.createElement('div');active.className='queue-item active';const progress=plan.active.awaiting_output?'Output blocked':`${Math.round(plan.active.paid_matter)} / ${g.types.get(plan.active.type_key)?.matter_cost} matter`;active.append(unitIcon(plan.active.type_key,g.color(v.owner)),queueLabel(`Building ${plan.active.type_key} · ${progress}`));const cancel=button('×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}}));cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key}`);cancel.title='Cancel this unit; spent matter is lost';cancel.onfocus=()=>{this.focusDelete=()=>cancel.click();};cancel.disabled=!enabled;const repeat=button(plan.active.loop_enabled?'↻':'1×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:plan.active!.item_id}],enabled:!plan.active!.loop_enabled}}));repeat.setAttribute('aria-label',`Loop active ${plan.active.type_key}`);repeat.setAttribute('aria-pressed',String(plan.active.loop_enabled??false));repeat.disabled=!enabled;active.dataset.loop=String(plan.active.loop_enabled??false);active.append(repeat,cancel);queue.append(active);}
+      if(plan.active){const active=document.createElement('div');active.className='queue-item active';active.dataset.queueItem=`active:${JSON.stringify(plan.active.item_id)}`;const progress=plan.active.awaiting_output?'Output blocked':`${Math.round(plan.active.paid_matter)} / ${g.types.get(plan.active.type_key)?.matter_cost} matter`;active.append(unitIcon(plan.active.type_key,g.color(v.owner)),queueLabel(`Building ${plan.active.type_key} · ${progress}`));const cancel=button('×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}}));cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key}`);cancel.title='Cancel this unit; spent matter is lost';cancel.onfocus=()=>{this.focusDelete=()=>cancel.click();};cancel.disabled=!enabled;const repeat=button(plan.active.loop_enabled?'↻':'1×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:plan.active!.item_id}],enabled:!plan.active!.loop_enabled}}));repeat.setAttribute('aria-label',`Loop active ${plan.active.type_key}`);repeat.setAttribute('aria-pressed',String(plan.active.loop_enabled??false));repeat.disabled=!enabled;active.dataset.loop=String(plan.active.loop_enabled??false);if(isSilo)active.append(repeat,cancel);else active.prepend(repeat,cancel);queue.append(active);}
       // Group adjacent recipes, preserving build order and each item reference for removal.
-      for(const batch of queueBatches(plan.pending)){const chip=document.createElement('div');chip.className='queue-item';chip.title=`${batch.type} ×${batch.indices.length}`;chip.append(unitIcon(batch.type,g.color(v.owner)),queueLabel(`${batch.type} ×${batch.indices.length}`));const index=batch.indices.at(-1)!;const remove=button('−',()=>{if(v.blueprint)configure(s=>{s.queue.splice(index,1);s.queue_loop_flags?.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[plan.pending[index].ref!]}});});remove.setAttribute('aria-label',`Remove one queued ${batch.type}`);remove.onfocus=()=>{this.focusDelete=()=>remove.click();};remove.disabled=!enabled;const repeat=button(batch.loop?'↻':'1×',()=>{if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);for(const index of batch.indices)s.queue_loop_flags[index]=!batch.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(index=>plan.pending[index].ref!),enabled:!batch.loop}});});repeat.setAttribute('aria-label',`Loop queued ${batch.type}`);repeat.setAttribute('aria-pressed',String(batch.loop));repeat.title=batch.loop?'Repeats after completion':'Build once';repeat.disabled=!enabled;chip.dataset.loop=String(batch.loop);chip.append(repeat,remove);queue.append(chip);}
-      if(!plan.active && !plan.pending.length){const empty=document.createElement('span');empty.className='muted';empty.textContent=isSilo?'Production empty — build missiles below.':'Queue empty — add units below.';queue.append(empty);}card.insertBefore(queue,summary);
+      for(const batch of queueBatches(plan.pending)){const chip=document.createElement('div');chip.className='queue-item';chip.dataset.queueItem=`${batch.type}:${batch.indices[0]}`;chip.title=`${batch.type} ×${batch.indices.length}`;chip.append(unitIcon(batch.type,g.color(v.owner)),queueLabel(`${batch.type} ×${batch.indices.length}`));const index=batch.indices.at(-1)!;const remove=button('−',()=>{if(v.blueprint)configure(s=>{s.queue.splice(index,1);s.queue_loop_flags?.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[plan.pending[index].ref!]}});});remove.setAttribute('aria-label',`Remove one queued ${batch.type}`);remove.onfocus=()=>{this.focusDelete=()=>remove.click();};remove.disabled=!enabled;const repeat=button(batch.loop?'↻':'1×',()=>{if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);for(const index of batch.indices)s.queue_loop_flags[index]=!batch.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(index=>plan.pending[index].ref!),enabled:!batch.loop}});});repeat.setAttribute('aria-label',`Loop queued ${batch.type}`);repeat.setAttribute('aria-pressed',String(batch.loop));repeat.title=batch.loop?'Repeats after completion':'Build once';repeat.disabled=!enabled;chip.dataset.loop=String(batch.loop);if(isSilo)chip.append(repeat,remove);else chip.prepend(repeat,remove);queue.append(chip);}
+      if(!plan.active && !plan.pending.length){const empty=document.createElement('span');empty.className='muted';empty.textContent=isSilo?'Production empty — build missiles below.':'Queue empty — add units.';queue.append(empty);}card.insertBefore(queue,summary);
       const recipes=document.createElement('div');recipes.className='recipe-icons';
       for(const type of g.types.get(v.type_key)?.production?.recipes ?? []){const add=button('',event=>{const items=Array(event.shiftKey?5:1).fill(type);if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);s.queue.push(...items);s.queue_loop_flags.push(...items.map(()=>plan.loop));});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items}});});add.append(unitIcon(type,g.color(v.owner)),document.createTextNode(isSilo?` ${type.replace('_',' ')} +`:'+'));add.setAttribute('aria-label',`Queue ${type}`);add.title=`Queue ${type} · ${g.types.get(type)?.matter_cost} matter · Shift-click adds 5`;add.disabled=!enabled;recipes.append(add);}card.append(recipes);
       const clear=button('Clear waiting queue',()=>{if(v.blueprint)configure(s=>{s.queue=[];s.queue_loop_flags=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});});clear.disabled=!enabled||!plan.pending.length;card.append(clear);
@@ -346,27 +357,56 @@ export class Experience {
         const children=Array.from(card.childNodes);details.append(label,...children);
         details.ontoggle=()=>{if(details.isConnected){if(details.open)this.siloProductionOpen.add(idKey(v.id));else this.siloProductionOpen.delete(idKey(v.id));}};
         card.append(details,siloPanel(g,v));
+      } else {
+        const controls=document.createElement('div');
+        controls.className='factory-controls';
+        controls.append(settings,recipes,clear);
+        card.append(controls);
       }
       root.append(card);
+    }
+    const currentQueue=root.querySelector(queueSelector);
+    if (scrollTop) currentQueue?.scrollTo(0,scrollTop);
+    if (focusedItem && focusedAction >= 0) {
+      const row=Array.from(currentQueue?.querySelectorAll<HTMLElement>('[data-queue-item]') ?? [])
+        .find(item=>item.dataset.queueItem===focusedItem.dataset.queueItem);
+      row?.querySelectorAll('button')[focusedAction]?.focus({preventScroll:true});
     }
   }
   sharedQueue(root: HTMLElement, views: EntityView[]): void {
     const g=this.g, aligned=new Set(views.map(v=>factorySignature(g,v))).size===1;
     const plan=factoryPlan(g,views[0]);
-    const card=document.createElement('section');card.className='factory-plan shared-factories';
+    const card=document.createElement('section');card.className='factory-plan editable-factory shared-factories';
     const heading=document.createElement('strong');heading.textContent=`${views.length} factories · shared commands`;card.append(heading);
     const warning=document.createElement('p');warning.className=aligned?'factory-order':'order-warning';
     warning.textContent=aligned?`Aligned queues · New units: ${orderLabel(plan.order)}`:'Different configurations. Your next shared command clears all selected factories’ queues and settings at this tick, including active production and spent matter. Undo restores the draft.';card.append(warning);
     const edit=(change:(v:EntityView)=>void)=>g.editFactories(()=>{for(const v of g.factorySelection())change(v);});
     const configure=(v:EntityView,change:(s:NonNullable<EntityView['settings']>)=>void)=>{const settings=structuredClone(v.settings!);settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
-    const loop=button(`↻ Loop new items: ${aligned?(plan.loop?'On':'Off'):'Mixed'}`,()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});}));card.append(loop);
+    const loop=button(`↻ Loop new items: ${aligned?(plan.loop?'On':'Off'):'Mixed'}`,()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});}));
     const queue=document.createElement('div');queue.className='queue-icons';
     if(aligned){
-      if(plan.active){const active=button(`Cancel active ${plan.active.type_key} on all`,()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));const actions=document.createElement('div');actions.className='queue-actions';const repeat=button(plan.active.loop_enabled?'Active repeats':'Repeat active on all',()=>edit(v=>{const active=factoryPlan(g,v).active;if(active)g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:active.item_id}],enabled:!plan.active!.loop_enabled}});}));actions.append(active,repeat);queue.append(actions);}
+      if (plan.active) {
+        const active=document.createElement('div');
+        active.className='queue-item active';
+        active.dataset.queueItem=`active:${JSON.stringify(plan.active.item_id)}`;
+        const repeat=button(plan.active.loop_enabled?'↻':'1×',()=>edit(v=>{
+          const item=factoryPlan(g,v).active;
+          if(item)g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:item.item_id}],enabled:!plan.active!.loop_enabled}});
+        }));
+        repeat.setAttribute('aria-label','Repeat active on all');
+        repeat.setAttribute('aria-pressed',String(plan.active.loop_enabled??false));
+        const cancel=button('×',()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));
+        cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key} on all`);
+        cancel.title='Cancel this unit in all selected factories; spent matter is lost';
+        cancel.onfocus=()=>{this.focusDelete=()=>cancel.click();};
+        active.append(repeat,cancel,unitIcon(plan.active.type_key,g.color(g.player!)),queueLabel(`Building ${plan.active.type_key} ×${views.length}`));
+        queue.append(active);
+      }
       for(const batch of queueBatches(plan.pending)){
         const index=batch.indices.at(-1)!;
         const chip=document.createElement('span');
         chip.className='queue-item';
+        chip.dataset.queueItem=`${batch.type}:${batch.indices[0]}`;
         chip.dataset.loop=String(batch.loop);
         chip.append(unitIcon(batch.type,g.color(g.player!)),queueLabel(`${batch.type} ×${batch.indices.length}`));
         const repeat=button(batch.loop?'↻':'1×',()=>edit(v=>{
@@ -384,16 +424,25 @@ export class Experience {
         }));
         remove.setAttribute('aria-label',`Remove shared item ${index+1}`);
         remove.onfocus=()=>{this.focusDelete=()=>remove.click();};
-        chip.append(repeat,remove);
+        chip.prepend(repeat,remove);
         queue.append(chip);
       }
+    }
+    if (!queue.childElementCount) {
+      const empty=document.createElement('span');
+      empty.className='muted';
+      empty.textContent=aligned?'Queue empty — add units.':'Queues differ across factories.';
+      queue.append(empty);
     }
     card.append(queue);
     const recipes=document.createElement('div');recipes.className='recipe-icons';
     for(const type of g.producible().filter(type=>views.every(v=>g.types.get(v.type_key)?.production?.recipes.includes(type)))){
       const add=button('',event=>edit(v=>{const items=Array(event.shiftKey?5:1).fill(type);if(v.blueprint)configure(v,s=>{s.queue.push(...items);s.queue_loop_flags!.push(...items.map(()=>s.loop_enabled));});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items}});}));add.setAttribute('aria-label',`Queue ${type}`);add.title=`${type} · ${g.types.get(type)?.matter_cost} matter each · Shift adds 5 to every factory`;add.append(unitIcon(type,g.color(g.player!)),document.createTextNode('+'));recipes.append(add);
     }
-    card.append(recipes,button('Clear all waiting queues',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue=[];s.queue_loop_flags=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});} )));
+    const controls=document.createElement('div');
+    controls.className='factory-controls';
+    controls.append(loop,recipes,button('Clear all waiting queues',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue=[];s.queue_loop_flags=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});} )));
+    card.append(controls);
     for(const b of Array.from(card.querySelectorAll('button')))b.disabled=!g.canStage().ok;
     root.append(card);
   }

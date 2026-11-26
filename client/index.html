@@ -192,7 +192,32 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
 .queue-icons{display:grid;grid-template-columns:minmax(0,1fr);width:min(100%,28rem);scrollbar-gutter:stable}
 .queue-item{display:grid;grid-template-columns:20px minmax(0,1fr) 2rem 1.75rem}
 .queue-item-label,.missile-launch-label{overflow-wrap:anywhere}
-.queue-actions{display:flex;flex-wrap:wrap;gap:4px}
+.editable-factory .queue-item{grid-template-columns:1.7rem 1.55rem 20px minmax(0,1fr)}
+.editable-factory .queue-item-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#queue .editable-factory .queue-item button{padding:0!important;text-align:center}
+#panels:has(.editable-factory){grid-template-rows:var(--step-row-height,176px) var(--timeline-strip-height)}
+#panels:has(.editable-factory) #draft-panel{height:100%;min-height:0}
+#panels:has(.editable-factory) #clear-future{flex-shrink:0}
+#draft-actions{display:contents}
+#queue:has(.editable-factory),#queue:has(.review-queue){overflow:auto;overflow-wrap:anywhere}
+#queue:has(.editable-factory){scrollbar-gutter:stable}
+#queue:has(.review-queue){max-height:110px}
+.editable-factory{display:grid;grid-template-columns:minmax(0,14rem) minmax(0,1fr);gap:3px 10px;align-items:start}
+.editable-factory>.queue-icons{grid-column:1;grid-row:1;width:100%;height:62px;max-height:none;padding:1px;grid-auto-rows:28px}
+.editable-factory>.queue-icons>.muted{padding:4px}
+.editable-factory>.factory-controls{grid-column:2;grid-row:1;min-width:0}
+.factory-controls .factory-settings{float:none}
+.factory-controls .recipe-icons{gap:4px;margin:4px 0}
+.factory-controls .recipe-icons .unit-icon{width:22px;height:22px}
+.editable-factory>.factory-order,.editable-factory>.order-warning,.editable-factory>small{grid-column:1/-1;margin:0}
+.editable-factory>.order-warning{max-height:3.8em;overflow:auto}
+@media(max-width:1000px){
+  #panels:has(.editable-factory){grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:173px var(--step-row-height,125px) var(--timeline-strip-height)}
+  #panels:has(.editable-factory)>#timeline-strip{grid-row:3}
+  #panels:has(.editable-factory) #draft-actions{display:flex;align-items:stretch;gap:4px;flex-shrink:0;margin-top:auto}
+  #panels:has(.editable-factory) #draft-actions button{min-width:0;flex:1;margin:0;white-space:normal}
+}
+@media(max-width:560px){.editable-factory{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .missile-launches{max-height:90px;scrollbar-gutter:stable}
 .missile-launch-row{display:grid;grid-template-columns:23px minmax(0,1fr) 1.75rem;gap:5px;align-items:center}
 .missile-launch-row button{margin:0}
@@ -241,7 +266,7 @@ summary{cursor:pointer;color:#b8d5e9;padding:4px;list-style-position:inside}
   <div id="panels">
     <div id="selection"><h3>Selection</h3><div id="selection-body" class="muted">Nothing selected. Click or drag on the map. Press ? for hotkeys.</div></div>
     <div id="timeline-wrap"><canvas id="timeline"></canvas><div id="transport"><button id="play">Play</button><button id="step-back">◀ 1</button><button id="step-fwd">1 ▶</button><button id="jump-back">◀ 100</button><button id="jump-fwd">100 ▶</button><span id="rate"></span><input id="tick-input" type="number" min="0" style="width:6rem"><button id="to-draft">Draft tick</button><span id="timeline-info" class="muted"></span></div></div>
-    <div><canvas id="minimap"></canvas><div id="draft-panel"><h3 id="draft-title">Draft</h3><p id="draft-recovery" role="status" hidden></p><ul id="draft-list"></ul><button id="clear-future" title="Stage removal of your previously committed orders strictly after this tick">Clear all future orders</button><button id="commit" disabled>Commit</button></div></div>
+    <div><canvas id="minimap"></canvas><div id="draft-panel"><h3 id="draft-title">Draft</h3><p id="draft-recovery" role="status" hidden></p><ul id="draft-list"></ul><div id="draft-actions"><button id="clear-future" title="Stage removal of your previously committed orders strictly after this tick">Clear all future orders</button><button id="commit" disabled>Commit</button></div></div></div>
   </div>
 </section>
 <script type="module" src="/app.js"></script>
