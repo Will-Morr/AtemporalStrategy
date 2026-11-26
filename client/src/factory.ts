@@ -1,6 +1,6 @@
 import {siloPlan} from './silo';
 import type { Game, EntityView } from './game';
-import type { DraftItemRef2, EntityId, Order, Priority, QueueItemId } from './contracts.generated';
+import type { DraftItemRef2, EntityId, Order, Priority, ProductionEdit, QueueItemId } from './contracts.generated';
 
 function persistentQueueKey(id: QueueItemId): string {
   const {command, target_index} = id.birth_command;
@@ -113,4 +113,80 @@ export function factorySignature(g: Game, v: EntityView): string {
     order: plan.order,
     group: plan.group ? [plan.group.owner, plan.group.slot] : null,
   });
+}
+
+// Pending positions are shared across aligned queues. Live orders resolve them
+// to each factory's own references, while planned blueprints store recipe arrays.
+export type QueueChange =
+  | {kind: 'set_default_loop'; enabled: boolean}
+  | {kind: 'append'; items: string[]}
+  | {kind: 'clear_pending'}
+  | {kind: 'remove_pending'; index: number}
+  | {kind: 'set_pending_loop'; indices: number[]; enabled: boolean}
+  | {kind: 'set_active_loop'; enabled: boolean}
+  | {kind: 'cancel_active'};
+
+export function editFactoryQueue(g: Game, v: EntityView, change: QueueChange): void {
+  if (v.blueprint) {
+    if (change.kind === 'cancel_active' || change.kind === 'set_active_loop') return;
+    g.configureBlueprint(v, (settings, loopFlags) => {
+      switch (change.kind) {
+        case 'set_default_loop':
+          settings.loop_enabled = change.enabled;
+          break;
+        case 'append':
+          settings.queue.push(...change.items);
+          loopFlags.push(...change.items.map(() => settings.loop_enabled));
+          break;
+        case 'clear_pending':
+          settings.queue.length = 0;
+          loopFlags.length = 0;
+          break;
+        case 'remove_pending':
+          settings.queue.splice(change.index, 1);
+          loopFlags.splice(change.index, 1);
+          break;
+        case 'set_pending_loop':
+          for (const index of change.indices) loopFlags[index] = change.enabled;
+          break;
+      }
+    });
+    return;
+  }
+
+  if (change.kind === 'set_default_loop') {
+    g.stage({kind: 'set_queue_loop', factories: [v.id], enabled: change.enabled});
+    return;
+  }
+
+  let edit: ProductionEdit;
+  switch (change.kind) {
+    case 'append':
+    case 'cancel_active':
+      edit = change;
+      break;
+    case 'clear_pending':
+      edit = {kind: 'replace_pending', items: []};
+      break;
+    case 'remove_pending': {
+      const ref = factoryPlan(g, v).pending[change.index]?.ref;
+      if (!ref) return;
+      edit = {kind: 'remove_pending', item_ids: [ref]};
+      break;
+    }
+    case 'set_pending_loop': {
+      const {pending} = factoryPlan(g, v);
+      const refs = change.indices.flatMap(index => pending[index]?.ref ?? []);
+      if (refs.length !== change.indices.length) return;
+      edit = {kind: 'set_item_loop', item_ids: refs, enabled: change.enabled};
+      break;
+    }
+    case 'set_active_loop': {
+      const {active} = factoryPlan(g, v);
+      if (!active) return;
+      edit = {kind: 'set_item_loop', item_ids: [{kind: 'persistent', id: active.item_id}], enabled: change.enabled};
+      break;
+    }
+  }
+  g.stage({kind: 'edit_production', factories: [v.id], edit});
 }

@@ -350,6 +350,9 @@ test('completed factory queues retain the remaining items after deletion and com
   await expect(a.getByRole('button', {name: 'Remove shared item 5', exact: true})).toBeVisible();
   await a.keyboard.press('Control+u');
   await expect(a.getByRole('button', {name: 'Remove shared item 5', exact: true})).toHaveCount(0);
+  const repeat = a.getByRole('button', {name: 'Loop shared grunt batch', exact: true});
+  await repeat.click();
+  await expect(repeat).toHaveAttribute('aria-pressed', 'true');
   await review.capture('completed-factories-after-delete', a);
   await a.locator('#commit').click();
   await b.locator('#commit').click();
@@ -358,7 +361,15 @@ test('completed factory queues retain the remaining items after deletion and com
   await selectBoth(a, sites);
   const remaining = await a.evaluate(() => window.atemporal.selectedViews().map(v => {
     const {pending_items, active_item} = v.exact.production;
-    return pending_items.length + Number(!!active_item);
+    return [...pending_items, ...(active_item ? [active_item] : [])].map(item => item.loop_enabled);
   }));
-  expect(remaining).toEqual([4, 4]);
+  expect(remaining).toEqual([Array(4).fill(true), Array(4).fill(true)]);
+  await repeat.click();
+  await expect(repeat).toHaveAttribute('aria-pressed', 'false');
+  // Committed items now have a different target identity in each factory.
+  const loopRefs = await a.evaluate(() => window.atemporal.draft.commands.flatMap(({command}) =>
+    command.kind === 'edit_production' && command.edit.kind === 'set_item_loop' ? [command.edit.item_ids] : []));
+  expect(loopRefs).toHaveLength(2);
+  expect(loopRefs.every(refs => refs.every(ref => ref.kind === 'persistent'))).toBe(true);
+  expect(loopRefs[0][0].id.birth_command.target_index).not.toBe(loopRefs[1][0].id.birth_command.target_index);
 });

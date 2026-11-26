@@ -2,25 +2,16 @@ import {TimelineReview} from './timeline-review';
 import {DisconnectedError} from './net';
 import {practice} from './practice';
 import {guideUrl} from './session';
-import {siloPanel} from './silo';
+import {ProductionPanel} from './production-panel';
 import { scoreboard } from './scoreboard';
 import { slopePoints } from './plot';
-import { unitIcon } from './icons';
-import { factoryPlan, factorySignature, orderLabel, queueBatches } from './factory';
 import type { AcceptedTurn, Command, ControlGroupState, EntityId, PlayerStats, ServerMessage, StatsSample } from './contracts.generated';
-import { Game, idKey, type EntityView, type RevisionView } from './game';
+import { idKey, type Game, type RevisionView } from './game';
 
 type Round = Extract<ServerMessage, { kind: 'round_result' }>;
 const $ = (id: string) => document.getElementById(id)!;
 const button = (label: string, action: (event: MouseEvent) => void) => {
   const b = document.createElement('button'); b.textContent = label; b.onclick = action; return b;
-};
-const queueLabel = (text: string) => {
-  const label = document.createElement('span');
-  label.className = 'queue-item-label';
-  label.textContent = text;
-  label.title = text;
-  return label;
 };
 const metrics = ['bank', 'mined', 'spend', 'army', 'infrastructure', 'attrition', 'thinking'] as const;
 
@@ -32,7 +23,7 @@ export class Experience {
   stats = new Map<number, StatsSample[]>();
   destructions = new Map<number, number>();
   loading = new Map<number, Promise<void>>();
-  focusDelete: (() => void) | null = null;
+  private readonly production: ProductionPanel;
   metric: typeof metrics[number] = 'bank';
   graphHover: number | null = null;
   groupOwner: number;
@@ -76,6 +67,7 @@ export class Experience {
     toolbar.querySelector('.groups')!.append(groups);
     const recipient = document.createElement('div'); recipient.id = 'recipient'; $('selection').prepend(recipient);
     const queue = document.createElement('div'); queue.id = 'queue'; $('timeline-wrap').append(queue);
+    this.production = new ProductionPanel(g, queue);
     const preview = document.createElement('div'); preview.id = 'lock-preview'; const diagnostics=document.createElement('details');diagnostics.innerHTML='<summary>Future-order details</summary>';diagnostics.append(preview);toolbar.querySelector('.planning')!.append(diagnostics);
     const replay = document.createElement('details'); replay.id = 'replay';
     replay.innerHTML = '<summary>Previous timelines &amp; plans</summary><label class="replay-field">Round <select id="round-picker"></select></label><button id="return-live">Return to live</button><div id="round-summary"></div><div id="rewrite-summary"></div><div id="accepted-inputs"></div>';
@@ -114,7 +106,6 @@ export class Experience {
     }));
     const stop = $('game').lastElementChild as HTMLElement; stop.id = 'stop-archive';planning.append(stop);
     window.addEventListener('focusin', e => {
-      if (!(e.target as HTMLElement).closest('#queue')) this.focusDelete = null;
       if ((e.target as HTMLElement).matches('input,select,textarea,[contenteditable]')) g.renderer.keys = { w:false,a:false,s:false,d:false };
     });
     window.addEventListener('blur', () => { g.renderer.keys = { w:false,a:false,s:false,d:false }; g.renderer.dragPan = null; });
@@ -194,7 +185,7 @@ export class Experience {
     this.g.mode = {kind:'none'}; this.g.updateMode();
   }
   deleteFocused(): boolean {
-    if (this.focusDelete) { this.focusDelete(); return true; }
+    if (this.production.deleteFocused()) return true;
     if (this.g.draft.selected !== null) return false;
     return this.g.cancelSelectedBlueprints();
   }
@@ -242,7 +233,7 @@ export class Experience {
       if(!count && !bound && !group?.latest_order)continue;
       list.append(button(`${slot}: ${count} living · ${bound} factories · ${group?.latest_order ? `${group.latest_order.order.kind} @${group.latest_order.tick}` : 'no saved order'}`, () => g.digit(slot)));
     }
-    this.queue();
+    this.production.render();
     $('lock-preview').textContent = this.lockPreview();
     const picker = $('round-picker') as HTMLSelectElement;
     const options = [...this.rounds.values()].sort((a,b) => a.revision-b.revision);
@@ -293,158 +284,6 @@ export class Experience {
     const options=$('mode-options');options.replaceChildren();
     const choices=g.mode.kind==='build'?g.structures():g.mode.kind==='recipe'?g.producible():g.mode.kind==='priority'?['High','Medium','Low','Off']:g.mode.kind==='membership'||g.mode.kind==='binding'?Array.from({length:10},(_,n)=>String(n)):[];
     choices.forEach((label,index)=>{const digit=g.mode.kind==='membership'||g.mode.kind==='binding'?index:index+1;const cost=g.types.get(label)?.matter_cost;options.append(button(`${digit} · ${label}${cost===undefined?'':` · ${cost} matter`}`,event=>g.digit(digit,event.shiftKey)));});
-  }
-  private siloProductionOpen=new Set<string>();
-  queue(): void {
-    const g=this.g, root=$('queue'), views=g.selectedViews().filter(v=>g.types.get(v.type_key)?.production && g.canInspectPlan(v.owner));
-    const signature=JSON.stringify([g.canStage().ok,g.fullVision,g.current===g.latest,views.map(v=>[v.id,v.lifecycle,!!v.exact,factoryPlan(g,v)])]);
-    if(root.dataset.plan===signature)return;
-    const selection=JSON.stringify(views.map(v=>v.id));
-    const queueSelector='.editable-factory>.queue-icons';
-    const previousQueue=root.dataset.queueSelection===selection ? root.querySelector(queueSelector) : null;
-    const scrollTop=previousQueue?.scrollTop;
-    const focused=document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
-    const focusedItem=previousQueue?.contains(focused) && focused
-      ? focused.closest<HTMLElement>('[data-queue-item]') : null;
-    const focusedAction=focusedItem && focused ? Array.from(focusedItem.querySelectorAll('button')).indexOf(focused) : -1;
-    root.dataset.plan=signature;root.dataset.queueSelection=selection;root.replaceChildren();this.focusDelete=null;
-    if (views.length && (g.fullVision || g.current !== g.latest)) {
-      for (const v of views) {
-        const card=document.createElement('section');card.className='factory-plan review-queue';
-        const title=document.createElement('strong');title.textContent=`${g.name(v.owner)} · ${v.type_key} at ${Math.round(v.x)}, ${Math.round(v.y)}`;card.append(title);
-        if (!v.exact && !v.blueprint) card.append('Pause at a tick to inspect its queue.');
-        else {
-          const plan=factoryPlan(g,v);
-          for (const line of [
-            plan.active ? `Building ${plan.active.type_key} · ${Math.round(plan.active.paid_matter)} matter paid` : 'No active production',
-            'Queue · '+(plan.pending.map(i=>i.type+(i.loop?' ↻':'')).join(' → ')||'empty'),
-            g.types.get(v.type_key)?.silo ? 'Launch plan · '+(plan.silo.launches.map(i=>i.type_key).join(' → ')||'empty') : 'New units · '+orderLabel(plan.order)
-          ]) { const item=document.createElement('div');item.textContent=line;card.append(item); }
-        }
-        root.append(card);
-      }
-      return;
-    }
-    const enabled=g.canStage().ok;
-    const factories=views.filter(v=>!g.types.get(v.type_key)?.silo);
-    const silos=views.filter(v=>g.types.get(v.type_key)?.silo);
-    const editors=[...(factories.length?[{key:'factories',label:factories.length>1?`${factories.length} factories · shared editor`:'Factory output'}]:[]),...silos.map(v=>({key:idKey(v.id),label:`Missile silo at ${v.x}, ${v.y}`}))];
-    if(!editors.some(e=>e.key===root.dataset.editor))root.dataset.editor=editors[0]?.key;
-    if(editors.length>1){const picker=document.createElement('select');picker.setAttribute('aria-label','Production editor');for(const e of editors)picker.add(new Option(e.label,e.key));picker.value=root.dataset.editor!;picker.onchange=()=>{root.dataset.editor=picker.value;root.dataset.plan='';this.queue();};root.append(picker);}
-    const showFactories=root.dataset.editor==='factories';
-    if(factories.length>1&&showFactories)this.sharedQueue(root,factories);
-    for(const v of views.filter(v=>g.types.get(v.type_key)?.silo?idKey(v.id)===root.dataset.editor:factories.length===1&&showFactories)) {
-      const isSilo=!!g.types.get(v.type_key)?.silo;
-      const plan=factoryPlan(g,v), card=document.createElement('section');card.className='factory-plan';
-      if (!isSilo) card.classList.add('editable-factory');
-      const heading=document.createElement('strong');heading.append(unitIcon(v.type_key,g.color(v.owner)),document.createTextNode(isSilo?'Missile production':v.lifecycle==='complete'?'Factory output':v.lifecycle==='site'?'Factory under construction':'Planned factory'));card.append(heading);
-      const configure=(change:(settings:NonNullable<typeof v.settings>)=>void)=>{const settings=structuredClone(v.settings!);settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
-      const settings=document.createElement('div');settings.className='factory-settings';
-      const loop=button(`↻ Loop new items: ${plan.loop?'On':'Off'}`,()=>{if(v.blueprint)configure(s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});});loop.setAttribute('aria-pressed',String(plan.loop));loop.disabled=!enabled;settings.append(loop);card.append(settings);
-      const summary=document.createElement('div');summary.className='factory-order';summary.textContent=`New units: ${plan.order.kind==='idle'?'Idle at output — give a destination':orderLabel(plan.order)}${plan.group ? ` · group ${plan.group.slot}` : ''}`;summary.hidden=isSilo;card.append(summary);
-      if(v.lifecycle!=='complete'){const note=document.createElement('small');note.textContent='Queue starts as soon as construction finishes.';card.append(note);}
-      const queue=document.createElement('div');queue.className='queue-icons';
-      if(plan.active){const active=document.createElement('div');active.className='queue-item active';active.dataset.queueItem=`active:${JSON.stringify(plan.active.item_id)}`;const progress=plan.active.awaiting_output?'Output blocked':`${Math.round(plan.active.paid_matter)} / ${g.types.get(plan.active.type_key)?.matter_cost} matter`;active.append(unitIcon(plan.active.type_key,g.color(v.owner)),queueLabel(`Building ${plan.active.type_key} · ${progress}`));const cancel=button('×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}}));cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key}`);cancel.title='Cancel this unit; spent matter is lost';cancel.onfocus=()=>{this.focusDelete=()=>cancel.click();};cancel.disabled=!enabled;const repeat=button(plan.active.loop_enabled?'↻':'1×',()=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:plan.active!.item_id}],enabled:!plan.active!.loop_enabled}}));repeat.setAttribute('aria-label',`Loop active ${plan.active.type_key}`);repeat.setAttribute('aria-pressed',String(plan.active.loop_enabled??false));repeat.disabled=!enabled;active.dataset.loop=String(plan.active.loop_enabled??false);if(isSilo)active.append(repeat,cancel);else active.prepend(repeat,cancel);queue.append(active);}
-      // Group adjacent recipes, preserving build order and each item reference for removal.
-      for(const batch of queueBatches(plan.pending)){const chip=document.createElement('div');chip.className='queue-item';chip.dataset.queueItem=`${batch.type}:${batch.indices[0]}`;chip.title=`${batch.type} ×${batch.indices.length}`;chip.append(unitIcon(batch.type,g.color(v.owner)),queueLabel(`${batch.type} ×${batch.indices.length}`));const index=batch.indices.at(-1)!;const remove=button('−',()=>{if(v.blueprint)configure(s=>{s.queue.splice(index,1);s.queue_loop_flags?.splice(index,1);});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[plan.pending[index].ref!]}});});remove.setAttribute('aria-label',`Remove one queued ${batch.type}`);remove.onfocus=()=>{this.focusDelete=()=>remove.click();};remove.disabled=!enabled;const repeat=button(batch.loop?'↻':'1×',()=>{if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);for(const index of batch.indices)s.queue_loop_flags[index]=!batch.loop;});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(index=>plan.pending[index].ref!),enabled:!batch.loop}});});repeat.setAttribute('aria-label',`Loop queued ${batch.type}`);repeat.setAttribute('aria-pressed',String(batch.loop));repeat.title=batch.loop?'Repeats after completion':'Build once';repeat.disabled=!enabled;chip.dataset.loop=String(batch.loop);if(isSilo)chip.append(repeat,remove);else chip.prepend(repeat,remove);queue.append(chip);}
-      if(!plan.active && !plan.pending.length){const empty=document.createElement('span');empty.className='muted';empty.textContent=isSilo?'Production empty — build missiles below.':'Queue empty — add units.';queue.append(empty);}card.insertBefore(queue,summary);
-      const recipes=document.createElement('div');recipes.className='recipe-icons';
-      for(const type of g.types.get(v.type_key)?.production?.recipes ?? []){const add=button('',event=>{const items=Array(event.shiftKey?5:1).fill(type);if(v.blueprint)configure(s=>{s.queue_loop_flags??=s.queue.map(()=>false);s.queue.push(...items);s.queue_loop_flags.push(...items.map(()=>plan.loop));});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items}});});add.append(unitIcon(type,g.color(v.owner)),document.createTextNode(isSilo?` ${type.replace('_',' ')} +`:'+'));add.setAttribute('aria-label',`Queue ${type}`);add.title=`Queue ${type} · ${g.types.get(type)?.matter_cost} matter · Shift-click adds 5`;add.disabled=!enabled;recipes.append(add);}card.append(recipes);
-      const clear=button('Clear waiting queue',()=>{if(v.blueprint)configure(s=>{s.queue=[];s.queue_loop_flags=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});});clear.disabled=!enabled||!plan.pending.length;card.append(clear);
-      if(isSilo){
-        const details=document.createElement('details');details.className='silo-production';details.open=this.siloProductionOpen.has(idKey(v.id));
-        const label=document.createElement('summary');label.textContent=`Build missiles · ${plan.pending.length} waiting${plan.active?' · building '+plan.active.type_key.replace('_',' '):''}`;
-        const children=Array.from(card.childNodes);details.append(label,...children);
-        details.ontoggle=()=>{if(details.isConnected){if(details.open)this.siloProductionOpen.add(idKey(v.id));else this.siloProductionOpen.delete(idKey(v.id));}};
-        card.append(details,siloPanel(g,v));
-      } else {
-        const controls=document.createElement('div');
-        controls.className='factory-controls';
-        controls.append(settings,recipes,clear);
-        card.append(controls);
-      }
-      root.append(card);
-    }
-    const currentQueue=root.querySelector(queueSelector);
-    if (scrollTop) currentQueue?.scrollTo(0,scrollTop);
-    if (focusedItem && focusedAction >= 0) {
-      const row=Array.from(currentQueue?.querySelectorAll<HTMLElement>('[data-queue-item]') ?? [])
-        .find(item=>item.dataset.queueItem===focusedItem.dataset.queueItem);
-      row?.querySelectorAll('button')[focusedAction]?.focus({preventScroll:true});
-    }
-  }
-  sharedQueue(root: HTMLElement, views: EntityView[]): void {
-    const g=this.g, aligned=new Set(views.map(v=>factorySignature(g,v))).size===1;
-    const plan=factoryPlan(g,views[0]);
-    const card=document.createElement('section');card.className='factory-plan editable-factory shared-factories';
-    const heading=document.createElement('strong');heading.textContent=`${views.length} factories · shared commands`;card.append(heading);
-    const warning=document.createElement('p');warning.className=aligned?'factory-order':'order-warning';
-    warning.textContent=aligned?`Aligned queues · New units: ${orderLabel(plan.order)}`:'Different configurations. Your next shared command clears all selected factories’ queues and settings at this tick, including active production and spent matter. Undo restores the draft.';card.append(warning);
-    const edit=(change:(v:EntityView)=>void)=>g.editFactories(()=>{for(const v of g.factorySelection())change(v);});
-    const configure=(v:EntityView,change:(s:NonNullable<EntityView['settings']>)=>void)=>{const settings=structuredClone(v.settings!);settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false);change(settings);g.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});};
-    const loop=button(`↻ Loop new items: ${aligned?(plan.loop?'On':'Off'):'Mixed'}`,()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.loop_enabled=!plan.loop;});else g.stage({kind:'set_queue_loop',factories:[v.id],enabled:!plan.loop});}));
-    const queue=document.createElement('div');queue.className='queue-icons';
-    if(aligned){
-      if (plan.active) {
-        const active=document.createElement('div');
-        active.className='queue-item active';
-        active.dataset.queueItem=`active:${JSON.stringify(plan.active.item_id)}`;
-        const repeat=button(plan.active.loop_enabled?'↻':'1×',()=>edit(v=>{
-          const item=factoryPlan(g,v).active;
-          if(item)g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:[{kind:'persistent',id:item.item_id}],enabled:!plan.active!.loop_enabled}});
-        }));
-        repeat.setAttribute('aria-label','Repeat active on all');
-        repeat.setAttribute('aria-pressed',String(plan.active.loop_enabled??false));
-        const cancel=button('×',()=>edit(v=>g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}})));
-        cancel.setAttribute('aria-label',`Cancel active ${plan.active.type_key} on all`);
-        cancel.title='Cancel this unit in all selected factories; spent matter is lost';
-        cancel.onfocus=()=>{this.focusDelete=()=>cancel.click();};
-        active.append(repeat,cancel,unitIcon(plan.active.type_key,g.color(g.player!)),queueLabel(`Building ${plan.active.type_key} ×${views.length}`));
-        queue.append(active);
-      }
-      for(const batch of queueBatches(plan.pending)){
-        const index=batch.indices.at(-1)!;
-        const chip=document.createElement('span');
-        chip.className='queue-item';
-        chip.dataset.queueItem=`${batch.type}:${batch.indices[0]}`;
-        chip.dataset.loop=String(batch.loop);
-        chip.append(unitIcon(batch.type,g.color(g.player!)),queueLabel(`${batch.type} ×${batch.indices.length}`));
-        const repeat=button(batch.loop?'↻':'1×',()=>edit(v=>{
-          if(v.blueprint)configure(v,s=>{for(const i of batch.indices)s.queue_loop_flags![i]=!batch.loop;});
-          else {
-            const pending=factoryPlan(g,v).pending;
-            g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'set_item_loop',item_ids:batch.indices.map(i=>pending[i].ref!),enabled:!batch.loop}});
-          }
-        }));
-        repeat.setAttribute('aria-label',`Loop shared ${batch.type} batch`);
-        repeat.setAttribute('aria-pressed',String(batch.loop));
-        const remove=button('−',()=>edit(v=>{
-          if(v.blueprint)configure(v,s=>{s.queue.splice(index,1);s.queue_loop_flags!.splice(index,1);});
-          else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'remove_pending',item_ids:[factoryPlan(g,v).pending[index].ref!]}});
-        }));
-        remove.setAttribute('aria-label',`Remove shared item ${index+1}`);
-        remove.onfocus=()=>{this.focusDelete=()=>remove.click();};
-        chip.prepend(repeat,remove);
-        queue.append(chip);
-      }
-    }
-    if (!queue.childElementCount) {
-      const empty=document.createElement('span');
-      empty.className='muted';
-      empty.textContent=aligned?'Queue empty — add units.':'Queues differ across factories.';
-      queue.append(empty);
-    }
-    card.append(queue);
-    const recipes=document.createElement('div');recipes.className='recipe-icons';
-    for(const type of g.producible().filter(type=>views.every(v=>g.types.get(v.type_key)?.production?.recipes.includes(type)))){
-      const add=button('',event=>edit(v=>{const items=Array(event.shiftKey?5:1).fill(type);if(v.blueprint)configure(v,s=>{s.queue.push(...items);s.queue_loop_flags!.push(...items.map(()=>s.loop_enabled));});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'append',items}});}));add.setAttribute('aria-label',`Queue ${type}`);add.title=`${type} · ${g.types.get(type)?.matter_cost} matter each · Shift adds 5 to every factory`;add.append(unitIcon(type,g.color(g.player!)),document.createTextNode('+'));recipes.append(add);
-    }
-    const controls=document.createElement('div');
-    controls.className='factory-controls';
-    controls.append(loop,recipes,button('Clear all waiting queues',()=>edit(v=>{if(v.blueprint)configure(v,s=>{s.queue=[];s.queue_loop_flags=[];});else g.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});} )));
-    card.append(controls);
-    for(const b of Array.from(card.querySelectorAll('button')))b.disabled=!g.canStage().ok;
-    root.append(card);
   }
   lockPreview(): string {
     const g = this.g, turns = this.turns.get(g.current);

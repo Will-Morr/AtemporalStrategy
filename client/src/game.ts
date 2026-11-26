@@ -656,12 +656,18 @@ export class Game {
     return visible;
   }
 
-  configureGhosts(change: (s: BlueprintSettings) => void, accepts: (v: EntityView) => boolean = () => true): boolean {
+  configureBlueprint(v: EntityView, change: (settings: BlueprintSettings, loopFlags: boolean[]) => void): void {
+    if (!v.blueprint || !v.settings) return;
+    const settings = structuredClone(v.settings);
+    const loopFlags = settings.queue.map((_, index) => settings.queue_loop_flags?.[index] ?? false);
+    settings.queue_loop_flags = loopFlags;
+    change(settings, loopFlags);
+    this.stage({kind: 'configure_blueprints', blueprint_ids: [v.blueprint], settings});
+  }
+
+  configureGhosts(change: (settings: BlueprintSettings, loopFlags: boolean[]) => void, accepts: (v: EntityView) => boolean = () => true): boolean {
     const ghosts = this.selectedViews().filter(v => v.blueprint && this.ownSelectable(v) && accepts(v));
-    for (const v of ghosts) {
-      const settings = structuredClone(v.settings!); settings.queue_loop_flags=settings.queue.map((_,i)=>settings.queue_loop_flags?.[i]??false); change(settings);
-      this.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint!],settings});
-    }
+    for (const v of ghosts) this.configureBlueprint(v, change);
     return ghosts.length > 0;
   }
 
@@ -892,8 +898,15 @@ export class Game {
     this.factoryEditing=true;
     try {
       if(mixed)for(const v of factories){
-        if(v.blueprint){const settings=structuredClone(v.settings!);settings.queue=[];settings.queue_loop_flags=[];settings.loop_enabled=false;settings.priority='medium';settings.order={kind:'idle'};this.stage({kind:'configure_blueprints',blueprint_ids:[v.blueprint],settings});}
-        else {
+        if (v.blueprint) {
+          this.configureBlueprint(v, settings => {
+            settings.queue = [];
+            settings.queue_loop_flags = [];
+            settings.loop_enabled = false;
+            settings.priority = 'medium';
+            settings.order = {kind: 'idle'};
+          });
+        } else {
           this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});
           if(factoryPlan(this,v).active)this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}});
           this.stage({kind:'set_queue_loop',factories:[v.id],enabled:false});
@@ -1615,8 +1628,12 @@ export class Game {
     } else if (mode.kind === 'recipe') {
       const key = this.producible()[n - 1];
       const factories = key ? this.selectedIds(t => !!t.production?.recipes.includes(key)) : [];
-      const ghosts = key ? this.configureGhosts(s => { s.queue_loop_flags ??= s.queue.map(()=>false);s.queue.push(...Array(five?5:1).fill(key));s.queue_loop_flags.push(...Array(five?5:1).fill(s.loop_enabled)); }, v=>!!this.types.get(v.type_key)?.production?.recipes.includes(key)) : false;
-      if (key && factories.length) this.stage({ kind: 'edit_production', factories, edit: { kind: 'append', items: Array(five?5:1).fill(key) } });
+      const items = key ? Array<string>(five ? 5 : 1).fill(key) : [];
+      const ghosts = key ? this.configureGhosts((settings, loopFlags) => {
+        settings.queue.push(...items);
+        loopFlags.push(...items.map(() => settings.loop_enabled));
+      }, v => !!this.types.get(v.type_key)?.production?.recipes.includes(key)) : false;
+      if (key && factories.length) this.stage({kind: 'edit_production', factories, edit: {kind: 'append', items}});
       else if (!ghosts) this.toast(key ? 'Select a factory first.' : 'No such recipe.');
       this.mode = { kind: 'none' };
     } else if (mode.kind === 'priority') {
