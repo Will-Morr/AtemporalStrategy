@@ -14,43 +14,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
-pub const TIMELINE_BUCKET: Tick = 20;
-/// Published index entries per player; cap-length runs widen buckets instead of growing.
-pub const TIMELINE_INDEX_PER_PLAYER: Tick = 500;
-/// Most stats buckets one `get_stats` answer carries; wider windows coarsen automatically.
-pub const MAX_STAT_BUCKETS: Tick = 2000;
+pub use crate::revision::{
+    MAX_STAT_BUCKETS, RevisionData, TIMELINE_BUCKET, TIMELINE_INDEX_PER_PLAYER, timeline_index,
+};
 const EXACT_CACHE: usize = 64;
 pub const DEFAULT_MEMORY_BUDGET: u64 = 512 << 20;
 pub const DEFAULT_DISK_BUDGET: u64 = 2048 << 20;
-
-#[derive(Clone)]
-pub struct RevisionData {
-    pub revision: Revision,
-    pub round: u32,
-    pub parent: Option<Revision>,
-    pub base_tick: Tick,
-    pub dictionary: Vec<EntityRef>,
-    pub samples: BTreeMap<Tick, Sample>,
-    pub checkpoints: BTreeMap<Tick, WorldState>,
-    pub stats: BTreeMap<Tick, StatsSample>,
-    pub events: Vec<WorldEvent>,
-    pub timeline: Vec<TimelineBucket>,
-    pub outcome: Option<Outcome>,
-    pub final_hash: String,
-    pub command_outcomes: Vec<CommandOutcome>,
-    pub sim_duration_ms: u64,
-    pub turns: Vec<AcceptedTurn>,
-    pub precedence: Vec<RoundPrecedence>,
-    pub timeline_index: Vec<TimelineBucket>,
-    pub score: Option<RoundScore>,
-    pub timed: Option<TimedAdjudication>,
-    pub started: Option<Instant>,
-    /// False once the regenerable body (samples, checkpoints, stats, events, timeline) was evicted.
-    pub loaded: bool,
-    /// Body size proxy: JSON bytes of the result cache (or an estimate before it is written).
-    pub bytes: u64,
-    pub last_used: u64,
-}
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RoundMeasurement {
@@ -841,86 +810,12 @@ impl Controller {
             .revisions
             .get(&parent_rev)
             .ok_or("no parent revision")?;
-        // Empty turns change the score ledger without changing the simulated world.
-        // Only published passes can reuse the final prefix. Jobs without new
-        // turns (genesis or an explicit regeneration) start at the opening.
-        let latest_safe_pass_tick = parent
-            .outcome
-            .as_ref()
-            .map_or(0, |outcome| outcome.terminal_state_tick.saturating_sub(1));
-        let earliest = turns
-            .iter()
-            .filter(|t| t.round == round)
-            .map(|t| {
-                if t.commands.is_empty() {
-                    latest_safe_pass_tick
-                } else {
-                    t.tick
-                }
-            })
-            .min()
-            .unwrap_or(0);
-        let (base_tick, checkpoint) = parent
-            .checkpoints
-            .range(..=earliest)
-            .next_back()
-            .map(|(t, s)| (*t, s.clone()))
-            .ok_or("no checkpoint at or before the earliest new input")?;
         let revision = if round == 0 {
             0
         } else {
             self.revisions.keys().max().map_or(0, |r| r + 1)
         };
-        let mut data = RevisionData::new(
-            revision,
-            round,
-            (round > 0).then_some(parent_rev),
-            base_tick,
-        );
-        // Reuse the unchanged prefix from the parent; the job regenerates everything from base_tick.
-        data.dictionary = parent.dictionary.clone();
-        data.samples = parent
-            .samples
-            .range(..base_tick)
-            .map(|(t, s)| (*t, s.clone()))
-            .collect();
-        data.checkpoints = parent
-            .checkpoints
-            .range(..=base_tick)
-            .map(|(t, s)| (*t, s.clone()))
-            .collect();
-        data.stats = parent
-            .stats
-            .range(..base_tick)
-            .map(|(t, s)| (*t, s.clone()))
-            .collect();
-        data.events = parent
-            .events
-            .iter()
-            .filter(|e| e.tick < base_tick)
-            .cloned()
-            .collect();
-        data.timeline = parent
-            .timeline
-            .iter()
-            .filter(|b| b.to_tick_exclusive <= base_tick)
-            .cloned()
-            .collect();
-        // Preserve authoritative diagnostics for the unchanged checkpoint prefix.
-        data.command_outcomes = parent
-            .command_outcomes
-            .iter()
-            .filter(|outcome| {
-                parent.turns.iter().any(|turn| {
-                    turn.tick < base_tick
-                        && turn
-                            .commands
-                            .iter()
-                            .any(|command| command.id == outcome.command_id)
-                })
-            })
-            .cloned()
-            .collect();
+        let (checkpoint, mut data) = parent.fork_at_inputs(revision, round, &turns)?;
         data.turns = turns.clone();
         data.precedence = precedence.clone();
         data.started = Some(Instant::now());
@@ -2099,18 +1994,7 @@ impl Controller {
         let Some(data) = self.revisions.get_mut(&revision) else {
             return;
         };
-        let initial = (revision == 0)
-            .then(|| data.checkpoints.get(&0).cloned())
-            .flatten();
-        data.dictionary = vec![];
-        data.samples = BTreeMap::new();
-        data.checkpoints = initial
-            .map(|s| BTreeMap::from([(0, s)]))
-            .unwrap_or_default();
-        data.stats = BTreeMap::new();
-        data.events = vec![];
-        data.timeline = vec![];
-        data.loaded = false;
+        data.discard_body();
         self.exact_cache.retain(|((r, _), _)| *r != revision);
         self.evictions += 1;
     }
@@ -2620,170 +2504,6 @@ pub fn verify_archive(loaded: &Loaded, content: &Content) -> Result<bool> {
     Ok(all_match)
 }
 
-impl RevisionData {
-    pub fn new(revision: Revision, round: u32, parent: Option<Revision>, base_tick: Tick) -> Self {
-        Self {
-            revision,
-            round,
-            parent,
-            base_tick,
-            dictionary: vec![],
-            samples: BTreeMap::new(),
-            checkpoints: BTreeMap::new(),
-            stats: BTreeMap::new(),
-            events: vec![],
-            timeline: vec![],
-            outcome: None,
-            final_hash: String::new(),
-            command_outcomes: vec![],
-            sim_duration_ms: 0,
-            turns: vec![],
-            precedence: vec![],
-            timeline_index: vec![],
-            score: None,
-            timed: None,
-            started: None,
-            loaded: true,
-            bytes: 0,
-            last_used: 0,
-        }
-    }
-    pub fn snapshot_range(
-        &self,
-        snapshot_interval: Tick,
-        from: Tick,
-        to: Tick,
-        stride: Tick,
-    ) -> ServerMessage {
-        let stride = stride.max(snapshot_interval);
-        let samples = self
-            .samples
-            .range(from..=to)
-            .filter(|(t, _)| (*t - from.min(**t)).is_multiple_of(stride) || **t == to)
-            .map(|(_, s)| s.clone())
-            .collect();
-        ServerMessage::SnapshotRange {
-            revision: self.revision,
-            index_width: if self.dictionary.len() <= usize::from(u16::MAX) {
-                16
-            } else {
-                32
-            },
-            entity_dictionary: self.dictionary.clone(),
-            samples,
-        }
-    }
-
-    pub fn stats_range(
-        &self,
-        snapshot_interval: Tick,
-        from: Tick,
-        to: Tick,
-        bucket_width: Tick,
-    ) -> ServerMessage {
-        let interval = snapshot_interval.max(1);
-        let span = to.saturating_sub(from).saturating_add(1);
-        let width = bucket_width
-            .max(interval)
-            .max(span.div_ceil(MAX_STAT_BUCKETS))
-            .next_multiple_of(interval);
-        // Banks and counters are gauges/cumulative, so a bucket reports its latest sample.
-        let mut buckets: Vec<StatsSample> = vec![];
-        for (tick, sample) in self.stats.range(from..=to) {
-            let bucket = (tick - from) / width;
-            if buckets
-                .last()
-                .is_some_and(|last| (last.tick - from) / width == bucket)
-            {
-                buckets.pop();
-            }
-            buckets.push(sample.clone());
-        }
-        ServerMessage::StatsRange {
-            revision: self.revision,
-            buckets,
-        }
-    }
-
-    pub fn round_result(&self, player_count: u8) -> Result<ServerMessage> {
-        let mut totals: BTreeMap<PlayerId, u64> =
-            (0..player_count).map(|player| (player, 0)).collect();
-        for turn in &self.turns {
-            *totals.entry(turn.player).or_default() += turn.duration_ms.get();
-        }
-        Ok(ServerMessage::RoundResult {
-            revision: self.revision,
-            round: self.round,
-            parent_revision: self.parent,
-            outcome: self.outcome.clone().ok_or("revision is not published")?,
-            timeline_index: self.timeline_index.clone(),
-            score: self.score.clone(),
-            timed: self.timed.clone(),
-            time_totals: totals
-                .into_iter()
-                .map(|(player_id, duration_ms)| PlayerTime {
-                    player_id,
-                    total_ms: duration_ms.try_into().unwrap_or_default(),
-                })
-                .collect(),
-            sim_duration_ms: self.sim_duration_ms.try_into().unwrap_or_default(),
-            command_outcomes: self.command_outcomes.clone(),
-        })
-    }
-
-    pub fn commands_range(&self, from: Tick, to: Tick) -> ServerMessage {
-        ServerMessage::Commands {
-            revision: self.revision,
-            turns: draft::effective_turns(&self.turns)
-                .into_iter()
-                .filter(|t| t.tick >= from && t.tick <= to)
-                .collect(),
-        }
-    }
-
-    pub fn events_range(&self, from: Tick, to: Tick, effects_only: bool) -> ServerMessage {
-        ServerMessage::Events {
-            revision: self.revision,
-            events: self
-                .events
-                .iter()
-                .filter(|e| e.tick >= from && e.tick <= to)
-                .filter(|e| {
-                    !effects_only
-                        || matches!(
-                            e.event,
-                            PresentationEvent::MissileLaunch { .. }
-                                | PresentationEvent::MissileImpact { .. }
-                                | PresentationEvent::Attack { .. }
-                                | PresentationEvent::Impact { .. }
-                                | PresentationEvent::Destroyed { .. }
-                        )
-                })
-                .cloned()
-                .collect(),
-        }
-    }
-
-    pub fn estimate_bytes(&self) -> u64 {
-        let checkpoints: usize = self
-            .checkpoints
-            .values()
-            .map(|c| 256 + c.terrain.cells.len() + c.ore.len() * 8 + c.entities.len() * 400)
-            .sum();
-        let samples: usize = self
-            .samples
-            .values()
-            .map(|s| 32 + s.entities.len() * 40 + s.ore.len() * 16)
-            .sum();
-        (checkpoints
-            + samples
-            + self.stats.len() * 256
-            + self.events.len() * 96
-            + self.timeline.len() * 48
-            + self.dictionary.len() * 64) as u64
-    }
-}
-
 fn short_id(id: &EntityId) -> String {
     format!(
         "r{}p{}i{}/{}#{}.{}",
@@ -2850,53 +2570,6 @@ fn rule_summary(config: &MatchConfig, content: &Content) -> String {
         config.ore_matter_per_start,
         depletion
     )
-}
-
-/// Dominant activity per player per coarse bucket: combat > construction > mining > movement > idle.
-/// Bucket width grows with the run so the index never exceeds `players × TIMELINE_INDEX_PER_PLAYER`.
-pub fn timeline_index(buckets: &[TimelineBucket], players: u8) -> Vec<TimelineBucket> {
-    let span = buckets
-        .iter()
-        .map(|b| b.to_tick_exclusive)
-        .max()
-        .unwrap_or(0);
-    let width = span
-        .div_ceil(TIMELINE_INDEX_PER_PLAYER)
-        .next_multiple_of(TIMELINE_BUCKET)
-        .max(TIMELINE_BUCKET);
-    let mut merged: BTreeMap<(Tick, PlayerId), [u32; 5]> = BTreeMap::new();
-    for b in buckets {
-        let key = (b.from_tick / width * width, b.player_id);
-        let slot = merged.entry(key).or_insert([0; 5]);
-        let a = b.activity as usize;
-        slot[a] = slot[a].max(b.affected_entities);
-    }
-    let _ = players;
-    merged
-        .into_iter()
-        .filter_map(|((from, player_id), counts)| {
-            let order = [
-                Activity::Combat,
-                Activity::Construction,
-                Activity::Mining,
-                Activity::Movement,
-                Activity::Idle,
-            ];
-            let (a, c) = order
-                .iter()
-                .enumerate()
-                .map(|(i, a)| (*a, counts[i]))
-                .find(|(_, c)| *c > 0)?;
-            Some(TimelineBucket {
-                from_tick: from,
-                to_tick_exclusive: from + width,
-                player_id,
-                activity: a,
-                affected_entities: c,
-                severity: f64::from(c),
-            })
-        })
-        .collect()
 }
 
 #[cfg(test)]

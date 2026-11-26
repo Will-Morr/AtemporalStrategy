@@ -286,71 +286,12 @@ impl Store {
         let parent = parent_key
             .and_then(|p| self.revisions.get(&p))
             .filter(|p| p.status == Status::Verified && p.data.loaded);
-        let earliest = turns
-            .iter()
-            .filter(|t| t.round == round)
-            .map(|t| t.tick)
-            .min()
-            .unwrap_or(0);
-        let mut data = RevisionData::new(revision, round, parent_key.filter(|_| revision > 0), 0);
-        let checkpoint = match parent {
-            Some(parent) if revision > 0 => {
-                let (base_tick, checkpoint) = parent
-                    .data
-                    .checkpoints
-                    .range(..=earliest)
-                    .next_back()
-                    .map(|(t, s)| (*t, s.clone()))
-                    .ok_or("no checkpoint at or before the earliest new input")?;
-                data.base_tick = base_tick;
-                data.dictionary = parent.data.dictionary.clone();
-                data.samples = parent
-                    .data
-                    .samples
-                    .range(..base_tick)
-                    .map(|(t, s)| (*t, s.clone()))
-                    .collect();
-                data.checkpoints = parent
-                    .data
-                    .checkpoints
-                    .range(..=base_tick)
-                    .map(|(t, s)| (*t, s.clone()))
-                    .collect();
-                data.stats = parent
-                    .data
-                    .stats
-                    .range(..base_tick)
-                    .map(|(t, s)| (*t, s.clone()))
-                    .collect();
-                data.events = parent
-                    .data
-                    .events
-                    .iter()
-                    .filter(|e| e.tick < base_tick)
-                    .cloned()
-                    .collect();
-                data.timeline = parent
-                    .data
-                    .timeline
-                    .iter()
-                    .filter(|b| b.to_tick_exclusive <= base_tick)
-                    .cloned()
-                    .collect();
-                data.command_outcomes = parent
-                    .data
-                    .command_outcomes
-                    .iter()
-                    .filter(|outcome| {
-                        parent.data.turns.iter().any(|turn| {
-                            turn.tick < base_tick
-                                && turn.commands.iter().any(|c| c.id == outcome.command_id)
-                        })
-                    })
-                    .cloned()
-                    .collect();
-                checkpoint
-            }
-            _ => self.initial()?,
+        let (checkpoint, mut data) = match parent {
+            Some(parent) if revision > 0 => parent.data.fork_at_inputs(revision, round, &turns)?,
+            _ => (
+                self.initial()?,
+                RevisionData::new(revision, round, parent_key.filter(|_| revision > 0), 0),
+            ),
         };
         data.turns = turns.clone();
         data.precedence = precedence.clone();
@@ -434,19 +375,10 @@ impl Store {
                 .min_by_key(|l| l.data.last_used)
                 .map(|l| l.data.revision);
             let Some(revision) = victim else { return };
-            let initial = (revision == 0).then(|| self.initial().ok()).flatten();
             let Some(entry) = self.revisions.get_mut(&revision) else {
                 return;
             };
-            entry.data.dictionary = vec![];
-            entry.data.samples = BTreeMap::new();
-            entry.data.checkpoints = initial
-                .map(|s| BTreeMap::from([(0, s)]))
-                .unwrap_or_default();
-            entry.data.stats = BTreeMap::new();
-            entry.data.events = vec![];
-            entry.data.timeline = vec![];
-            entry.data.loaded = false;
+            entry.data.discard_body();
             self.exact_cache.retain(|((r, _), _)| *r != revision);
             self.evictions += 1;
         }

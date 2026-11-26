@@ -12,3 +12,5 @@ pub mod preview;
 
 pub mod bots;
 pub mod coordinator;
+
+pub mod revision;
