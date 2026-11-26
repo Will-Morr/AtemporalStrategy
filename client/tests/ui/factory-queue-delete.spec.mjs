@@ -216,6 +216,96 @@ test('factory queue deletion still works when no draft fits in storage', async (
   await expect(queue).toContainText('grunt ×3');
 });
 
+test('factory queue dimensions and left-hand actions stay fixed as items change', async ({review}, testInfo) => {
+  const {a,constructor}=await opening(review,testInfo);
+  const sites=[await placeFactory(a,constructor),await placeFactory(a,constructor)];
+  await tile(a,sites[0]);
+  const queue=a.locator('.editable-factory>.queue-icons');
+  const layout=()=>a.evaluate(()=>{
+    const bounds=selector=>{
+      const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
+      return {x,y,width,height};
+    };
+    return {
+      deck:bounds('#panels'), map:bounds('#map'),
+      queue:bounds('.editable-factory>.queue-icons'),
+      build:bounds('.factory-controls .recipe-icons'),
+      add:bounds('.factory-controls [aria-label="Queue grunt"]'),
+    };
+  });
+  const fill=async()=>{
+    for (const name of ['grunt','artillery','tank','scout','miner','constructor']) {
+      await a.getByRole('button',{name:`Queue ${name}`,exact:true}).click({modifiers:['Shift']});
+    }
+    await expect(queue.locator('.queue-item')).toHaveCount(6);
+  };
+  const expectDraftInsidePanel=async()=>{
+    const layout=await a.evaluate(()=>{
+      const commit=document.querySelector('#commit').getBoundingClientRect();
+      const draft=document.querySelector('#draft-panel').parentElement.getBoundingClientRect();
+      const timeline=document.querySelector('#timeline-strip').getBoundingClientRect();
+      const list=document.querySelector('#draft-list').getBoundingClientRect();
+      const row=document.querySelector('#draft-list li').getBoundingClientRect();
+      return {commitBottom:commit.bottom,draftBottom:draft.bottom,timelineTop:timeline.top,
+        listBottom:list.bottom,rowBottom:row.bottom};
+    });
+    expect(layout.commitBottom).toBeLessThan(layout.timelineTop);
+    expect(layout.commitBottom).toBeLessThan(layout.draftBottom);
+    expect(layout.listBottom).toBeGreaterThanOrEqual(layout.rowBottom);
+  };
+  const mapFitsDeck=()=>a.evaluate(()=>{
+    const map=document.querySelector('#map');
+    return map.width===innerWidth && map.height===Math.floor(document.querySelector('#panels').getBoundingClientRect().top);
+  });
+  for (const viewport of [{width:1920,height:1080},{width:960,height:760}]) {
+    await a.setViewportSize(viewport);
+    await expect.poll(mapFitsDeck).toBe(true);
+    const empty=await layout();
+    await fill();
+    await expect.poll(layout).toEqual(empty);
+    await expectDraftInsidePanel();
+    const columns=await queue.locator('.queue-item').evaluateAll(rows=>rows.map(row=>{
+      const [repeat,remove,icon,label]=row.children;
+      return [repeat.getBoundingClientRect().left,remove.getBoundingClientRect().left,
+        icon.getBoundingClientRect().left,label.getBoundingClientRect().left];
+    }));
+    for (const row of columns) expect(row).toEqual(columns[0]);
+    expect(columns[0]).toEqual([...columns[0]].sort((x,y)=>x-y));
+    expect(new Set(columns[0]).size).toBe(4);
+    await review.capture(`fixed-factory-queue-${viewport.width}`,a);
+    const remove=a.getByRole('button',{name:'Remove one queued constructor',exact:true});
+    await remove.scrollIntoViewIfNeeded();
+    await remove.click();
+    await expect(queue).toContainText('constructor ×4');
+    await expect(remove).toBeFocused();
+    expect(await queue.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+    await a.keyboard.press('Delete');
+    await expect(queue).toContainText('constructor ×3');
+    await a.getByRole('button',{name:'Clear waiting queue',exact:true}).click();
+    await expect(queue).toContainText('Queue empty');
+    await expect.poll(layout).toEqual(empty);
+  }
+
+  await a.setViewportSize({width:1920,height:1080});
+  await selectBoth(a,sites);
+  await expect(a.locator('.editable-factory')).toHaveClass(/shared-factories/);
+  await expect.poll(mapFitsDeck).toBe(true);
+  const sharedEmpty=await layout();
+  await fill();
+  await expect.poll(layout).toEqual(sharedEmpty);
+  await expectDraftInsidePanel();
+  await review.capture('fixed-shared-factory-queue',a);
+  const removeShared=a.getByRole('button',{name:'Remove shared item 30',exact:true});
+  await removeShared.scrollIntoViewIfNeeded();
+  await removeShared.click();
+  await expect(queue).toContainText('constructor ×4');
+  await expect(a.getByRole('button',{name:'Remove shared item 29',exact:true})).toBeFocused();
+  expect(await queue.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+  await a.getByRole('button',{name:'Clear all waiting queues',exact:true}).click();
+  await expect(queue).toContainText('Queue empty');
+  await expect.poll(layout).toEqual(sharedEmpty);
+});
+
 test('completed factory queues retain the remaining items after deletion and commit', async ({review}, testInfo) => {
   const {a, b, constructor} = await opening(review, testInfo);
   const sites = [await placeFactory(a, constructor), await placeFactory(a, constructor)];
