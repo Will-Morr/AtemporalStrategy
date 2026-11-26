@@ -402,3 +402,13 @@ and multiple artillery factories with attack orders. The inspected
 forward sites and units in both approaches. The one-round browser fixture
 ended in a stalemate at its 1,200-tick cap. The browser artifacts are under
 `artifacts/ui/2026-11-24T05-11-49.471Z-1946801`.
+
+## Factory queue dimensions
+
+Chromium compared the map, command deck, queue and add-button bounds before
+adding six different batches, with the list overflowing, and after clearing it.
+The bounds matched at 1920 × 1080 and 960 × 760 for one factory and at
+desktop width for a shared queue. The scrolled removal button retained focus
+for a second deletion by keyboard. The inspected frames include the narrow
+draft controls and the aligned multi-factory editor in
+`artifacts/ui/2026-11-26T04-31-46.284Z-2432589`.
