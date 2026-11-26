@@ -412,3 +412,10 @@ desktop width for a shared queue. The scrolled removal button retained focus
 for a second deletion by keyboard. The inspected frames include the narrow
 draft controls and the aligned multi-factory editor in
 `artifacts/ui/2026-11-26T04-31-46.284Z-2432589`.
+
+The production panel refactor was also checked in Chromium with single and shared
+factory queues, per-item loop changes on completed factories, mixed factory
+resets, silo production, and archived spectator views. Both storage-quota cases
+passed with trace recording disabled after the first trace failed to finalize.
+The inspected screenshots, including the 960-pixel layout, are in
+`artifacts/ui/2026-11-26T05-57-14.180Z-2453816`.

@@ -58,8 +58,8 @@ Useful tools: `cargo run -p atemporal-tools -- schema | guide | normalize | fixt
 - `crates/contracts` — versioned records, identities, locks, scoring, timed adjudication, golden comparator.
 - `crates/content` — content/setup loading and validation; optional `guide` feature.
 - `crates/sim` — the engine: `world.rs` indexes, `fields.rs` flow fields, `commands.rs`, `tick.rs`, `output.rs`, `map.rs` (connected 2–4-player maps). Clippy forbids HashMap/HashSet here.
-- `crates/server` — library plus binary: `adapter.rs` sim thread (run/exact/replay jobs), `controller.rs` match state, lobby, retention, resume and replay verification, `archive.rs` files, `ws.rs` routes/protocol including `/ws/peripheral`, `coordinator.rs` directory/process routing, `bots.rs` simple opponents, `main.rs` CLI.
-- `client/src` — `directory.ts` game directory and creation, `net.ts`, `lobby.ts`, `game.ts` (state, input, panels), `render.ts` (map, minimap, timeline).
+- `crates/server` — library plus binary: `adapter.rs` sim thread (run/exact/replay jobs), `controller.rs` match lifecycle and publication, `revision.rs` shared replay queries, checkpoint selection and regeneration, `archive.rs` files, `ws.rs` routes/protocol including `/ws/peripheral`, `coordinator.rs` directory/process routing, `bots.rs` simple opponents, `main.rs` CLI.
+- `client/src` — `directory.ts` game directory and creation, `net.ts`, `lobby.ts`, `game.ts` (state and input), `factory.ts` (queue projection and edits), `production-panel.ts` (factory and silo controls), `render.ts` (map, minimap, timeline).
 - `crates/runner` — the native peripheral: `store.rs` local revision store (reproduction, hash check, eviction/regeneration, queries) over the server's sim adapter, `link.rs` controller sync link and per-tab relay, `main.rs` CLI/local routes.
 
 ## Final browser and integration checks
