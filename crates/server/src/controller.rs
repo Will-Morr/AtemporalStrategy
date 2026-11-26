@@ -65,6 +65,14 @@ impl From<&str> for StateCheckIssue {
     }
 }
 
+/// The worker generation and its unpublished revision share one lifetime. Taking this entry
+/// transfers the completed revision to publication or discards it on cancellation/failure.
+struct ActiveSimulation {
+    id: String,
+    cancel: Arc<AtomicBool>,
+    data: RevisionData,
+}
+
 pub struct Controller {
     practice_opening_min_end: Option<Tick>,
     pub last_activity_ms: u64,
@@ -97,8 +105,7 @@ pub struct Controller {
     exact_cache: VecDeque<((Revision, Tick), WorldState)>,
     pub broadcast: broadcast::Sender<ServerMessage>,
     pub sim: SimThread,
-    running: Option<(String, Arc<AtomicBool>)>,
-    pending: Option<RevisionData>,
+    active_simulation: Option<ActiveSimulation>,
     worker_retries: u8,
     pub match_winners: Vec<SideId>,
     pub measurements: Vec<RoundMeasurement>,
@@ -268,8 +275,7 @@ impl Controller {
             exact_cache: VecDeque::new(),
             broadcast,
             sim,
-            running: None,
-            pending: None,
+            active_simulation: None,
             worker_retries: 0,
             match_winners: vec![],
             measurements: vec![],
@@ -333,9 +339,9 @@ impl Controller {
 
     pub fn cancel_practice(&mut self) {
         if self.practice_opening_min_end.is_some()
-            && let Some((_, cancel)) = self.running.take()
+            && let Some(active) = self.active_simulation.take()
         {
-            cancel.store(true, Ordering::Relaxed);
+            active.cancel.store(true, Ordering::Relaxed);
         }
     }
 
@@ -829,8 +835,11 @@ impl Controller {
             .push_str(&format!("-retry{}", self.worker_retries));
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel(OUT_CAPACITY);
-        self.running = Some((request.job_id.clone(), cancel.clone()));
-        self.pending = Some(data);
+        self.active_simulation = Some(ActiveSimulation {
+            id: request.job_id.clone(),
+            cancel: cancel.clone(),
+            data,
+        });
         self.phase = Phase::Simulating;
         if let Some(inputs) = self.preview_inputs() {
             self.send(inputs);
@@ -846,26 +855,26 @@ impl Controller {
 
     pub fn replay_progress(&self) -> ServerMessage {
         ServerMessage::ReplayProgress {
-            preview: self
-                .pending
-                .as_ref()
-                .zip(self.running.as_ref())
-                .map(|(d, (id, _))| crate::preview::frontier(d, id, self.config.max_tick)),
+            preview: self.active_simulation.as_ref().map(|active| {
+                crate::preview::frontier(&active.data, &active.id, self.config.max_tick)
+            }),
         }
     }
 
     pub fn preview_inputs(&self) -> Option<ServerMessage> {
-        self.pending
+        self.active_simulation
             .as_ref()
-            .and_then(|d| self.round_inputs(d.revision).ok())
+            .and_then(|active| self.round_inputs(active.data.revision).ok())
     }
 
     pub fn preview_is_current(&self, generation: &str) -> bool {
-        self.pending.is_some()
-            && self
-                .running
-                .as_ref()
-                .is_some_and(|(id, _)| id == generation)
+        self.active_simulation
+            .as_ref()
+            .is_some_and(|active| active.id == generation)
+    }
+
+    fn take_active_simulation(&mut self, job_id: &str) -> Option<ActiveSimulation> {
+        self.active_simulation.take_if(|active| active.id == job_id)
     }
 
     pub fn preview_request(
@@ -876,10 +885,12 @@ impl Controller {
         from: Tick,
         to: Tick,
     ) -> Result<(ServerMessage, SimRequest)> {
-        if !self.preview_is_current(generation) {
-            return Err("preview generation expired".into());
-        }
-        let data = self.pending.as_ref().ok_or("preview finished")?;
+        let data = &self
+            .active_simulation
+            .as_ref()
+            .filter(|active| active.id == generation)
+            .ok_or("preview generation expired")?
+            .data;
         let message = crate::preview::response(data, generation, request_id, tick, from, to)?;
         let ServerMessage::ReplayPreview { snapshot, .. } = &message else {
             unreachable!()
@@ -895,9 +906,6 @@ impl Controller {
     }
 
     pub fn on_batch(&mut self, message: WorkerMessage) -> bool {
-        let Some(pending) = self.pending.as_mut() else {
-            return false;
-        };
         match message {
             WorkerMessage::Batch {
                 job_id,
@@ -909,9 +917,14 @@ impl Controller {
                 timeline,
                 ..
             } => {
-                if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
+                let Some(active) = self
+                    .active_simulation
+                    .as_mut()
+                    .filter(|active| active.id == job_id)
+                else {
                     return false;
-                }
+                };
+                let pending = &mut active.data;
                 fail_point("during_job", pending.round);
                 pending.dictionary.extend(dictionary);
                 for s in samples {
@@ -933,7 +946,7 @@ impl Controller {
                 tick,
                 end_tick,
             } => {
-                if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
+                if !self.preview_is_current(&job_id) {
                     return false;
                 }
                 self.send(self.replay_progress());
@@ -957,11 +970,7 @@ impl Controller {
         sim_duration_ms: u64,
         command_outcomes: Vec<CommandOutcome>,
     ) -> Option<RevisionData> {
-        if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
-            return None;
-        }
-        self.running = None;
-        let mut data = self.pending.take()?;
+        let mut data = self.take_active_simulation(job_id)?.data;
         data.outcome = Some(outcome);
         data.final_hash = final_hash;
         data.sim_duration_ms = sim_duration_ms;
@@ -975,14 +984,15 @@ impl Controller {
         &mut self,
         job_id: &str,
     ) -> Result<Option<mpsc::Receiver<WorkerMessage>>> {
-        if self.running.as_ref().is_none_or(|(id, _)| id != job_id) || self.worker_retries > 0 {
+        if self.worker_retries > 0 {
             return Ok(None);
         }
+        let Some(active) = self.take_active_simulation(job_id) else {
+            return Ok(None);
+        };
         self.worker_retries += 1;
-        if let Some((_, cancel)) = self.running.take() {
-            cancel.store(true, Ordering::Relaxed);
-        }
-        self.pending = None;
+        active.cancel.store(true, Ordering::Relaxed);
+        drop(active);
         eprintln!("retrying panicked worker from durable round {}", self.round);
         if self.round == 0 {
             self.start_job(0, vec![], vec![]).map(Some)
@@ -992,13 +1002,11 @@ impl Controller {
     }
 
     pub fn on_failed(&mut self, job_id: &str, message: &str) {
-        if self.running.as_ref().is_none_or(|(id, _)| *id != job_id) {
+        if self.take_active_simulation(job_id).is_none() {
             return;
         }
         eprintln!("simulation job {job_id} failed: {message}");
         self.send(ServerMessage::ReplayProgress { preview: None });
-        self.running = None;
-        self.pending = None;
         self.reopen_round();
     }
 
@@ -1852,8 +1860,9 @@ impl Controller {
     /// parent's timed boundary (0 without one) and fixes `minimum_end_tick` for reproduction.
     pub fn round_inputs(&self, revision: Revision) -> Result<ServerMessage> {
         let data = self
-            .pending
+            .active_simulation
             .as_ref()
+            .map(|active| &active.data)
             .filter(|d| d.revision == revision)
             .map(Ok)
             .unwrap_or_else(|| self.revision(revision))?;
@@ -2028,7 +2037,10 @@ impl Controller {
         let Some(archive) = &self.archive else { return };
         let usage = archive.results_usage();
         let mut total: u64 = usage.iter().map(|(_, b)| b).sum();
-        let pending = self.pending.as_ref().map(|p| p.revision);
+        let pending = self
+            .active_simulation
+            .as_ref()
+            .map(|active| active.data.revision);
         for (revision, bytes) in usage {
             if total <= self.disk_budget {
                 break;
@@ -2074,8 +2086,8 @@ impl Controller {
         if based_on_revision != self.current {
             return Err("stale revision".into());
         }
-        if let Some((_, cancel)) = &self.running {
-            cancel.store(true, Ordering::Relaxed);
+        if let Some(active) = &self.active_simulation {
+            active.cancel.store(true, Ordering::Relaxed);
         }
         self.phase = Phase::Archived;
         self.last_activity_ms = now_ms();
@@ -3281,7 +3293,7 @@ pub(crate) mod tests {
         commit(&mut c, 0, "a1", 0);
         let rx = commit(&mut c, 1, "b1", 0).unwrap();
         let hash = c.revisions[&0].final_hash.clone();
-        let pending = c.pending.as_ref().unwrap().samples.len();
+        let pending = c.active_simulation.as_ref().unwrap().data.samples.len();
         assert!(!c.on_batch(WorkerMessage::Progress {
             job_id: "stale".into(),
             revision: 99,
@@ -3301,10 +3313,43 @@ pub(crate) mod tests {
         c.on_failed("stale", "ignored");
         assert_eq!(c.current, 0);
         assert_eq!(c.revisions[&0].final_hash, hash);
-        assert_eq!(c.pending.as_ref().unwrap().samples.len(), pending);
+        assert_eq!(
+            c.active_simulation.as_ref().unwrap().data.samples.len(),
+            pending
+        );
         assert_eq!(c.phase, Phase::Simulating);
         drop(rx);
     }
+
+    #[test]
+    fn leaving_practice_releases_the_unpublished_revision() {
+        let original = started(false, |_| {});
+        let mut practice = Controller::practice(
+            original.config.clone(),
+            original.content.clone(),
+            original.fingerprint.clone(),
+            original.lobby.clone(),
+            original.revisions[&0].clone(),
+            0,
+            original.sim.clone(),
+        )
+        .unwrap();
+        let _worker = practice.start_job(1, vec![], vec![]).unwrap();
+        let active = practice.active_simulation.as_ref().unwrap();
+        let cancel = active.cancel.clone();
+        let generation = active.id.clone();
+        assert!(practice.preview_is_current(&generation));
+        assert!(practice.preview_inputs().is_some());
+
+        practice.cancel_practice();
+
+        assert!(cancel.load(Ordering::Relaxed));
+        assert!(!practice.preview_is_current(&generation));
+        assert!(practice.preview_inputs().is_none());
+        assert!(practice.round_inputs(1).is_err());
+        assert!(practice.revision_published(1).is_none());
+    }
+
     #[test]
     fn effects_query_omits_movement_without_changing_full_diagnostics() {
         let mut c = started(false, |_| {});
