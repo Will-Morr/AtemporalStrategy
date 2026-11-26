@@ -72,6 +72,7 @@ test('spectators inspect enemy production and branch an archived unfinished game
   expect(await b.evaluate(()=>window.atemporal.player)).toBe(1);
   await a.locator('#actions .planning>summary').click();await a.locator('#stop-archive').click();
   await expect(b.locator('#new-game-menu')).toBeVisible();
+  await b.getByRole('button',{name:'Keep viewing replay'}).click();
   await seek(b,153);await tile(b,spot);
   await expect(b.locator('.review-queue')).toContainText('Queue · grunt');
   await expect(b.locator('.review-queue button')).toHaveCount(0);
