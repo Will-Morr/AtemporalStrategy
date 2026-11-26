@@ -230,33 +230,32 @@ impl Sim {
         neighbors: Neighbors,
     ) -> Vec<Tile> {
         const RADIUS: i32 = 6;
+        const SIDE: usize = (2 * RADIUS + 1) as usize;
+        const CELLS: usize = SIDE * SIDE;
         let target_below = field[self.idx(from)];
         if target_below == 0 || target_below == UNREACHABLE {
             return vec![];
         }
         let count = if neighbors == Neighbors::Eight { 8 } else { 4 };
-        let mut parent: BTreeMap<Tile, Tile> = BTreeMap::new();
-        let mut queue = VecDeque::from([from]);
-        parent.insert(from, from);
+        let index = |tile: Tile| {
+            let x = (i32::from(tile.x) - i32::from(from.x) + RADIUS) as usize;
+            let y = (i32::from(tile.y) - i32::from(from.y) + RADIUS) as usize;
+            y * SIDE + x
+        };
+        let mut parent = [None; CELLS];
+        parent[index(from)] = Some(from);
+        // Each cell enters the FIFO once. Record its depth at discovery; the
+        // predecessor chain is only needed when reconstructing the chosen path.
+        let mut queue = [(from, 0); CELLS];
+        let mut head = 0;
+        let mut tail = 1;
         let mut best: Option<(u16, usize, Tile)> = None;
-        while let Some(t) = queue.pop_front() {
-            let path_len = {
-                let mut n = 0;
-                let mut c = t;
-                while c != from {
-                    c = parent[&c];
-                    n += 1;
-                }
-                n
-            };
-            if t != from {
-                let d = field[self.idx(t)];
-                if d < target_below {
-                    let key = (d, path_len, t);
-                    if best.is_none_or(|b| key < (b.0, b.1, b.2)) {
-                        best = Some(key);
-                    }
-                }
+        while head < tail {
+            let (t, path_len) = queue[head];
+            head += 1;
+            let key = (field[self.idx(t)], path_len, t);
+            if key.0 < target_below && best.is_none_or(|b| key < b) {
+                best = Some(key);
             }
             for (dx, dy, _) in &DIRS[..count] {
                 let Some(n) = self.step_legal(t, *dx, *dy, neighbors) else {
@@ -265,22 +264,24 @@ impl Sim {
                 if (i32::from(n.x) - i32::from(from.x)).abs() > RADIUS
                     || (i32::from(n.y) - i32::from(from.y)).abs() > RADIUS
                     || self.occ[self.idx(n)] != world::NONE
-                    || parent.contains_key(&n)
                 {
                     continue;
                 }
-                parent.insert(n, t);
-                queue.push_back(n);
+                let slot = &mut parent[index(n)];
+                if slot.is_none() {
+                    *slot = Some(t);
+                    queue[tail] = (n, path_len + 1);
+                    tail += 1;
+                }
             }
         }
-        let Some((_, _, end)) = best else {
+        let Some((_, path_len, mut tile)) = best else {
             return vec![];
         };
-        let mut path = vec![end];
-        let mut c = end;
-        while parent[&c] != from {
-            c = parent[&c];
-            path.push(c);
+        let mut path = Vec::with_capacity(path_len);
+        while tile != from {
+            path.push(tile);
+            tile = parent[index(tile)].expect("each queued tile has a predecessor");
         }
         path.reverse();
         path
