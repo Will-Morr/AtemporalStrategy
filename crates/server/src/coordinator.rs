@@ -44,6 +44,39 @@ struct Directory {
     games: BTreeMap<String, GameRecord>,
     users: BTreeMap<String, String>,
 }
+
+/// Copy just the directory card fields before accessing any lobby or replay files.
+struct DirectoryGame {
+    id: String,
+    name: String,
+    created: u64,
+    expired: bool,
+    locked: bool,
+    players: PlayerId,
+    bots: Vec<Option<crate::bots::Style>>,
+    owned_slots: Vec<PlayerId>,
+    teams: Vec<AvailableTeam>,
+}
+
+impl DirectoryGame {
+    fn snapshot(game: &GameRecord, user: Option<&str>) -> Self {
+        Self {
+            id: game.id.clone(),
+            name: game.name.clone(),
+            created: game.created,
+            expired: game.expired,
+            locked: !game.password.is_empty(),
+            players: game.setup.match_defaults.player_count,
+            bots: game.bots.slots.clone(),
+            owned_slots: user
+                .and_then(|user| game.members.get(user))
+                .cloned()
+                .unwrap_or_default(),
+            teams: game.setup.available_teams.clone(),
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct ReplayListing {
     time: u64,
@@ -363,7 +396,7 @@ pub struct Coordinator {
     defaults: Setup,
     test_server: bool,
     directory: Arc<Mutex<Directory>>,
-    replay_summaries: Arc<Mutex<ReplaySummaryCache>>,
+    replay_summaries: Arc<tokio::sync::Mutex<ReplaySummaryCache>>,
     workers: Arc<Mutex<BTreeMap<String, Worker>>>,
     admissions: Arc<Mutex<Admissions>>,
 }
@@ -434,7 +467,7 @@ impl Coordinator {
             defaults,
             test_server,
             directory: Arc::new(Mutex::new(directory)),
-            replay_summaries: Arc::new(Mutex::new(BTreeMap::new())),
+            replay_summaries: Arc::new(tokio::sync::Mutex::new(BTreeMap::new())),
             workers: Arc::new(Mutex::new(BTreeMap::new())),
             admissions: Arc::new(Mutex::new(Admissions { count: 0 })),
         };
@@ -461,20 +494,24 @@ impl Coordinator {
         Ok(coordinator)
     }
     fn expired(&self, game: &GameRecord, now: u64) -> bool {
-        game.expired
-            || now.saturating_sub(
-                self.status(&game.id)["last_activity_ms"]
-                    .as_u64()
-                    .unwrap_or(game.created),
-            ) >= 24 * 60 * 60 * 1000
+        game.expired || Self::status_expired(&self.status(&game.id), game.created, now)
     }
-    fn active_players(&self, game: &GameRecord, status: &Value) -> usize {
+    fn status_expired(status: &Value, created: u64, now: u64) -> bool {
+        now.saturating_sub(status["last_activity_ms"].as_u64().unwrap_or(created))
+            >= 24 * 60 * 60 * 1000
+    }
+    fn active_players(
+        &self,
+        game: &str,
+        bots: &[Option<crate::bots::Style>],
+        status: &Value,
+    ) -> usize {
         // Persisted connection bits alone are stale after a coordinator crash.
         if !self
             .workers
             .lock()
             .unwrap()
-            .get(&format!("{}:live", game.id))
+            .get(&format!("{game}:live"))
             .is_some_and(|w| w.readers > 0)
         {
             return 0;
@@ -486,7 +523,7 @@ impl Coordinator {
                     let slot = s["slot"].as_u64().unwrap_or(u64::MAX) as usize;
                     s["connected"] == true
                         && s["claimed"] == true
-                        && game.bots.slots.get(slot).is_none_or(Option::is_none)
+                        && bots.get(slot).is_none_or(Option::is_none)
                 })
                 .count()
         })
@@ -568,37 +605,70 @@ impl Coordinator {
     fn save(&self, d: &Directory) -> Result<()> {
         atomic_json(&self.root.join("directory.json"), d)
     }
-    fn game(&self, id: &str) -> Result<GameRecord> {
+    fn game_record(&self, id: &str) -> Result<GameRecord> {
         self.directory
             .lock()
             .unwrap()
             .games
             .get(id)
-            .filter(|g| !self.expired(g, now_ms()))
             .cloned()
             .ok_or_else(|| "Game not found".into())
     }
-    fn reviewable_game(&self, id: &str, replay: Option<&str>) -> Result<GameRecord> {
-        let directory = self.directory.lock().unwrap();
-        let game = directory.games.get(id).ok_or("Game not found")?;
-        if replay.is_none() && !self.expired(game, now_ms()) {
-            return Ok(game.clone());
+    fn game(&self, id: &str) -> Result<GameRecord> {
+        let created = self
+            .directory
+            .lock()
+            .unwrap()
+            .games
+            .get(id)
+            .filter(|game| !game.expired)
+            .map(|game| game.created)
+            .ok_or("Game not found")?;
+        if Self::status_expired(&self.status(id), created, now_ms()) {
+            return Err("Game not found".into());
         }
+        // Maintenance may have tombstoned the lobby while status was being read.
+        let game = self.game_record(id)?;
+        if game.expired {
+            Err("Game not found".into())
+        } else {
+            Ok(game)
+        }
+    }
+    fn reviewable_game(&self, id: &str, replay: Option<&str>) -> Result<GameRecord> {
+        if replay.is_none()
+            && let Ok(game) = self.game(id)
+        {
+            return Ok(game);
+        }
+        let game = self.game_record(id)?;
+        let (games, _) = self.directory_snapshot(None);
         if self
-            .replay_catalog(&directory)
+            .replay_catalog(&games)
             .iter()
             .any(|r| r.game == id && replay.is_none_or(|id| r.id == id))
         {
-            Ok(game.clone())
+            Ok(game)
         } else {
             Err("Replay not found".into())
         }
     }
 
-    fn replay_catalog(&self, directory: &Directory) -> Vec<ReplayListing> {
+    fn directory_snapshot(&self, user: Option<&str>) -> (Vec<DirectoryGame>, Option<String>) {
+        let directory = self.directory.lock().unwrap();
+        let username = user.and_then(|user| directory.users.get(user)).cloned();
+        let games = directory
+            .games
+            .values()
+            .map(|game| DirectoryGame::snapshot(game, user))
+            .collect();
+        (games, username)
+    }
+
+    fn replay_catalog(&self, games: &[DirectoryGame]) -> Vec<ReplayListing> {
         let mut completed = Vec::new();
         let mut archived = Vec::new();
-        for game in directory.games.values() {
+        for game in games {
             let Ok(entries) = std::fs::read_dir(self.game_root(&game.id).join("replays")) else {
                 continue;
             };
@@ -634,7 +704,7 @@ impl Coordinator {
                     name: game.name.clone(),
                     finished,
                     summary: ReplaySummary::default(),
-                    locked: !game.password.is_empty(),
+                    locked: game.locked,
                 };
                 if finished {
                     completed.push(listing);
@@ -653,9 +723,17 @@ impl Coordinator {
         completed
     }
 
-    fn fill_replay_summaries(&self, directory: &Directory, replays: &mut [ReplayListing]) {
-        let mut cache = self.replay_summaries.lock().unwrap();
-        let mut previous = std::mem::take(&mut *cache);
+    fn fill_replay_summaries(
+        &self,
+        games: &[DirectoryGame],
+        replays: &mut [ReplayListing],
+        cache: &mut ReplaySummaryCache,
+    ) {
+        let teams_by_game: BTreeMap<_, _> = games
+            .iter()
+            .map(|g| (g.id.as_str(), g.teams.as_slice()))
+            .collect();
+        let mut previous = std::mem::take(cache);
         for replay in replays {
             let root = self
                 .game_root(&replay.game)
@@ -665,11 +743,7 @@ impl Coordinator {
             // only for rows the directory still lists and retry incomplete reads.
             let key = (root, replay.finished, replay.time);
             let summary = previous.remove(&key).unwrap_or_else(|| {
-                ReplaySummary::load(
-                    &key.0,
-                    &directory.games[&replay.game].setup.available_teams,
-                    replay.finished,
-                )
+                ReplaySummary::load(&key.0, teams_by_game[replay.game.as_str()], replay.finished)
             });
             if summary.round_count.is_some() {
                 cache.insert(key, summary.clone());
@@ -897,40 +971,57 @@ pub fn router(c: Coordinator) -> Router {
         .with_state(c)
 }
 async fn directory(State(c): State<Coordinator>, h: HeaderMap) -> Response {
-    let d = c.directory.lock().unwrap();
     let user = cookie(&h, "atemporal-user");
-    let mut replays = c.replay_catalog(&d);
-    c.fill_replay_summaries(&d, &mut replays);
-    let games: Vec<_> = d
-        .games
-        .values()
-        .filter(|g| !c.expired(g, now_ms()))
-        .map(|g| {
+    // Readers queue asynchronously before spawning a scan. This also keeps summary-cache
+    // pruning in request order without holding the directory mutex or blocking writes.
+    let mut cache = c.replay_summaries.clone().lock_owned().await;
+    match tokio::task::spawn_blocking(move || directory_payload(&c, user.as_deref(), &mut cache))
+        .await
+    {
+        Ok(payload) => Json(payload).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+fn directory_payload(c: &Coordinator, user: Option<&str>, cache: &mut ReplaySummaryCache) -> Value {
+    let (snapshot, username) = c.directory_snapshot(user);
+    let now = now_ms();
+    let mut replays = c.replay_catalog(&snapshot);
+    c.fill_replay_summaries(&snapshot, &mut replays, cache);
+    let games: Vec<_> = snapshot
+        .iter()
+        .filter(|g| !g.expired)
+        .filter_map(|g| {
             let status = c.status(&g.id);
-            let mine = user
-                .as_ref()
-                .and_then(|u| g.members.get(u))
-                .is_some_and(|owned| {
-                    status["slots"].as_array().is_some_and(|slots| {
-                        slots.iter().any(|s| {
-                            s["claimed"] == true && owned.iter().any(|id| s["slot"] == *id)
-                        })
-                    })
-                });
+            if Coordinator::status_expired(&status, g.created, now) {
+                return None;
+            }
+            let mine = status["slots"].as_array().is_some_and(|slots| {
+                slots.iter().any(|s| {
+                    s["claimed"] == true && g.owned_slots.iter().any(|id| s["slot"] == *id)
+                })
+            });
             let game_replays: Vec<_> = replays
                 .iter()
                 .filter(|r| r.game == g.id)
                 .map(|r| &r.id)
                 .collect();
-            json!({
-                "active_players": c.active_players(g, &status), "id": g.id, "name": g.name,
-                "created": g.created, "locked": !g.password.is_empty(), "status": status,
-                "players": g.setup.match_defaults.player_count, "bots": g.bots.slots,
+            Some(json!({
+                "active_players": c.active_players(&g.id, &g.bots, &status), "id": g.id, "name": g.name,
+                "created": g.created, "locked": g.locked, "status": status,
+                "players": g.players, "bots": g.bots,
                 "mine": mine, "replays": game_replays
-            })
+            }))
         })
         .collect();
-    Json(json!({"games":games,"replays":replays,"user":user.as_ref().and_then(|u|d.users.get(u)),"defaults":c.defaults,"default_bot":crate::bots::DEFAULT_STYLE,"debug_test":c.test_server})).into_response()
+    json!({
+        "games": games,
+        "replays": replays,
+        "user": username,
+        "defaults": c.defaults,
+        "default_bot": crate::bots::DEFAULT_STYLE,
+        "debug_test": c.test_server
+    })
 }
 #[derive(Deserialize)]
 struct IdentityInput {
@@ -1516,7 +1607,8 @@ mod tests {
         assert!(c.expired(&game, 2000)); // A clock change cannot resurrect a tombstone.
         assert_eq!(
             c.active_players(
-                &game,
+                &game.id,
+                &game.bots.slots,
                 &json!({"slots":[{"slot":0,"claimed":true,"connected":true}]})
             ),
             0
@@ -1626,7 +1718,7 @@ mod tests {
             bots: BotConfig::default(),
             debug_test: false,
             created: now_ms(),
-            expired: false,
+            expired: true,
             members: BTreeMap::new(),
         };
         c.directory
@@ -1705,6 +1797,12 @@ mod tests {
         let raw = String::from_utf8_lossy(&body);
         assert!(!raw.contains("private-secret") && !raw.contains("turn-plan"));
         let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["games"], json!([]));
+        assert!(c.game("game-summary").is_err());
+        let retained = c
+            .reviewable_game("game-summary", Some("match-first"))
+            .unwrap();
+        assert!(!allowed(&retained, &HeaderMap::new()));
         let replays = json["replays"].as_array().unwrap();
         let replay = |id: &str| replays.iter().find(|row| row["id"] == id).unwrap();
         let first = replay("match-first");
@@ -1730,7 +1828,24 @@ mod tests {
         assert_eq!(replay("match-timed")["scores"], json!([]));
         assert_eq!(replay("match-legacy")["result"], json!({"kind":"draw"}));
         assert_eq!(replay("match-empty")["round_count"], Value::Null);
-        assert_eq!(c.replay_summaries.lock().unwrap().len(), 4);
+        assert_eq!(c.replay_summaries.lock().await.len(), 4);
+        // Completion changes the cache key even when the archive and completion share a time.
+        let path = archival_root.join("match-rematch/completed.json");
+        atomic_json(&path, &rematch["time"]).unwrap();
+        let refreshed = directory(State(c.clone()), HeaderMap::new()).await;
+        let bytes = axum::body::to_bytes(refreshed.into_body(), 16384)
+            .await
+            .unwrap();
+        let refreshed: Value = serde_json::from_slice(&bytes).unwrap();
+        let rematch = refreshed["replays"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["id"] == "match-rematch")
+            .unwrap();
+        assert_eq!(rematch["finished"], true);
+        assert_eq!(rematch["result"], json!({"kind":"win","winners":["New A"]}));
+        assert_eq!(c.replay_summaries.lock().await.len(), 4);
         std::fs::remove_dir_all(root).unwrap();
     }
 
