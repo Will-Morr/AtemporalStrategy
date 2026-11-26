@@ -15,7 +15,8 @@ use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 
 pub use crate::revision::{
-    MAX_STAT_BUCKETS, RevisionData, TIMELINE_BUCKET, TIMELINE_INDEX_PER_PLAYER, timeline_index,
+    MAX_STAT_BUCKETS, RevisionData, TIMELINE_BUCKET, TIMELINE_INDEX_PER_PLAYER, collect_run,
+    minimum_end_tick, timeline_index,
 };
 const EXACT_CACHE: usize = 64;
 pub const DEFAULT_MEMORY_BUDGET: u64 = 512 << 20;
@@ -2342,22 +2343,6 @@ impl Controller {
     }
 }
 
-/// Timed jobs cannot stop before the next lock boundary; scoreboard jobs may stop any time.
-pub fn minimum_end_tick(config: &MatchConfig, editable_from: Tick) -> Tick {
-    match config.objective {
-        Objective::Timed {
-            lock_ticks_per_round,
-        }
-        | Objective::Hybrid {
-            lock_ticks_per_round,
-            ..
-        } => editable_from
-            .saturating_add(lock_ticks_per_round)
-            .min(config.max_tick),
-        Objective::SimpleWin { .. } | Objective::Scoreboard { .. } => 0,
-    }
-}
-
 /// Accepted turns and precedence for every round through `round`, in record order.
 pub fn ledger(loaded: &Loaded, round: u32) -> Result<(Vec<AcceptedTurn>, Vec<RoundPrecedence>)> {
     let mut turns = vec![];
@@ -2379,37 +2364,6 @@ pub fn ledger(loaded: &Loaded, round: u32) -> Result<(Vec<AcceptedTurn>, Vec<Rou
         precedence.push(record.precedence.clone());
     }
     Ok((turns, precedence))
-}
-
-/// Run a job to completion on the calling thread, collecting its outputs into `data`.
-pub fn collect_run(request: &SimRequest, data: &mut RevisionData, players: u8) -> Result<()> {
-    let cancel = AtomicBool::new(false);
-    // The engine emits checkpoints at interval ticks; the base state is the first one.
-    data.checkpoints
-        .entry(request.checkpoint.tick)
-        .or_insert_with(|| request.checkpoint.clone());
-    let result = atemporal_sim::run(request, &cancel, &mut |o| match o {
-        Output::Dictionary(d) => data.dictionary.extend(d),
-        Output::Sample(s) => {
-            data.samples.insert(s.tick, s);
-        }
-        Output::Checkpoint(c) => {
-            data.checkpoints.insert(c.tick, c);
-        }
-        Output::Stats(s) => {
-            data.stats.insert(s.tick, s);
-        }
-        Output::Events(e) => data.events.extend(e),
-        Output::Timeline(t) => data.timeline.extend(t),
-        Output::Progress { .. } => {}
-    })?;
-    data.outcome = Some(result.outcome);
-    data.final_hash = result.final_hash;
-    data.sim_duration_ms = result.sim_duration_ms;
-    data.command_outcomes = result.command_outcomes;
-    data.timeline_index = timeline_index(&data.timeline, players);
-    data.loaded = true;
-    Ok(())
 }
 
 fn ensure_archive_fingerprint(loaded: &Loaded, current: &Fingerprint) -> Result<()> {

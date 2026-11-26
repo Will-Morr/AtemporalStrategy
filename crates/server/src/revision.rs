@@ -1,6 +1,7 @@
 //! Replay data and queries shared by the authoritative controller and native runner.
 use atemporal_sim::*;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 pub const TIMELINE_BUCKET: Tick = 20;
@@ -66,6 +67,7 @@ impl RevisionData {
             last_used: 0,
         }
     }
+
     /// Start a child revision from the last unchanged checkpoint. Samples, events,
     /// stats and command outcomes at the checkpoint tick belong to the replayed suffix.
     pub fn fork_at_inputs(
@@ -344,4 +346,51 @@ pub fn timeline_index(buckets: &[TimelineBucket], players: u8) -> Vec<TimelineBu
             })
         })
         .collect()
+}
+
+/// Timed jobs cannot stop before the next lock boundary; scoreboard jobs may stop any time.
+pub fn minimum_end_tick(config: &MatchConfig, editable_from: Tick) -> Tick {
+    match config.objective {
+        Objective::Timed {
+            lock_ticks_per_round,
+        }
+        | Objective::Hybrid {
+            lock_ticks_per_round,
+            ..
+        } => editable_from
+            .saturating_add(lock_ticks_per_round)
+            .min(config.max_tick),
+        Objective::SimpleWin { .. } | Objective::Scoreboard { .. } => 0,
+    }
+}
+
+/// Run a job to completion on the calling thread, collecting its outputs into `data`.
+pub fn collect_run(request: &SimRequest, data: &mut RevisionData, players: u8) -> Result<()> {
+    let cancel = AtomicBool::new(false);
+    // The engine emits checkpoints at interval ticks; the base state is the first one.
+    data.checkpoints
+        .entry(request.checkpoint.tick)
+        .or_insert_with(|| request.checkpoint.clone());
+    let result = atemporal_sim::run(request, &cancel, &mut |o| match o {
+        Output::Dictionary(d) => data.dictionary.extend(d),
+        Output::Sample(s) => {
+            data.samples.insert(s.tick, s);
+        }
+        Output::Checkpoint(c) => {
+            data.checkpoints.insert(c.tick, c);
+        }
+        Output::Stats(s) => {
+            data.stats.insert(s.tick, s);
+        }
+        Output::Events(e) => data.events.extend(e),
+        Output::Timeline(t) => data.timeline.extend(t),
+        Output::Progress { .. } => {}
+    })?;
+    data.outcome = Some(result.outcome);
+    data.final_hash = result.final_hash;
+    data.sim_duration_ms = result.sim_duration_ms;
+    data.command_outcomes = result.command_outcomes;
+    data.timeline_index = timeline_index(&data.timeline, players);
+    data.loaded = true;
+    Ok(())
 }
