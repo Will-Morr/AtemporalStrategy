@@ -22,7 +22,7 @@ pub enum Job {
     Replay {
         request: Box<SimRequest>,
         players: u8,
-        reply: oneshot::Sender<Result<crate::controller::RevisionData, String>>,
+        reply: oneshot::Sender<Result<crate::revision::RevisionData, String>>,
     },
 }
 
@@ -76,7 +76,7 @@ impl SimThread {
         &self,
         request: SimRequest,
         players: u8,
-    ) -> Result<crate::controller::RevisionData, String> {
+    ) -> Result<crate::revision::RevisionData, String> {
         let (reply, rx) = oneshot::channel();
         self.submit(Job::Replay {
             request: Box::new(request),
@@ -118,11 +118,11 @@ fn send(
 fn service_replay(
     request: &SimRequest,
     players: u8,
-    reply: oneshot::Sender<Result<crate::controller::RevisionData, String>>,
+    reply: oneshot::Sender<Result<crate::revision::RevisionData, String>>,
 ) {
-    let mut data = crate::controller::RevisionData::new(request.revision, 0, None, 0);
+    let mut data = crate::revision::RevisionData::new(request.revision, 0, None, 0);
     let _ = reply.send(
-        guard(|| crate::controller::collect_run(request, &mut data, players).map(|_| data))
+        guard(|| crate::revision::collect_run(request, &mut data, players).map(|_| data))
             .and_then(|r| r),
     );
 }

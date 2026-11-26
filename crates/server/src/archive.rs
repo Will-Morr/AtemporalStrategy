@@ -437,7 +437,7 @@ impl Archive {
         }
         Ok(())
     }
-    pub fn write_results(&self, data: &crate::controller::RevisionData) -> Result<ResultSizes> {
+    pub fn write_results(&self, data: &crate::revision::RevisionData) -> Result<ResultSizes> {
         let start = std::time::Instant::now();
         let dir = self.root.join(format!("results/{}", data.revision));
         // A stale marker from an interrupted earlier attempt must not vouch for mixed files.

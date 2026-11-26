@@ -2,9 +2,8 @@
 //! the same simulation library, compares the reference hash, and serves world-state queries to
 //! the local browser. The controller never streams world state; only inputs and hashes arrive.
 use atemporal_server::adapter::{Job, OUT_CAPACITY, SimThread};
-use atemporal_server::controller::{
-    RevisionData, fingerprint, minimum_end_tick, now_ms, timeline_index,
-};
+use atemporal_server::controller::{fingerprint, now_ms};
+use atemporal_server::revision::{RevisionData, minimum_end_tick, timeline_index};
 use atemporal_sim::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -286,71 +285,12 @@ impl Store {
         let parent = parent_key
             .and_then(|p| self.revisions.get(&p))
             .filter(|p| p.status == Status::Verified && p.data.loaded);
-        let earliest = turns
-            .iter()
-            .filter(|t| t.round == round)
-            .map(|t| t.tick)
-            .min()
-            .unwrap_or(0);
-        let mut data = RevisionData::new(revision, round, parent_key.filter(|_| revision > 0), 0);
-        let checkpoint = match parent {
-            Some(parent) if revision > 0 => {
-                let (base_tick, checkpoint) = parent
-                    .data
-                    .checkpoints
-                    .range(..=earliest)
-                    .next_back()
-                    .map(|(t, s)| (*t, s.clone()))
-                    .ok_or("no checkpoint at or before the earliest new input")?;
-                data.base_tick = base_tick;
-                data.dictionary = parent.data.dictionary.clone();
-                data.samples = parent
-                    .data
-                    .samples
-                    .range(..base_tick)
-                    .map(|(t, s)| (*t, s.clone()))
-                    .collect();
-                data.checkpoints = parent
-                    .data
-                    .checkpoints
-                    .range(..=base_tick)
-                    .map(|(t, s)| (*t, s.clone()))
-                    .collect();
-                data.stats = parent
-                    .data
-                    .stats
-                    .range(..base_tick)
-                    .map(|(t, s)| (*t, s.clone()))
-                    .collect();
-                data.events = parent
-                    .data
-                    .events
-                    .iter()
-                    .filter(|e| e.tick < base_tick)
-                    .cloned()
-                    .collect();
-                data.timeline = parent
-                    .data
-                    .timeline
-                    .iter()
-                    .filter(|b| b.to_tick_exclusive <= base_tick)
-                    .cloned()
-                    .collect();
-                data.command_outcomes = parent
-                    .data
-                    .command_outcomes
-                    .iter()
-                    .filter(|outcome| {
-                        parent.data.turns.iter().any(|turn| {
-                            turn.tick < base_tick
-                                && turn.commands.iter().any(|c| c.id == outcome.command_id)
-                        })
-                    })
-                    .cloned()
-                    .collect();
-                checkpoint
-            }
-            _ => self.initial()?,
+        let (checkpoint, mut data) = match parent {
+            Some(parent) if revision > 0 => parent.data.fork_at_inputs(revision, round, &turns)?,
+            _ => (
+                self.initial()?,
+                RevisionData::new(revision, round, parent_key.filter(|_| revision > 0), 0),
+            ),
         };
         data.turns = turns.clone();
         data.precedence = precedence.clone();
@@ -434,19 +374,10 @@ impl Store {
                 .min_by_key(|l| l.data.last_used)
                 .map(|l| l.data.revision);
             let Some(revision) = victim else { return };
-            let initial = (revision == 0).then(|| self.initial().ok()).flatten();
             let Some(entry) = self.revisions.get_mut(&revision) else {
                 return;
             };
-            entry.data.dictionary = vec![];
-            entry.data.samples = BTreeMap::new();
-            entry.data.checkpoints = initial
-                .map(|s| BTreeMap::from([(0, s)]))
-                .unwrap_or_default();
-            entry.data.stats = BTreeMap::new();
-            entry.data.events = vec![];
-            entry.data.timeline = vec![];
-            entry.data.loaded = false;
+            entry.data.discard_body();
             self.exact_cache.retain(|((r, _), _)| *r != revision);
             self.evictions += 1;
         }
@@ -1118,15 +1049,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn unpublished_inputs_can_be_replaced_and_reopened_without_reusing_a_preview() {
+    fn opening_store() -> Store {
         let mut config = atemporal_content::load_setup(include_str!("../../../config/game.yaml"))
             .unwrap()
             .match_defaults;
         config.seed = 42u64.try_into().unwrap();
         let content = load_content(include_str!("../../../config/content.yaml")).unwrap();
         let initial = atemporal_sim::map::generate(&config, &content).unwrap();
-        let mut store = Store::new(
+        Store::new(
             "test".into(),
             fingerprint(&config, &content).unwrap(),
             config,
@@ -1134,7 +1064,46 @@ mod tests {
             initial,
             1 << 26,
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    #[test]
+    fn passing_at_tick_zero_reuses_the_verified_parent_in_the_runner() {
+        let mut store = opening_store();
+        let order = |round| RoundPrecedence {
+            round,
+            players: vec![0, 1],
+        };
+        store.accept_inputs(0, vec![], order(0), 0);
+        let (request, mut genesis) = store.start(0).unwrap();
+        atemporal_server::revision::collect_run(&request, &mut genesis, 2).unwrap();
+        let terminal = genesis.outcome.as_ref().unwrap().terminal_state_tick;
+        let checkpoint_tick = *genesis.checkpoints.range(..terminal).next_back().unwrap().0;
+        assert!(checkpoint_tick > 0);
+        let hash = genesis.final_hash.clone();
+        store.accept_reference(0, terminal, hash.clone());
+        assert_eq!(store.finish(0, genesis), Status::Verified);
+
+        let passes = (0..2)
+            .map(|player| AcceptedTurn {
+                player,
+                round: 1,
+                tick: 0,
+                commands: vec![],
+                duration_ms: 0u64.try_into().unwrap(),
+            })
+            .collect();
+        store.accept_inputs(1, passes, order(1), 0);
+        let (request, mut revised) = store.start(1).unwrap();
+        assert_eq!(request.checkpoint.tick, checkpoint_tick);
+        atemporal_server::revision::collect_run(&request, &mut revised, 2).unwrap();
+        store.accept_reference(1, terminal, hash);
+        assert_eq!(store.finish(1, revised), Status::Verified);
+    }
+
+    #[test]
+    fn unpublished_inputs_can_be_replaced_and_reopened_without_reusing_a_preview() {
+        let mut store = opening_store();
         store.revisions.get_mut(&0).unwrap().status = Status::Verified;
         let precedence = RoundPrecedence {
             round: 1,

@@ -1,5 +1,5 @@
 //! Read-only completed prefixes. Generation identity never crosses into published query caches.
-use crate::controller::RevisionData;
+use crate::revision::RevisionData;
 use atemporal_sim::*;
 
 pub fn frontier(data: &RevisionData, generation: &str, end_tick: Tick) -> ReplayFrontier {
