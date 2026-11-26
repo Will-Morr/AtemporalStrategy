@@ -62,7 +62,7 @@ Show stored matter clearly at the viewed tick. Timeline markers include every ti
 
 Keep the top bar's readouts and controls in place as simulation and replay advance.
 
-Align right-hand controls across rows so the click position stays consistent when labels are different lengths.
+Keep controls aligned across rows so different label lengths do not change where the player clicks. In factory queues, put the loop and remove icons to the left of the unit name. Keep the queue compact and its visible dimensions stable as items are added or removed. Overflow must scroll inside the queue without resizing the command window or moving adjacent controls.
 
 Hide full-health bars. Use distinct layered geometric silhouettes with readable direction: square factories, circular turrets on square bases, and distinguishable combinations for mobile units. Group related input buttons in left-aligned columns. Emphasize construction/production discovery and key game information over secondary diagnostics. Show unmistakable color-coded win/loss results and clearly explain continued simulation after elimination and playback after match end.
 
