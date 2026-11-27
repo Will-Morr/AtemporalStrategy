@@ -419,3 +419,16 @@ resets, silo production, and archived spectator views. Both storage-quota cases
 passed with trace recording disabled after the first trace failed to finalize.
 The inspected screenshots, including the 960-pixel layout, are in
 `artifacts/ui/2026-11-26T05-57-14.180Z-2453816`.
+
+## Draft editing and recovery
+
+On November 27, 2026, 17 targeted Chromium scenarios passed against the local
+authoritative server. Undoing the only factory placement, reloading, and
+redoing it restored the same order and ID. A new edit after undo discarded
+the old redo branch. The reload scenario failed on the previous release.
+Uncommitting a two-order plan allowed both orders to be undone and redone
+together. Uncommitting a pass left the draft tick free. Other scenarios covered
+legacy ID repair, shared queues, quota fallback, checker replies and single-order
+matches. The inspected frames show the redone factory placement and the restored
+two-order plan in `artifacts/ui/2026-11-27T19-40-29.026Z-2799891`. This pass
+used desktop Chromium with screenshots and trace recording disabled.
