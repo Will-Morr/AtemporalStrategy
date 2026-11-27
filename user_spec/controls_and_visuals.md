@@ -82,6 +82,8 @@ Blueprints of every structure type, including turrets, need a clear deletion act
 
 Normal draft edits, undo and reload must preserve independently staged orders without reusing their local identifiers. Recover legitimate orders from a saved draft with duplicate identifiers and clearly identify any unresolved dependent edits. Preserve the original draft for investigating the failure.
 
+Keep draft editing, undo and saved-plan recovery simple. Rarely used menu behaviors may be changed or removed when that simplifies the editor.
+
 Ore should be yellow; fully depleted deposits should become light gray, distinct from partly mined deposits. Fog shades open tiles only; walls retain their dark gray. Miner silhouettes must primarily show their player color. Statistics plots need a slope switch showing a lightly smoothed derivative, especially for comparing active mining rates.
 
 ## Replay during simulation

@@ -1,4 +1,5 @@
-import {DraftIds, draftRecoveryNotice, packDraft, unpackDraft, type Draft} from './draft-storage';
+import {DraftStorage} from './draft-storage';
+import {DraftEditor} from './draft';
 import {practice} from './practice';
 import {PlacementPlan} from './placement';
 import {GroundVision, SightMemory, playerSeesEntity, playerVisibility} from './vision';
@@ -116,11 +117,9 @@ export class Game {
   selection = new Set<string>();
   recalledGroup: number | null = null;
   mode: Mode = { kind: 'none' };
-  private readonly draftIds = new DraftIds();
-  private draftRecovery: {original: ReturnType<typeof packDraft>; notice: string} | null = null;
-  draft: Draft = { tick: null, commands: [], undo: [], redo: [], policy: 'keep', selected: null };
-  // Uncommitted orders survive a reload (e.g. a server update restart) in this tab.
-  draftRestored = false;
+  private readonly draftEditor = new DraftEditor();
+  private readonly draftStorage = new DraftStorage();
+  get draft() { return this.draftEditor.draft; }
   get draftKey(): string { return `atemporal-draft:${location.pathname}:${this.net.matchId}:${this.player}`; }
   drag: { x0: number; y0: number; x1: number; y1: number } | null = null;
   hover: Tile | null = null;
@@ -195,16 +194,15 @@ export class Game {
       this.availableThrough = m.available_through;
       this.committed = m.committed_players;
       this.progress = null;
-      if (!this.draftRestored && this.player !== null) {
+      if (this.player !== null) {
         try {
-          const saved = JSON.parse(sessionStorage.getItem(this.draftKey) ?? 'null');
-          if (saved?.round === m.round && !this.draft.commands.length) {
-            const notice = this.restoreDraft(unpackDraft(saved.draft), m.revision);
-            if (!this.draftRecovery) this.draftRecovery = saved.recovery ?? null;
+          const saved = this.draftStorage.load(this.draftKey, m.round);
+          if (saved && !this.draft.commands.length) {
+            const restored = this.draftEditor.restore(saved.draft, saved.recovery);
+            const notice = this.reportDraftRecovery(restored, m.revision);
             if (notice) this.toast(`Draft restored.${notice}`);
           }
         } catch { this.toast('Could not restore the saved draft in this tab.'); }
-        this.draftRestored = true;
       }
       this.updatePanels();
       if (this.player !== null && this.exact) this.net.send({ kind: 'planning_ready', round: m.round, revision: m.revision });
@@ -698,53 +696,15 @@ export class Game {
     const gate = this.canStage();
     if (!gate.ok) { this.toast(gate.reason); return true; }
 
-    const removed = new Map<string, Set<number>>();
-    for (const ref of refs) {
-      if (ref.kind !== 'draft') continue;
-      const indices = removed.get(ref.local_id) ?? new Set<number>();
-      indices.add(ref.item_index);
-      removed.set(ref.local_id, indices);
-    }
-
-    // A partial wall-line deletion shifts item indices for later settings and cancellations.
-    const commands: DraftCommand[] = [];
-    const newIndices = new Map<string, Map<number, number>>();
-    for (const draft of this.draft.commands) {
-      const command = draft.command;
-      const excluded = removed.get(draft.local_id);
-      if (command.kind === 'place_blueprints' && excluded) {
-        const indices = new Map<number, number>();
-        const tiles = command.tiles.filter((_, index) => {
-          if (excluded.has(index)) return false;
-          indices.set(index, indices.size);
-          return true;
-        });
-        newIndices.set(draft.local_id, indices);
-        const output_directions = command.output_directions?.filter((_, index) => indices.has(index)) ?? null;
-        if (tiles.length) commands.push({...draft, command: {...command, tiles, output_directions}});
-      } else if ((command.kind === 'configure_blueprints' || command.kind === 'cancel_blueprints') &&
-                 command.blueprint_ids.some(ref => ref.kind === 'draft' && newIndices.has(ref.local_id))) {
-        const blueprint_ids = command.blueprint_ids.flatMap<DraftItemRef>(ref => {
-          if (ref.kind !== 'draft' || !newIndices.has(ref.local_id)) return [ref];
-          const item_index = newIndices.get(ref.local_id)!.get(ref.item_index);
-          return item_index === undefined ? [] : [{...ref, item_index}];
-        });
-        if (blueprint_ids.length) commands.push({...draft, command: {...command, blueprint_ids}});
-      } else commands.push(draft);
-    }
+    const commands = this.draftEditor.withoutBlueprints(refs);
     if (persistent.length && this.config.control_limit === 'single_order' && commands.length) {
       this.toast('Single-order mode: delete the staged command first.');
       return true;
     }
     if (persistent.length) {
-      commands.push({local_id: this.draftIds.create(), future_orders: 'keep',
-        command: {kind: 'cancel_blueprints', blueprint_ids: persistent}});
+      commands.push(this.draftEditor.newCommand({kind: 'cancel_blueprints', blueprint_ids: persistent}));
     }
-    this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
-    this.draft.redo = [];
-    this.draft.commands = commands;
-    this.draft.tick = commands.length ? Math.floor(this.playhead) : null;
-    this.draft.selected = null;
+    this.draftEditor.replace(commands, commands.length ? Math.floor(this.playhead) : null, null);
     for (const v of selected) if (this.blueprintRef(v)) this.selection.delete(idKey(v.id));
     $('toast').classList.remove('active');
     this.updatePanels();
@@ -753,29 +713,14 @@ export class Game {
 
   removeDraftCommand(index: number): void {
     const removed=this.draft.commands[index];if(!removed)return;
-    // Removing a placement/queue append also removes its local references, never dangling them.
-    const commands=this.draft.commands.flatMap((d,i)=>{
-      if(i===index)return [];
-      const c=d.command;
-      if(c.kind==='configure_blueprints' || c.kind==='cancel_blueprints') {
-        const blueprint_ids=c.blueprint_ids.filter(ref=>ref.kind!=='draft'||ref.local_id!==removed.local_id);
-        return blueprint_ids.length ? [{...d,command:{...c,blueprint_ids}}] : [];
-      }
-      if(c.kind==='edit_production' && (c.edit.kind==='remove_pending'||c.edit.kind==='set_item_loop')) {
-        const item_ids=c.edit.item_ids.filter(ref=>ref.kind!=='draft'||ref.local_id!==removed.local_id);
-        return item_ids.length ? [{...d,command:{...c,edit:{...c.edit,item_ids}}}] : [];
-      }
-      return [d];
-    });
+    const commands = this.draftEditor.withoutCommand(index);
     if (removed.command.kind === 'cancel_blueprints' && this.current === this.latest &&
         this.exact?.revision === this.current && this.exact.tick === this.draft.tick) {
       const issue = this.blueprintDraftIssue(this.exact.state, commands);
       if (issue) { this.toast(issue); return; }
     }
-    this.draft.undo.push({commands:this.draft.commands,tick:this.draft.tick});
-    this.draft.redo=[];
-    this.draft.commands=commands;
-    this.draft.selected=null;if(!commands.length)this.draft.tick=null;this.updatePanels();
+    this.draftEditor.replace(commands, commands.length ? this.draft.tick : null, null);
+    this.updatePanels();
   }
 
   effectiveOrder(v: EntityView): Order | undefined {
@@ -883,7 +828,7 @@ export class Game {
     return { ok: true, reason: '' };
   }
 
-  factoryEditing = false;
+  get factoryEditing(): boolean { return this.draftEditor.inBatch; }
   factorySelection(): EntityView[] {
     return this.selectedViews().filter(v=>this.ownSelectable(v)&&!!this.types.get(v.type_key)?.production&&!this.types.get(v.type_key)?.silo);
   }
@@ -893,33 +838,31 @@ export class Game {
     if(factories.length<2){action();return;}
     if(!this.canStage().ok){this.toast(this.canStage().reason);return;}
     const mixed=new Set(factories.map(v=>factorySignature(this,v))).size>1;
-    const before=this.draft;
-    this.draft={...before,commands:[...before.commands]};
-    this.factoryEditing=true;
     try {
-      if(mixed)for(const v of factories){
-        if (v.blueprint) {
-          this.configureBlueprint(v, settings => {
-            settings.queue = [];
-            settings.queue_loop_flags = [];
-            settings.loop_enabled = false;
-            settings.priority = 'medium';
-            settings.order = {kind: 'idle'};
-          });
-        } else {
-          this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});
-          if(factoryPlan(this,v).active)this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}});
-          this.stage({kind:'set_queue_loop',factories:[v.id],enabled:false});
-          this.stage({kind:'bind_factory_group',factories:[v.id],group:null});
-          this.stage({kind:'assign_order',entities:[v.id],order:{kind:'idle'}});
-          this.stage({kind:'set_priority',entities:[v.id],priority:'medium'});
+      const accepted = this.draftEditor.batch(() => {
+        if(mixed)for(const v of factories){
+          if (v.blueprint) {
+            this.configureBlueprint(v, settings => {
+              settings.queue = [];
+              settings.queue_loop_flags = [];
+              settings.loop_enabled = false;
+              settings.priority = 'medium';
+              settings.order = {kind: 'idle'};
+            });
+          } else {
+            this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});
+            if(factoryPlan(this,v).active)this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}});
+            this.stage({kind:'set_queue_loop',factories:[v.id],enabled:false});
+            this.stage({kind:'bind_factory_group',factories:[v.id],group:null});
+            this.stage({kind:'assign_order',entities:[v.id],order:{kind:'idle'}});
+            this.stage({kind:'set_priority',entities:[v.id],priority:'medium'});
+          }
         }
-      }
-      action();
-      if(this.config.control_limit==='single_order'&&this.draft.commands.length>1){this.draft=before;this.toast('This shared edit needs multiple commands. In single-order mode, select factories individually.');}
-      else {this.draft.undo=[...before.undo,{commands:before.commands,tick:before.tick}];this.draft.redo=[];}
-    } catch (error) { this.draft=before; throw error; }
-    finally {this.factoryEditing=false;this.updatePanels();}
+        action();
+        return this.config.control_limit !== 'single_order' || this.draft.commands.length <= 1;
+      });
+      if (!accepted) this.toast('This shared edit needs multiple commands. In single-order mode, select factories individually.');
+    } finally { this.updatePanels(); }
   }
 
   stage(command: Command, policy: FutureOrderPolicy = 'keep', finishPlacement?: () => void): boolean {
@@ -935,80 +878,42 @@ export class Game {
     if (command.kind === 'place_blueprints') {
       const issue = this.placementPlanAtPlayhead()?.issue(command);
       if (issue) {
-        const local_id = this.draftIds.create();
+        const entry = this.draftEditor.newCommand(command, policy);
         const mode = this.mode;
         const direction = this.renderer.outputDirection;
         this.reconsiderDraftRejection('placement', {
           based_on_revision: this.current,
           tick: Math.floor(this.playhead),
-          commands: [...this.draft.commands, {local_id, command, future_orders: policy}],
+          commands: [...this.draft.commands, entry],
         }, issue, () => {
           if (this.mode !== mode || this.renderer.outputDirection !== direction || !this.canStage().ok) return false;
-          this.writeDraftCommand(command, policy, local_id);
+          this.writeDraftCommand(entry);
           finishPlacement?.();
           return true;
         });
         return false;
       }
     }
-    return this.writeDraftCommand(command, policy);
+    return this.writeDraftCommand(this.draftEditor.newCommand(command, policy));
   }
 
-  private writeDraftCommand(command: Command, policy: FutureOrderPolicy, localId?: string): boolean {
-    // One shared payload remains one protocol command for disjoint recipients.
-    if(this.factoryEditing){
-      const previous=this.draft.commands.at(-1);
-      const field='factories' in command?'factories':'entities' in command?'entities':command.kind==='configure_blueprints'?'blueprint_ids':null;
-      if(previous&&field&&previous.future_orders===policy){
-        const old=previous.command as unknown as Record<string,unknown>, next=command as unknown as Record<string,unknown>;
-        const left=old[field] as unknown[]|undefined,right=next[field] as unknown[];
-        const payload=(c:Record<string,unknown>)=>JSON.stringify({...c,[field]:undefined});
-        if(left&&payload(old)===payload(next)&&!left.some(a=>right.some(b=>JSON.stringify(a)===JSON.stringify(b)))){
-          this.draft.commands[this.draft.commands.length-1]={...previous,command:{...previous.command,[field]:[...left,...right]} as DraftCommand['command']};
-          return true;
-        }
-      }
-    }
-    if (!this.factoryEditing) {
-      this.draft.undo.push({commands:this.draft.commands,tick:this.draft.tick});
-      this.draft.redo = [];
-    }
-    this.draft.tick = Math.floor(this.playhead);
+  private writeDraftCommand(entry: DraftCommand): boolean {
+    this.draftEditor.write(entry, Math.floor(this.playhead));
     $('toast').classList.remove('active');
-    // A later draft assignment replaces the same recipients' earlier action; undo restores it.
-    if (command.kind === 'assign_order' || command.kind === 'set_stored_order') {
-      const ids = command.kind === 'assign_order' ? command.entities : command.factories;
-      this.draft.commands = this.draft.commands.flatMap(d => {
-        const c=d.command;
-        if(c.kind==='assign_order' && command.kind==='assign_order') {const entities=c.entities.filter(id=>!ids.some(v=>idKey(v)===idKey(id)));return entities.length?[{...d,command:{...c,entities}}]:[];}
-        if(c.kind==='set_stored_order' && command.kind==='set_stored_order') {const factories=c.factories.filter(id=>!ids.some(v=>idKey(v)===idKey(id)));return factories.length?[{...d,command:{...c,factories}}]:[];}
-        return [d];
-      });
-    }
-    this.draft.commands = [...this.draft.commands, { local_id: localId ?? this.draftIds.create(), command: command as DraftCommand['command'], future_orders: policy }];
     if (!this.factoryEditing) this.updatePanels();
     return true;
   }
 
   undo(): void {
-    const previous = this.draft.undo.pop();
-    if (!previous) return;
-    this.draft.redo.push({commands:[...this.draft.commands],tick:this.draft.tick});
-    this.draft.commands = previous.commands;
-    this.draft.tick = previous.tick;
-    this.updatePanels();
+    if (this.draftEditor.undo()) this.updatePanels();
   }
+
   redo(): void {
-    const next = this.draft.redo.pop();
-    if (!next) return;
-    this.draft.undo.push({commands:[...this.draft.commands],tick:this.draft.tick});
-    this.draft.commands = next.commands;
-    this.draft.tick = next.tick;
-    this.updatePanels();
+    if (this.draftEditor.redo()) this.updatePanels();
   }
+
   clearDraft(): void {
-    this.draftRecovery = null;
-    this.draft = { tick: null, commands: [], undo: [], redo: [], policy: this.draft.policy, selected: null };
+    this.draftEditor.clear();
     this.updatePanels();
   }
 
@@ -1036,19 +941,13 @@ export class Game {
     this.stage({ kind: 'assign_order', entities, order }, this.draft.policy);
   }
 
-  private restoreDraft(original: Draft, revision: number): string {
-    const recovered = this.draftIds.restore(original);
-    this.draft = recovered.draft;
-    const notice = draftRecoveryNotice(recovered.unresolved, recovered.historyAffected);
-    if (recovered.evidence) {
-      const recovery = {original: packDraft(original), notice: notice.trim()};
-      this.draftRecovery = recovery;
-      const {tick, commands} = recovered.evidence;
-      if (tick !== null) {
-        const issue = recovery.notice || 'Recovered duplicate or invalid draft IDs.';
-        void this.checkLocalDraftRejection('recovery', {based_on_revision: revision, tick, commands}, issue)
-          .then(message => { if (this.draftRecovery === recovery && message !== issue) this.toast(message); });
-      }
+  private reportDraftRecovery({evidence, notice}: ReturnType<DraftEditor['restore']>, revision: number): string {
+    const recovery = this.draftEditor.recovery;
+    if (recovery && evidence && evidence.tick !== null) {
+      const {tick, commands} = evidence;
+      const issue = recovery.notice || 'Recovered duplicate or invalid draft IDs.';
+      void this.checkLocalDraftRejection('recovery', {based_on_revision: revision, tick, commands}, issue)
+        .then(message => { if (this.draftEditor.recovery === recovery && message !== issue) this.toast(message); });
     }
     return notice;
   }
@@ -1067,10 +966,8 @@ export class Game {
         this.clearDraft();
         if (reply.draft) {
           const {commands, tick} = reply.draft;
-          const notice = this.restoreDraft({
-            ...this.draft, tick, commands,
-            undo: commands.map((_, index) => ({commands: commands.slice(0, index), tick: index ? tick : null})),
-          }, reply.draft.based_on_revision);
+          const restored = this.draftEditor.restoreUncommitted(commands, tick);
+          const notice = this.reportDraftRecovery(restored, reply.draft.based_on_revision);
           this.current = reply.draft.based_on_revision;
           this.seek(reply.draft.tick);
           this.toast(notice ? `Turn uncommitted.${notice}` : 'Turn uncommitted. Your moves are ready to edit.');
@@ -1099,9 +996,7 @@ export class Game {
   }
 
   private applyDraftRebase(): void {
-    this.draft.undo.push({commands: this.draft.commands, tick: this.draft.tick});
-    this.draft.redo = [];
-    this.draft.tick = Math.floor(this.playhead);
+    this.draftEditor.replace(this.draft.commands, Math.floor(this.playhead));
     this.updatePanels();
   }
 
@@ -1162,13 +1057,11 @@ export class Game {
   }
 
   private draftGuard(): () => boolean {
-    const match = this.net.matchId, round = this.round, revision = this.current, draftTick = this.draft.tick;
-    const commands = this.draft.commands;
-    const contents = JSON.stringify(commands);
-    const undo = this.draft.undo.length, redo = this.draft.redo.length;
+    const match = this.net.matchId, round = this.round, revision = this.current;
+    const {tick, commands, undo, redo} = this.draft;
     return () => match === this.net.matchId && round === this.round && revision === this.current &&
-      draftTick === this.draft.tick && undo === this.draft.undo.length && redo === this.draft.redo.length &&
-      commands === this.draft.commands && contents === JSON.stringify(this.draft.commands);
+      tick === this.draft.tick && commands === this.draft.commands &&
+      undo === this.draft.undo && redo === this.draft.redo;
   }
 
   private draftIntentNumber = 0;
@@ -1569,7 +1462,7 @@ export class Game {
       }
       case 'o': {
         const policies: FutureOrderPolicy[] = this.config.future_orders.window_ticks ? ['keep', 'drop_all', 'drop_window'] : ['keep', 'drop_all'];
-        this.draft.policy = policies[(policies.indexOf(this.draft.policy) + 1) % policies.length];
+        this.draftEditor.setPolicy(policies[(policies.indexOf(this.draft.policy) + 1) % policies.length]);
         this.updatePanels();
         break;
       }
@@ -1729,29 +1622,9 @@ export class Game {
     }
   }
 
-  private lastSavedCommands?: DraftCommand[];
-  private lastSavedState = '';
-
   private persistDraft(): void {
-    if (!this.draftRestored) return;
-    const d = this.draft;
-    const state = JSON.stringify([this.round, d.tick, d.selected, d.policy, d.undo.length, d.redo.length, !!this.draftRecovery]);
-    if (this.lastSavedCommands === d.commands && this.lastSavedState === state) return;
-    this.lastSavedCommands = d.commands;
-    this.lastSavedState = state;
-    try {
-      if (practice || (!d.commands.length && !this.draftRecovery)) sessionStorage.removeItem(this.draftKey);
-      else sessionStorage.setItem(this.draftKey, JSON.stringify({
-        round: this.round, draft: packDraft(d), recovery: this.draftRecovery ?? undefined,
-      }));
-    } catch {
-      try {
-        if ((d.commands.length || this.draftRecovery) && !practice) {
-          sessionStorage.setItem(this.draftKey, JSON.stringify({
-            round: this.round, draft: {...d, undo: [], redo: []}, recovery: this.draftRecovery ?? undefined,
-          }));
-        }
-      } catch { this.toast('Browser storage is full or unavailable. Keep this tab open until you commit.'); }
+    if (!this.factoryEditing && !this.draftStorage.save(this.draftKey, this.round, this.draft, this.draftEditor.recovery, !!practice)) {
+      this.toast('Browser storage is full or unavailable. Keep this tab open until you commit.');
     }
   }
 
@@ -1896,8 +1769,8 @@ export class Game {
     updateOrderWarnings(this);
     // Draft panel.
     const recovery = $('draft-recovery');
-    recovery.hidden = !this.draftRecovery?.notice;
-    recovery.textContent = this.draftRecovery?.notice ?? '';
+    recovery.hidden = !this.draftEditor.recovery?.notice;
+    recovery.textContent = this.draftEditor.recovery?.notice ?? '';
     const list = $('draft-list');
     list.innerHTML = '';
     this.draft.commands.forEach((c, i) => {
@@ -1905,7 +1778,7 @@ export class Game {
       li.textContent = describe(c);
       if (this.draft.selected === i) li.classList.add('selected');
       li.onclick = () => {
-        this.draft.selected = this.draft.selected === i ? null : i;
+        this.draftEditor.select(this.draft.selected === i ? null : i);
         this.updatePanels();
       };
       list.append(li);

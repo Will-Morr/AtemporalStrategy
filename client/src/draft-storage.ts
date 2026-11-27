@@ -181,3 +181,43 @@ export function draftRecoveryNotice(unresolved: number, historyAffected: boolean
   const references = unresolved === 1 ? '1 blueprint or queue reference' : `${unresolved} blueprint or queue references`;
   return ` Removed ${references} that could not be matched safely. Review your moves before committing.`;
 }
+
+export interface DraftRecovery {
+  original: SavedDraft;
+  notice: string;
+}
+
+export class DraftStorage {
+  private restored = false;
+  private lastSaved?: {key: string; round: number; draft: Readonly<Draft>; recovery: DraftRecovery | null};
+
+  load(key: string, round: number): {draft: Draft; recovery: DraftRecovery | null} | null {
+    if (this.restored) return null;
+    this.restored = true;
+    const saved = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+    if (saved?.round !== round) return null;
+    return {draft: unpackDraft(saved.draft), recovery: saved.recovery ?? null};
+  }
+
+  save(key: string, round: number, draft: Readonly<Draft>, recovery: DraftRecovery | null, practice: boolean): boolean {
+    if (!this.restored) return true;
+    const last = this.lastSaved;
+    if (last?.key === key && last.round === round && last.draft === draft && last.recovery === recovery) return true;
+    this.lastSaved = {key, round, draft, recovery};
+    const hasOrders = draft.commands.length > 0 || recovery !== null;
+    const hasHistory = draft.undo.length > 0 || draft.redo.length > 0;
+
+    try {
+      if (practice || (!hasOrders && !hasHistory)) sessionStorage.removeItem(key);
+      else sessionStorage.setItem(key, JSON.stringify({round, draft: packDraft(draft), recovery: recovery ?? undefined}));
+    } catch {
+      if (practice || (!hasOrders && !hasHistory)) return true;
+      try {
+        sessionStorage.setItem(key, JSON.stringify({
+          round, draft: {...draft, undo: [], redo: []}, recovery: recovery ?? undefined,
+        }));
+      } catch { return false; }
+    }
+    return true;
+  }
+}

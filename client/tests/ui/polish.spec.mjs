@@ -26,8 +26,9 @@ test('same-browser players refresh independently and uncommit restores an editab
   await expect(a.locator('#selection-icons svg')).toBeVisible();
   await expect(a.locator('#selection-body')).toContainText('Vision');
   await a.keyboard.press('m'); await tile(a,{x:start.x+2,y:start.y});
+  await a.keyboard.press('p'); await a.keyboard.press('1');
   const original = await a.evaluate(()=>window.atemporal.draft.commands);
-  expect(original).toHaveLength(1);
+  expect(original.map(({command}) => command.kind)).toEqual(['assign_order', 'set_priority']);
   await a.locator('#commit').click();
   await expect(a.locator('#commit')).toHaveText('Uncommit · edit my moves');
   await a.reload(); await revision(a,0);
