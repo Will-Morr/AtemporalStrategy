@@ -216,17 +216,35 @@ test('replacing a draft factory preserves independent targeting in one clock tic
     await chooseBuilding(a, 'factory');
     await a.mouse.click(...await point(a, body));
   };
+  const draftCommands = () => a.evaluate(() => window.atemporal.draft.commands);
   for (const body of [first, removed, retained]) await stage(body);
+  const original = await draftCommands();
   await a.mouse.click(...await point(a, removed));
   await a.getByRole('button', {name: 'Delete selected blueprints', exact: true}).click();
   await stage(added);
   await a.evaluate(() => window.restoreDraftClock());
 
-  const placements = await a.evaluate(() => window.atemporal.draft.commands);
+  const placements = await draftCommands();
   expect(placements.map(draft => draft.command.tiles[0])).toEqual([first, retained, added]);
   expect(new Set(placements.map(draft => draft.local_id)).size).toBe(3);
+  expect(placements[2].local_id).not.toBe(original[1].local_id);
+  await a.keyboard.press('Control+z');
+  expect(await draftCommands()).toEqual([original[0], original[2]]);
+  await a.keyboard.press('Control+z');
+  expect(await draftCommands()).toEqual(original);
+  await a.keyboard.press('Control+u');
+  await a.keyboard.press('Control+u');
+  expect(await draftCommands()).toEqual(placements);
+
   await a.mouse.click(...await point(a, added));
   await a.getByRole('button', {name: 'Queue grunt', exact: true}).click();
+  const configured = await draftCommands();
+  await a.keyboard.press('Control+z');
+  expect(await draftCommands()).toEqual(placements);
+  await expect(a.locator('#queue')).toContainText('Queue empty');
+  await a.keyboard.press('Control+u');
+  expect(await draftCommands()).toEqual(configured);
+  await expect(a.locator('#queue')).toContainText('grunt');
   await a.mouse.click(...await point(a, retained));
   await expect(a.locator('#queue')).toContainText('Queue empty');
   await review.capture('retained-factory-keeps-empty-queue', a);
@@ -239,6 +257,46 @@ test('replacing a draft factory preserves independent targeting in one clock tic
   expect(blueprints.map(blueprint => [blueprint.tile, blueprint.settings?.queue ?? []])).toEqual([
     [first, []], [retained, []], [added, ['grunt']],
   ]);
+});
+
+test('redo survives an empty draft reload and a new edit discards it', async ({review}, testInfo) => {
+  const {a, home} = await openMatch(review, testInfo);
+  await center(a, home);
+  const [first, second] = await eastFacingSites(a, home, 2);
+  const rows = a.locator('#draft-list li');
+  const commands = () => a.evaluate(() => window.atemporal.draft.commands);
+  const place = async site => {
+    await chooseBuilding(a, 'factory');
+    await a.mouse.click(...await point(a, site));
+    await expect(rows).toHaveCount(1);
+  };
+
+  await place(first);
+  const original = await commands();
+  await a.keyboard.press('Control+z');
+  await expect(rows).toHaveCount(0);
+  await a.reload();
+  await revision(a, 0);
+  await expect(rows).toHaveCount(0);
+  await a.keyboard.press('Control+u');
+  await expect(rows).toHaveCount(1);
+  expect(await commands()).toEqual(original);
+  await review.capture('factory-draft-redone-after-empty-reload', a);
+
+  await a.keyboard.press('Control+z');
+  await expect(rows).toHaveCount(0);
+  await center(a, home);
+  await place(second);
+  const replacement = await commands();
+  expect(replacement[0].command.tiles).toEqual([second]);
+  expect(replacement[0].local_id).not.toBe(original[0].local_id);
+  await a.keyboard.press('Control+u');
+  expect(await commands()).toEqual(replacement);
+  await a.reload();
+  await revision(a, 0);
+  await expect(rows).toHaveCount(1);
+  await a.keyboard.press('Control+u');
+  expect(await commands()).toEqual(replacement);
 });
 
 test('reload preserves distinct legacy blueprint placements and reports an ambiguous edit', async ({review}, testInfo) => {
