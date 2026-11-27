@@ -432,3 +432,11 @@ legacy ID repair, shared queues, quota fallback, checker replies and single-orde
 matches. The inspected frames show the redone factory placement and the restored
 two-order plan in `artifacts/ui/2026-11-27T19-40-29.026Z-2799891`. This pass
 used desktop Chromium with screenshots and trace recording disabled.
+
+On November 27, the mixed-factory scenario compared each blueprint’s settings
+before and after changing priority and newborn target. It then committed those
+edits on two completed factories with paid tank production, different waiting
+units, loop flags and output groups. The resulting production state matched
+each original factory apart from the requested target, with priority set to Off.
+Desktop Chromium screenshots of the mixed blueprint editor and the two live
+factories are in `artifacts/ui/2026-11-27T20-10-07.526Z-2812022`.
