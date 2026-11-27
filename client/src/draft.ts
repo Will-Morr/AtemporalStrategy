@@ -155,7 +155,7 @@ export class DraftEditor {
 
   restoreUncommitted(commands: DraftCommand[], tick: number) {
     return this.restore({
-      ...this.state, commands, tick,
+      ...this.state, commands, tick: commands.length ? tick : null, selected: null, redo: [],
       undo: commands.length ? [{commands: [], tick: null}] : [],
     });
   }
