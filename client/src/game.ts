@@ -963,7 +963,6 @@ export class Game {
       const reply = await this.net.request({ kind: 'uncommit', request_id, slot_token: this.session.token, round: this.round, revision: this.latest }, 'uncommitted', m => m.request_id === request_id);
       if (reply.round === this.round) {
         this.committed = this.committed.filter(p => p !== this.player);
-        this.clearDraft();
         if (reply.draft) {
           const {commands, tick} = reply.draft;
           const restored = this.draftEditor.restoreUncommitted(commands, tick);
@@ -971,7 +970,10 @@ export class Game {
           this.current = reply.draft.based_on_revision;
           this.seek(reply.draft.tick);
           this.toast(notice ? `Turn uncommitted.${notice}` : 'Turn uncommitted. Your moves are ready to edit.');
-        } else this.toast('Turn uncommitted. This older archive has no editable draft; enter your moves again.');
+        } else {
+          this.draftEditor.clear();
+          this.toast('Turn uncommitted. This older archive has no editable draft; enter your moves again.');
+        }
       }
     } catch (err) { this.toast(`Could not uncommit: ${(err as Error).message}`); }
     finally { this.turnRequestPending = false; this.updatePanels(); }
