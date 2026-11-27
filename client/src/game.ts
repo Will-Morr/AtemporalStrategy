@@ -8,7 +8,7 @@ import {updateOrderWarnings} from './order-warnings';
 import {updateRematch} from './rematch';
 import {missileName, queueLaunch} from './silo';
 import { unitIcon } from './icons';
-import { factoryPlan, factorySignature, orderLabel } from './factory';
+import { factoryPlan, orderLabel } from './factory';
 import type {
   Activity, CardinalDirection, ReplayFrontier, BlueprintSettings, DraftItemRef, Command, Content, DraftCommand, EntityId, EntityRef, FutureOrderPolicy, LobbyState, MatchConfig, Order, Outcome, Priority, RoundScore, Sample, ServerMessage, Tile, TimelineBucket,
   DraftCheckSource, TurnDraft, TypeDefinition, WorldEvent, WorldState,
@@ -837,27 +837,8 @@ export class Game {
     const factories=this.factorySelection();
     if(factories.length<2){action();return;}
     if(!this.canStage().ok){this.toast(this.canStage().reason);return;}
-    const mixed=new Set(factories.map(v=>factorySignature(this,v))).size>1;
     try {
       const accepted = this.draftEditor.batch(() => {
-        if(mixed)for(const v of factories){
-          if (v.blueprint) {
-            this.configureBlueprint(v, settings => {
-              settings.queue = [];
-              settings.queue_loop_flags = [];
-              settings.loop_enabled = false;
-              settings.priority = 'medium';
-              settings.order = {kind: 'idle'};
-            });
-          } else {
-            this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'replace_pending',items:[]}});
-            if(factoryPlan(this,v).active)this.stage({kind:'edit_production',factories:[v.id],edit:{kind:'cancel_active'}});
-            this.stage({kind:'set_queue_loop',factories:[v.id],enabled:false});
-            this.stage({kind:'bind_factory_group',factories:[v.id],group:null});
-            this.stage({kind:'assign_order',entities:[v.id],order:{kind:'idle'}});
-            this.stage({kind:'set_priority',entities:[v.id],priority:'medium'});
-          }
-        }
         action();
         return this.config.control_limit !== 'single_order' || this.draft.commands.length <= 1;
       });
@@ -1455,7 +1436,7 @@ export class Game {
       case 'x': this.assign({ kind: 'idle' }, () => true); this.mode = { kind: 'none' }; break;
       case 'l': {
         if(!this.factoryEditing&&this.factorySelection().length>1){this.editFactories(()=>this.key(e));break;}
-        const enabled = !this.selectedViews().filter(v=>this.types.get(v.type_key)?.production).every(v=>factoryPlan(this,v).loop);
+        const enabled = !this.selectedViews().filter(v=>this.ownSelectable(v)&&this.types.get(v.type_key)?.production).every(v=>factoryPlan(this,v).loop);
         const ghosts = this.configureGhosts(s => { s.loop_enabled = enabled; }, v=>!!this.types.get(v.type_key)?.production);
         const factories = this.selectedIds(t => !!t.production);
         if (factories.length) this.stage({ kind: 'set_queue_loop', factories, enabled });
@@ -1504,7 +1485,7 @@ export class Game {
   }
   setSelectionPriority(priority: Priority): void {
     if(!this.factoryEditing&&this.factorySelection().length>1){this.editFactories(()=>this.setSelectionPriority(priority));return;}
-    this.configureGhosts(s=>{s.priority=priority;});
+    this.configureGhosts(s=>{s.priority=priority;}, v=>this.priorityEligible(v));
     const entities=this.selectedViews().filter(v=>this.ownSelectable(v)&&!v.blueprint&&this.priorityEligible(v)).map(v=>v.id);
     if(entities.length)this.stage({kind:'set_priority',entities,priority});
   }

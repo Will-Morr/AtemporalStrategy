@@ -1,4 +1,4 @@
-import {editFactoryQueue, factoryPlan, factorySignature, orderLabel, queueBatches, type QueueChange} from './factory';
+import {editFactoryQueue, factoryPlan, orderLabel, queueBatches, type QueueChange} from './factory';
 import {idKey, type EntityView, type Game} from './game';
 import {unitIcon} from './icons';
 import {siloPanel} from './silo';
@@ -125,8 +125,15 @@ export class ProductionPanel {
     const type = g.types.get(first.type_key);
     const shared = views.length > 1;
     const isSilo = !!type?.silo;
-    const aligned = !shared || new Set(views.map(v => factorySignature(g, v))).size === 1;
-    const plan = factoryPlan(g, first);
+    const plans = views.map(v => factoryPlan(g, v));
+    const plan = plans[0];
+    // Only compare the fields used by each set of shared controls.
+    const samePending = !shared || plans.every(p => p.pending.length === plan.pending.length &&
+      p.pending.every((item, index) => item.type === plan.pending[index].type && item.loop === plan.pending[index].loop));
+    const sameActive = plans.every(p =>
+      p.active?.type_key === plan.active?.type_key && !!p.active?.loop_enabled === !!plan.active?.loop_enabled);
+    const sameOrder = !shared || new Set(plans.map(p => JSON.stringify(p.order))).size === 1;
+    const sameLoop = plans.every(p => p.loop === plan.loop);
     const enabled = g.canStage().ok;
     const color = g.color(shared ? g.player! : first.owner);
     const edit = (change: QueueChange) => {
@@ -134,9 +141,8 @@ export class ProductionPanel {
         editFactoryQueue(g, first, change);
         return;
       }
-      // Read the selection after editFactories has reset any mixed plans.
       g.editFactories(() => {
-        for (const factory of g.factorySelection()) editFactoryQueue(g, factory, change);
+        for (const factory of views) editFactoryQueue(g, factory, change);
       });
     };
 
@@ -154,33 +160,38 @@ export class ProductionPanel {
     }
     card.append(heading);
 
-    const loop = button(`↻ Loop new items: ${!aligned ? 'Mixed' : plan.loop ? 'On' : 'Off'}`,
-      () => edit({kind: 'set_default_loop', enabled: !plan.loop}));
+    const loop = button(`↻ Loop new items: ${!sameLoop ? 'Mixed' : plan.loop ? 'On' : 'Off'}`,
+      () => edit({kind: 'set_default_loop', enabled: !sameLoop || !plan.loop}));
     loop.disabled = !enabled;
-    if (!shared) loop.setAttribute('aria-pressed', String(plan.loop));
+    loop.setAttribute('aria-pressed', sameLoop ? String(plan.loop) : 'mixed');
     const settings = document.createElement('div');
     settings.className = 'factory-settings';
     settings.append(loop);
 
     const queue = document.createElement('div');
     queue.className = 'queue-icons';
-    if (aligned) {
-      if (plan.active) {
-        const active = plan.active;
-        const progress = active.awaiting_output ? 'Output blocked'
-          : `${Math.round(active.paid_matter)} / ${g.types.get(active.type_key)?.matter_cost} matter`;
-        const row = this.productionRow({
-          type: active.type_key, color, enabled, isSilo, shared, loop: !!active.loop_enabled,
-          label: shared ? `Building ${active.type_key} ×${views.length}` : `Building ${active.type_key} · ${progress}`,
-          repeatLabel: shared ? 'Repeat active on all' : `Loop active ${active.type_key}`,
-          removeLabel: shared ? `Cancel active ${active.type_key} on all` : `Cancel active ${active.type_key}`,
-          repeat: () => edit({kind: 'set_active_loop', enabled: !active.loop_enabled}),
-          remove: () => edit({kind: 'cancel_active'}),
-          active: true,
-        });
-        row.dataset.queueItem = `active:${JSON.stringify(active.item_id)}`;
-        queue.append(row);
-      }
+    if (sameActive && plan.active) {
+      const active = plan.active;
+      const progress = active.awaiting_output ? 'Output blocked'
+        : `${Math.round(active.paid_matter)} / ${g.types.get(active.type_key)?.matter_cost} matter`;
+      const row = this.productionRow({
+        type: active.type_key, color, enabled, isSilo, shared, loop: !!active.loop_enabled,
+        label: shared ? `Building ${active.type_key} ×${views.length}` : `Building ${active.type_key} · ${progress}`,
+        repeatLabel: shared ? 'Repeat active on all' : `Loop active ${active.type_key}`,
+        removeLabel: shared ? `Cancel active ${active.type_key} on all` : `Cancel active ${active.type_key}`,
+        repeat: () => edit({kind: 'set_active_loop', enabled: !active.loop_enabled}),
+        remove: () => edit({kind: 'cancel_active'}),
+        active: true,
+      });
+      row.dataset.queueItem = `active:${JSON.stringify(active.item_id)}`;
+      queue.append(row);
+    } else if (!sameActive) {
+      const mixed = document.createElement('span');
+      mixed.className = 'muted';
+      mixed.textContent = 'Active production differs.';
+      queue.append(mixed);
+    }
+    if (samePending) {
       for (const batch of queueBatches(plan.pending)) {
         const index = batch.indices.at(-1)!;
         const label = `${batch.type} ×${batch.indices.length}`;
@@ -197,10 +208,10 @@ export class ProductionPanel {
         queue.append(row);
       }
     }
-    if (!queue.childElementCount) {
+    if (!samePending || !queue.childElementCount) {
       const empty = document.createElement('span');
       empty.className = 'muted';
-      empty.textContent = !aligned ? 'Queues differ across factories.'
+      empty.textContent = !samePending ? 'Queues differ across factories.'
         : isSilo ? 'Production empty — build missiles below.' : 'Queue empty — add units.';
       queue.append(empty);
     }
@@ -221,14 +232,13 @@ export class ProductionPanel {
       recipes.append(add);
     }
     const clear = button(shared ? 'Clear all waiting queues' : 'Clear waiting queue', () => edit({kind: 'clear_pending'}));
-    clear.disabled = !enabled || (!shared && !plan.pending.length);
+    clear.disabled = !enabled || plans.every(p => !p.pending.length);
 
     if (shared) {
-      const warning = document.createElement('p');
-      warning.className = aligned ? 'factory-order' : 'order-warning';
-      warning.textContent = aligned ? `Aligned queues · New units: ${orderLabel(plan.order)}`
-        : 'Different configurations. Your next shared command clears all selected factories’ queues and settings at this tick, including active production and spent matter. Undo restores the draft.';
-      card.append(warning, queue);
+      const summary = document.createElement('div');
+      summary.className = 'factory-order';
+      summary.textContent = `${samePending ? 'Aligned queues · ' : ''}New units: ${sameOrder ? orderLabel(plan.order) : 'Mixed'}`;
+      card.append(queue, summary);
     } else {
       const summary = document.createElement('div');
       summary.className = 'factory-order';

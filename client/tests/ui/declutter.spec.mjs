@@ -1,46 +1,150 @@
 import {test,expect} from './fixtures.mjs';
 import {isolatedServer,players,revision,tile,seek,area} from './game-helpers.mjs';
 
-test('shared factory editing uses inline warning and preserves aligned additions',async({review},testInfo)=>{
+test('shared factory edits preserve unrelated planned and live settings', async ({review}, testInfo) => {
   test.setTimeout(120000);
-  const server=await isolatedServer(testInfo,c=>{c.match_defaults.max_tick=400;c.match_defaults.starting_matter=5000;});review.afterClose(server.stop);
-  const [a,b]=await players(review,server.url);await a.getByRole('button',{name:'Start match',exact:true}).click();await revision(a,0);await revision(b,0);
-  const constructor=await a.evaluate(()=>window.atemporal.entities().find(e=>e.owner===0&&e.type_key==='constructor'));
-  const sites=[];
-  for(let i=0;i<2;i++){
-    await tile(a,constructor);
-    const site=await a.evaluate(()=>{const g=window.atemporal,c=g.selectedViews()[0];for(let y=c.y-3;y<=c.y+3;y++)for(let x=c.x-3;x<=c.x+3;x++)if(g.validPlacement({x,y},true))return{x,y};});sites.push(site);
-    await a.keyboard.press('b');await a.locator('#mode-options button').filter({hasText:'factory'}).click();await tile(a,site);await tile(a,site);
-    if(i===0)await a.getByRole('button',{name:'Queue miner',exact:true}).click();
+  const server = await isolatedServer(testInfo, c => {
+    c.match_defaults.max_tick = 400;
+    c.match_defaults.starting_matter = 5000;
+  });
+  review.afterClose(server.stop);
+  const [a, b] = await players(review, server.url);
+  await a.getByRole('button', {name: 'Start match', exact: true}).click();
+  await revision(a, 0);
+  await revision(b, 0);
+  const constructor = await a.evaluate(() => window.atemporal.entities().find(e => e.owner === 0 && e.type_key === 'constructor'));
+  const initialTarget = {x: constructor.x + 2, y: constructor.y};
+  const sharedTarget = {x: constructor.x + 4, y: constructor.y + 2};
+  const sites = [];
+  const priority = a.getByRole('combobox', {name: 'Selection priority'});
+  const queue = type => a.getByRole('button', {name: `Queue ${type}`, exact: true});
+  const editor = a.locator('.shared-factories');
+  const setTarget = async target => {
+    await a.keyboard.press('f');
+    await tile(a, target);
+  };
+  const selectBoth = async () => {
+    await tile(a, sites[0]);
+    const point = await a.evaluate(t => window.atemporal.renderer.screen(t.x + .5, t.y + .5), sites[1]);
+    await a.keyboard.down('Shift');
+    await a.mouse.click(...point);
+    await a.keyboard.up('Shift');
+  };
+  const planned = () => a.evaluate(() => window.atemporal.selectedViews().map(v => v.settings));
+  const published = () => a.evaluate(() => window.atemporal.selectedViews().map(v => ({
+    lifecycle: v.lifecycle,
+    priority: v.exact.priority,
+    production: v.exact.production,
+  })));
+  const publish = async (nextRevision, tick) => {
+    await a.locator('#commit').click();
+    await b.locator('#commit').click();
+    await revision(a, nextRevision);
+    await seek(a, tick);
+    await selectBoth();
+  };
+
+  for (let i = 0; i < 2; i++) {
+    await tile(a, constructor);
+    const site = await a.evaluate(() => {
+      const g = window.atemporal, c = g.selectedViews()[0];
+      for (let y = c.y - 3; y <= c.y + 3; y++) {
+        for (let x = c.x - 3; x <= c.x + 3; x++) {
+          if (g.validPlacement({x, y}, true)) return {x, y};
+        }
+      }
+      throw new Error('No valid factory site near the opening constructor');
+    });
+    sites.push(site);
+    await a.keyboard.press('b');
+    await a.locator('#mode-options button').filter({hasText: 'factory'}).click();
+    await tile(a, site);
+    await tile(a, site);
+    if (i === 0) {
+      await a.keyboard.press('l');
+      await priority.selectOption('high');
+      await setTarget(initialTarget);
+    }
+    await queue(i === 0 ? 'miner' : 'grunt').click();
   }
-  const selectBoth=async()=>{await tile(a,sites[0]);const point=await a.evaluate(t=>window.atemporal.renderer.screen(t.x+.5,t.y+.5),sites[1]);await a.keyboard.down('Shift');await a.mouse.click(...point);await a.keyboard.up('Shift');};
-  await selectBoth();await expect(a.locator('.shared-factories')).toContainText('Different configurations');await expect(a.getByRole('button',{name:'Queue miner',exact:true})).toHaveCount(1);
-  await review.capture('mixed-factory-override-warning',a);
-  const before=await a.evaluate(()=>window.atemporal.draft.commands);
-  a.on('dialog',async d=>{await d.dismiss();throw new Error('Factory edits must not open browser dialogs');});await a.getByRole('button',{name:'Queue scout',exact:true}).click();
-  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>v.settings.queue))).toEqual([['scout'],['scout']]);
-  await a.getByRole('button',{name:'Queue miner',exact:true}).click({modifiers:['Shift']});
-  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>v.settings.queue))).toEqual(Array(2).fill(['scout',...Array(5).fill('miner')]));
-  await a.keyboard.press('Control+z');expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>v.settings.queue))).toEqual([['scout'],['scout']]);
-  await a.keyboard.press('Control+z');expect(await a.evaluate(()=>window.atemporal.draft.commands)).toEqual(before);
-  await a.keyboard.press('q');await a.locator('#mode-options button').filter({hasText:'scout'}).click();
-  await a.keyboard.press('m');await area(a,{x:constructor.x,y:constructor.y});
-  await review.capture('shared-aligned-factory-editor',a);
-  await tile(a,constructor);await a.keyboard.press('c');const from=await a.evaluate(t=>window.atemporal.renderer.screen(t.x-1,t.y-1),sites[0]);const to=await a.evaluate(t=>window.atemporal.renderer.screen(t.x+2,t.y+2),sites[1]);await a.mouse.move(...from);await a.mouse.down();await a.mouse.move(...to);await a.mouse.up();
-  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,1);await seek(a,1);await selectBoth();
-  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>v.settings?.queue??v.exact.production.pending_items.map(i=>i.type_key)))).toEqual([['scout'],['scout']]);
-  await a.getByRole('button',{name:'Queue miner',exact:true}).click();await expect(a.locator('.shared-factories')).toContainText('Aligned queues');
-  await a.getByRole('button',{name:'Remove shared item 2',exact:true}).click();
-  await review.capture('shared-live-factory-editor',a);
-  await a.keyboard.press('Control+z');await a.keyboard.press('Control+z');await seek(a,150);await selectBoth();
-  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>v.lifecycle))).toEqual(['complete','complete']);
-  await a.getByRole('button',{name:'Queue tank',exact:true}).click();await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,152);await tile(a,sites[0]);
-  await a.getByRole('button',{name:'Queue miner',exact:true}).click();await selectBoth();
-  await a.getByRole('combobox',{name:'Selection priority'}).selectOption('off');
-  expect(await a.evaluate(()=>window.atemporal.draft.commands.filter(d=>d.command.kind==='edit_production'&&d.command.edit.kind==='cancel_active').length)).toBe(2);
-  await noPanelScroll(a);await review.capture('active-factories-overridden-together',a);
-  await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,3);await seek(a,153);await selectBoth();
-  expect(await a.evaluate(()=>window.atemporal.selectedViews().map(v=>({priority:v.exact.priority,pending:v.exact.production.pending_items.length,active:v.exact.production.active_item??null})))).toEqual(Array(2).fill({priority:'off',pending:0,active:null}));
+  await selectBoth();
+  const blueprints = await planned();
+  expect(blueprints).toMatchObject([
+    {queue: ['miner'], queue_loop_flags: [true], loop_enabled: true, priority: 'high', order: {kind: 'attack_move', destination: initialTarget}},
+    {queue: ['grunt'], queue_loop_flags: [false], loop_enabled: false, priority: 'medium', order: {kind: 'idle'}},
+  ]);
+  await expect(editor).toContainText('Queues differ across factories');
+  await expect(editor).not.toContainText('clears all selected factories');
+  await review.capture('mixed-planned-factories', a);
+
+  await priority.selectOption('low');
+  const lowPriority = blueprints.map(settings => ({...settings, priority: 'low'}));
+  expect(await planned()).toEqual(lowPriority);
+  await setTarget(sharedTarget);
+  const newTarget = lowPriority.map(settings => ({...settings, order: {kind: 'attack_move', destination: sharedTarget}}));
+  expect(await planned()).toEqual(newTarget);
+
+  await a.keyboard.press('q');
+  await a.locator('#mode-options button').filter({hasText: 'scout'}).click();
+  expect(await planned()).toEqual(newTarget.map(settings => ({
+    ...settings,
+    queue: [...settings.queue, 'scout'],
+    queue_loop_flags: [...settings.queue_loop_flags, settings.loop_enabled],
+  })));
+  await a.keyboard.press('Control+z');
+  expect(await planned()).toEqual(newTarget);
+  await a.getByRole('button', {name: '↻ Loop new items: Mixed', exact: true}).click();
+  expect(await planned()).toEqual(newTarget.map(settings => ({...settings, loop_enabled: true})));
+  await a.keyboard.press('Control+z');
+  expect(await planned()).toEqual(newTarget);
+
+  await a.getByRole('button', {name: 'Clear all waiting queues', exact: true}).click();
+  expect(await planned()).toEqual(newTarget.map(settings => ({...settings, queue: [], queue_loop_flags: []})));
+  await expect(editor).toContainText('Aligned queues');
+  await review.capture('shared-empty-queues-with-different-loop-defaults', a);
+  await a.keyboard.press('Control+z');
+  expect(await planned()).toEqual(newTarget);
+  // Start construction with empty queues, then create controlled active and waiting items.
+  await a.getByRole('button', {name: 'Clear all waiting queues', exact: true}).click();
+  await tile(a, constructor);
+  await a.keyboard.press('c');
+  const [from, to] = await a.evaluate(([first, second]) => {
+    const renderer = window.atemporal.renderer;
+    return [renderer.screen(first.x - 1, first.y - 1), renderer.screen(second.x + 2, second.y + 2)];
+  }, sites);
+  await a.mouse.move(...from);
+  await a.mouse.down();
+  await a.mouse.move(...to);
+  await a.mouse.up();
+  await publish(1, 150);
+  expect((await published()).map(v => v.lifecycle)).toEqual(['complete', 'complete']);
+
+  await queue('tank').click();
+  for (let i = 0; i < sites.length; i++) {
+    await tile(a, sites[i]);
+    await a.keyboard.press('j');
+    await a.keyboard.press(String(i + 1));
+    await queue(i === 0 ? 'miner' : 'grunt').click();
+  }
+  await publish(2, 152);
+  const live = await published();
+  expect(live).toMatchObject([
+    {production: {active_item: {type_key: 'tank', loop_enabled: true}, pending_items: [{type_key: 'miner'}], spawn_group: {slot: 1}}},
+    {production: {active_item: {type_key: 'tank', loop_enabled: false}, pending_items: [{type_key: 'grunt'}], spawn_group: {slot: 2}}},
+  ]);
+  for (const {production} of live) expect(production.active_item.paid_matter).toBeGreaterThan(0);
+  await priority.selectOption('off');
+  await setTarget(initialTarget);
+  expect(await a.evaluate(() => window.atemporal.draft.commands.map(d => d.command.kind)))
+    .toEqual(['set_priority', 'assign_order']);
+  await noPanelScroll(a);
+  await review.capture('mixed-active-factories-with-shared-priority-and-target', a);
+  await publish(3, 153);
+  expect(await published()).toEqual(live.map(v => ({
+    ...v,
+    priority: 'off',
+    production: {...v.production, stored_order: {kind: 'attack_move', destination: initialTarget}},
+  })));
 });
 
 async function noPanelScroll(page){

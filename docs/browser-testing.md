@@ -160,7 +160,7 @@ The reports, traces and full frames are under `artifacts/ui/factory-delete-basel
 
 ## Compact planning review
 
-`declutter.spec.mjs` covers grouped factory overrides (inline warnings without browser dialogs, mouse and keyboard, whole-edit undo, aligned additions and active production cancellation), missing-order feedback, selection markers, unit-reference access, and committed/uncommitted banners. It checks normal panels for overflow and captures 1920×1080 and 1366×768 frames. `missiles.spec.mjs` also checks the expanded silo editor at 1366×768. Secondary actions are reached through Groups and Planning menus; only command/production/launch lists scroll. The default browser harness builds both server and peripheral binaries to avoid testing a stale replica against current content.
+`declutter.spec.mjs` exercises shared factory edits with mouse and keyboard, whole-edit undo, missing-order feedback, selection markers, unit-reference access, and committed/uncommitted banners. It checks normal panels for overflow and captures desktop and laptop frames.
 
 On the current eight-core workstation, keep test workloads on six cores at low priority so the user can work concurrently: prefix commands with `taskset -c 0-5 nice -n 10 env CARGO_BUILD_JOBS=6 RUST_TEST_THREADS=6`. Browser scenarios use two workers within that shared CPU cap. Run the repository check and browser build phases sequentially because both write generated/client assets.
 
