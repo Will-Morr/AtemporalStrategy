@@ -6,6 +6,7 @@ pub mod archive;
 mod checker;
 mod client_incident;
 pub mod controller;
+mod order_checker;
 pub mod ws;
 
 pub mod preview;

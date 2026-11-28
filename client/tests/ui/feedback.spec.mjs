@@ -52,8 +52,18 @@ test('blueprint deletion, queued membership and mixed priorities stay valid thro
   expect(await a.evaluate(()=>window.atemporal.committed)).not.toContain(0);
   await review.capture('rebase-rejected-draft-unchanged',a);
   await seek(a,1);
+  // Stage the cancellation before the replacement. Both checkers must free this tile in command order.
+  await place('turret', spots[2]);
+  expect(await a.evaluate(() => window.atemporal.draft.commands.map(d => d.command.kind)))
+    .toEqual(['cancel_blueprints', 'place_blueprints']);
+  const oldId = await a.evaluate(() => window.atemporal.exact.state.blueprints.find(b => b.owner === 0).id);
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,2);await seek(a,2);
-  expect(await a.evaluate(()=>window.atemporal.exact.state.blueprints.filter(b=>b.owner===0))).toEqual([]);
+  const replacements = await a.evaluate(() => window.atemporal.exact.state.blueprints.filter(b => b.owner === 0));
+  expect(replacements).toHaveLength(1);
+  expect(replacements[0]).toMatchObject({type_key: 'turret', tile: spots[2]});
+  expect(replacements[0].id).not.toEqual(oldId);
+  // Clear the replacement before assigning the constructor to the next site.
+  await tile(a,spots[2]);await a.locator('#cancel-blueprints').click();
   await place('turret',spots[3]);await tile(a,constructor);await a.keyboard.press('c');await area(a,spots[3]);
   await a.locator('#commit').click();await b.locator('#commit').click();await revision(a,3);await seek(a,10);await tile(a,spots[3]);
   await expect(a.locator('#cancel-blueprints')).toHaveText('Cancel selected construction');await review.capture('turret-under-construction-cancel-control',a);

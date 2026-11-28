@@ -2,10 +2,7 @@
 //! `/ws/peripheral` serves a trusted inputs-only peripheral: it receives the replay bootstrap,
 //! per-revision inputs and reference hashes and never world-state bodies; `--inputs-only` makes
 //! the ordinary route refuse those bodies too, so world state only exists through peripherals.
-use crate::{
-    checker,
-    controller::{Controller, StateCheckIssue},
-};
+use crate::{checker, controller::Controller, order_checker::StateCheckIssue};
 use atemporal_sim::*;
 use axum::{
     Json, Router,
@@ -1115,6 +1112,135 @@ pub fn drive_job(app: App, mut rx: mpsc::Receiver<WorkerMessage>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod draft_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn commit_can_reuse_cancelled_blueprint_tile_with_a_new_id() {
+        let controller =
+            tokio::task::spawn_blocking(|| crate::controller::tests::started(false, |_| {}))
+                .await
+                .unwrap();
+        let revision = controller.current;
+        let state = &controller.revision(revision).unwrap().checkpoints[&0];
+        let width = usize::from(state.terrain.width);
+        let tile = state
+            .terrain
+            .cells
+            .iter()
+            .enumerate()
+            .find_map(|(index, cell)| {
+                let tile = Tile {
+                    x: (index % width) as u16,
+                    y: (index / width) as u16,
+                };
+                (*cell == TerrainCell::Floor && !state.entities.iter().any(|e| e.tile == tile))
+                    .then_some(tile)
+            })
+            .unwrap();
+        let slot_token = controller.bot_token(0).unwrap();
+        let app = App {
+            controller: Arc::new(Mutex::new(controller)),
+            client_dir: PathBuf::new(),
+            guide_dir: PathBuf::new(),
+            inputs_only: false,
+            managed: None,
+        };
+        let command = |local_id: &str, command| DraftCommand {
+            local_id: local_id.into(),
+            command,
+            future_orders: FutureOrderPolicy::Keep,
+        };
+        let place = |type_key: &str| Command::PlaceBlueprints {
+            type_key: type_key.into(),
+            tiles: vec![tile],
+            priority: Priority::Medium,
+            output_directions: None,
+        };
+        let reference = |local_id: &str| DraftItemRef::Draft {
+            local_id: local_id.into(),
+            item_index: 0,
+        };
+        let cancel = Command::CancelBlueprints {
+            blueprint_ids: vec![reference("original")],
+        };
+        let configure = |blueprint_id: &str| Command::ConfigureBlueprints {
+            blueprint_ids: vec![reference(blueprint_id)],
+            settings: BlueprintSettings {
+                silo_plan: None,
+                queue_loop_flags: vec![],
+                queue: vec![],
+                order: Order::Idle {},
+                priority: Priority::High,
+                loop_enabled: false,
+            },
+        };
+        let mut request = CommitRequest {
+            request_id: "cancelled-reference".into(),
+            slot_token,
+            draft: TurnDraft {
+                based_on_revision: revision,
+                tick: 0,
+                commands: vec![
+                    command("original", place("turret")),
+                    command("cancel", cancel.clone()),
+                    command("replacement", place("wall")),
+                ],
+            },
+        };
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        let prefix = request.draft.commands.len();
+        for (request_id, invalid) in [
+            ("configure-cancelled", configure("original")),
+            ("cancel-again", cancel),
+        ] {
+            request.request_id = request_id.into();
+            request
+                .draft
+                .commands
+                .push(command("invalid-edit", invalid));
+            handle_draft(
+                &app,
+                &tx,
+                request.clone(),
+                DraftIntent::Commit {
+                    checker_approved: true,
+                },
+            )
+            .await;
+            let rejected = rx.recv().await.unwrap();
+            assert!(matches!(
+                rejected,
+                ServerMessage::CommitRejected { message, .. }
+                    if message == "blueprint is not yours or does not exist"
+            ));
+            request.draft.commands.truncate(prefix);
+        }
+
+        request.request_id = "replacement-reference".into();
+        request
+            .draft
+            .commands
+            .push(command("configure", configure("replacement")));
+        handle_draft(
+            &app,
+            &tx,
+            request,
+            DraftIntent::Commit {
+                checker_approved: true,
+            },
+        )
+        .await;
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            ServerMessage::CommitAccepted { request_id, .. } if request_id == "replacement-reference"
+        ));
+        assert!(app.controller.lock().unwrap().has_commit(0));
+    }
 }
 
 #[cfg(test)]
