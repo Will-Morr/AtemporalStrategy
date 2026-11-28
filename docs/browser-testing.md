@@ -440,3 +440,17 @@ units, loop flags and output groups. The resulting production state matched
 each original factory apart from the requested target, with priority set to Off.
 Desktop Chromium screenshots of the mixed blueprint editor and the two live
 factories are in `artifacts/ui/2026-11-27T20-10-07.526Z-2812022`.
+
+## Replay request ownership and ordered placement checks
+
+The replay loader scenarios hold real exact-state replies for ticks 111, 122
+and 133, release them out of order, and disconnect during the initial tick-zero
+fetch. Chromium verifies that the latest seek keeps its map, status and planning
+controls, and that reconnect resumes at the requested tick. The stale status
+regression also ran against the preceding release. The focused desktop runs
+include progressive preview handoff on the controller and native peripheral.
+Inspected frames and traces are in `artifacts/ui/replay-loader-chromium`.
+
+The blueprint deletion scenario cancels a published turret blueprint and places
+a new turret on the same tile in one draft. It checks that both commands commit
+and that the next revision contains exactly one replacement with a fresh ID.
