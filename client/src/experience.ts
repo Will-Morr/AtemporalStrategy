@@ -126,7 +126,7 @@ export class Experience {
         this.stats.set(revision,stats.buckets);
         const events = await this.g.net.request({kind:'get_events',revision,from_tick:0,to_tick:end,effects_only:true},'events',m => m.revision === revision);
         this.destructions.set(revision,events.events.filter(e => e.event.kind === 'destroyed').length);
-        if (!this.g.revisions.has(revision)) this.g.revisions.set(revision, { revision, outcome:r.outcome, timeline:r.timeline_index, score:r.score ?? null, dictionary:[], samples:new Map(), events:[], chunks:new Set(), loading:new Set() });
+        if (!this.g.revisions.has(revision)) this.g.revisions.set(revision, { revision, outcome:r.outcome, timeline:r.timeline_index, score:r.score ?? null, dictionary:[], samples:new Map(), events:[] });
         // Populate the round picker from durable metadata. Loading every ancestor's body
         // on reconnect would regenerate large evicted replays without a user inspecting them.
         let parent = r.parent_revision;
@@ -153,8 +153,8 @@ export class Experience {
     await this.loadRound(revision);
     if (request !== this.roundSelection || !this.g.revisions.has(revision)) return;
     const old = this.g.rev();
-    if (old && !this.g.viewingPreview && old.revision !== revision) { old.samples.clear();old.events=[];old.chunks.clear(); }
-    this.g.playing = false; this.g.current = revision; this.g.exact = null;
+    if (old && !this.g.viewingPreview && old.revision !== revision) this.g.replay.clearChunks(old);
+    this.g.playing = false; this.g.current = revision;
     this.g.selection.clear(); this.g.recalledGroup = null;
     this.g.view = { t0:0,t1:Math.max(1,this.g.rev()!.outcome.terminal_state_tick) };
     this.g.seek(Math.min(tick,this.g.view.t1));

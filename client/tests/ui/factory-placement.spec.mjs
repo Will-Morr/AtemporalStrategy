@@ -129,7 +129,7 @@ test('factory loading bays and spawn markers follow all four rotations through p
   await a.locator('#commit').click();
   await b.locator('#commit').click();
   await revision(a, 1);
-  await a.waitForFunction(() => window.atemporal.rev().chunks.has(0));
+  await a.waitForFunction(() => window.atemporal.rev().samples.has(45));
 
   const stage = await a.evaluate(() => {
     const game = window.atemporal;
