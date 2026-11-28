@@ -7,6 +7,7 @@ mod artillery;
 mod commands;
 mod fields;
 pub mod map;
+mod movement;
 mod output;
 pub mod placement;
 pub mod player_timeline;

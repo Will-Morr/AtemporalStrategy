@@ -558,6 +558,66 @@ fn factory_pushes_a_crowded_output_chain_but_not_structures() {
     }
 }
 
+#[test]
+fn factory_reuses_a_displacement_lane_until_it_fills() {
+    let mut w = World::new(&["#######", "#.....#", "#######"]);
+    w.config.checkpoint_interval = 5;
+    w.bank(0, 100.0);
+    let factory = w.spawn(0, "factory", 1, 1);
+    let first = w.spawn(0, "tank", 2, 1);
+    let second = w.spawn(0, "tank", 3, 1);
+    w.entity_mut(&first).next_move_tick = 1000;
+    w.entity_mut(&second).next_move_tick = 1000;
+    let ids = w.turn(
+        1,
+        0,
+        0,
+        vec![Command::EditProduction {
+            factories: vec![factory.clone()],
+            edit: ProductionEdit::Append {
+                items: vec!["grunt".into(); 3],
+            },
+        }],
+    );
+    let run = w.run();
+    let state = &run.result.final_state;
+    assert_eq!(entity(state, &first).tile, tile(4, 1));
+    assert_eq!(entity(state, &second).tile, tile(5, 1));
+    assert_eq!(entity(state, &first).next_move_tick, 1000);
+    assert_eq!(entity(state, &second).next_move_tick, 1000);
+    // Each birth replays the discovered path from the vacancy back toward the output.
+    let shifts: Vec<_> = run
+        .events
+        .iter()
+        .filter_map(|event| {
+            if let PresentationEvent::Displacement {
+                blocker_from,
+                blocker_to,
+                ..
+            } = event.event
+            {
+                Some((blocker_from.x, blocker_to.x))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(shifts, [(3, 4), (2, 3), (4, 5), (3, 4), (2, 3)]);
+    assert_eq!(entity(state, &born(&ids[0], 0, 0, 0)).tile, tile(3, 1));
+    assert_eq!(entity(state, &born(&ids[0], 0, 1, 0)).tile, tile(2, 1));
+    assert!(!present(state, &born(&ids[0], 0, 2, 0)));
+    let active = entity(state, &factory)
+        .production
+        .as_ref()
+        .unwrap()
+        .active_item
+        .as_ref()
+        .unwrap();
+    assert!(active.awaiting_output);
+    assert_eq!(state.players[0].counters.unit_spend, 45.0);
+    assert_checkpoint_equivalence(&w, &run);
+}
+
 fn lock_world() -> (World, EntityId) {
     let mut w = World::new(&OPEN);
     w.config.future_orders.window_ticks = Some(10);
