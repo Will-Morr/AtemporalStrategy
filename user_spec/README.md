@@ -27,7 +27,7 @@ The user requested committing and pushing all planning documents when ready, and
 
 ## Implementation and playtest expectations
 
-Review the codebase for structural problems and simplify systems where duplication, unnecessary work, or unclear ownership justifies a refactor. Verify improvements against existing gameplay and user-facing behavior.
+Review the codebase for structural problems and simplify systems where duplication, unnecessary work, or unclear ownership justifies a refactor. Verify improvements against existing gameplay and user-facing behavior. For the replay loader, authoritative order checker, and movement and factory-output code, verify overlapping seeks, successive placement edits, and deterministic behavior under congestion.
 
 Limit local test workloads to about six of the host’s eight CPU cores so the user can keep working on the same computer.
 
