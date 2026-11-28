@@ -30,8 +30,9 @@ export class Net {
   connect(): Promise<void> {
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${this.path.startsWith('/games/') ? this.path.replace(/\/$/, '') : ''}/ws`;
     const branch = practice ? `/practice/${practice.source}/${practice.revision}/${practice.player}` : '';
-    this.ws = new WebSocket(url + branch);
-    this.ws.onmessage = event => {
+    const socket = this.ws = new WebSocket(url + branch);
+    socket.onmessage = event => {
+      if (this.ws !== socket) return;
       const text = String(event.data);
       this.bytes += text.length;
       const envelope: ServerEnvelope = JSON.parse(text);
@@ -58,15 +59,17 @@ export class Net {
       }
       for (const handler of this.handlers.get(message.kind) ?? []) handler(message);
     };
-    this.ws.onclose = () => {
+    socket.onclose = () => {
+      if (this.ws !== socket) return;
       this.connected = false;
+      this.ranges.clear();
       for (const w of this.waiters) w.reject(new DisconnectedError('connection closed'));
       this.waiters = [];
       this.onClose();
     };
     return new Promise((resolve, reject) => {
-      this.ws.onopen = () => { this.connected = true; resolve(); };
-      this.ws.onerror = () => reject(new DisconnectedError('cannot connect'));
+      socket.onopen = () => { this.connected = true; resolve(); };
+      socket.onerror = () => reject(new DisconnectedError('cannot connect'));
     });
   }
   disconnect(): void { this.ws?.close(); }
@@ -83,12 +86,20 @@ export class Net {
     // These replies have no range/request ID: serialize them so responses cannot be
     // mistaken for a different chunk requested concurrently by playback or inspection.
     if (!['events','stats_range','commands','snapshot_range'].includes(kind)) return this.performRequest(message,kind,test,timeoutMs);
-    const pending = (this.ranges.get(kind) ?? Promise.resolve()).catch(() => {}).then(() => this.performRequest(message,kind,test,timeoutMs));
+    const socket = this.ws;
+    const pending = (this.ranges.get(kind) ?? Promise.resolve()).catch(() => {}).then(() => {
+      if (this.ws !== socket || socket.readyState !== WebSocket.OPEN) throw new DisconnectedError('connection closed');
+      return this.performRequest(message,kind,test,timeoutMs).catch(error => {
+        // A late unkeyed reply could otherwise be consumed by the next queued range.
+        if (error instanceof RequestTimeoutError) socket.close();
+        throw error;
+      });
+    });
     this.ranges.set(kind,pending);
     return pending;
   }
   private performRequest<K extends Kind>(message: ClientMessage, kind: K, test: (m: Of<K>) => boolean = () => true, timeoutMs = 60000): Promise<Of<K>> {
-    if (!this.connected) return Promise.reject(new DisconnectedError('Disconnected'));
+    if (!this.connected || this.ws.readyState !== WebSocket.OPEN) return Promise.reject(new DisconnectedError('Disconnected'));
     const requestId = message.kind === 'commit' || message.kind === 'compare_draft_check'
       ? message.request.request_id : 'request_id' in message ? message.request_id : '';
     return new Promise((resolve, reject) => {
