@@ -14,3 +14,7 @@ serde_json.workspace = true
 [[bench]]
 name = "scale"
 harness = false
+
+[[bench]]
+name = "factory_output"
+harness = false
